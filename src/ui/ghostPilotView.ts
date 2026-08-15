@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
+import { createChatParticipantHandler } from '../agent/chatParticipant'
 import { getGhostPilotSettings } from '../config'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
@@ -14,10 +15,18 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
+  private readonly requests = new Map<string, vscode.CancellationTokenSource>()
   private pendingMessages: GhostPilotExtensionMessage[] = []
   private status: GhostPilotViewStatus = 'ready'
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  private readonly chatHandler: vscode.ChatRequestHandler
+
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    options: { chatHandler?: vscode.ChatRequestHandler } = {}
+  ) {
+    this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView
@@ -30,6 +39,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     this.disposables.push(
       webviewView.webview.onDidReceiveMessage(message => this.handleMessage(message)),
       webviewView.onDidDispose(() => {
+        this.cancelRequests()
         if (this.view === webviewView) {
           this.view = undefined
         }
@@ -49,13 +59,94 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   reset(): void {
+    this.cancelRequests()
     this.status = 'ready'
     this.postMessage(this.createMessage('reset'))
     this.postState()
   }
 
   clear(): void {
+    this.cancelRequests()
     this.postMessage(this.createMessage('clear'))
+  }
+
+  private async submit(requestId: string, conversationId: string, prompt: string): Promise<void> {
+    if (this.requests.has(requestId)) {
+      return
+    }
+
+    const cancellation = new vscode.CancellationTokenSource()
+    this.requests.set(requestId, cancellation)
+    this.postMessage({
+      source: 'ghostpilot-extension',
+      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      type: 'chat-started',
+      requestId,
+      conversationId
+    })
+
+    const response = {
+      markdown: (delta: string) => {
+        this.postMessage({
+          source: 'ghostpilot-extension',
+          version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+          type: 'chat-delta',
+          requestId,
+          conversationId,
+          delta
+        })
+      },
+      progress: (progress: string) => {
+        this.postMessage({
+          source: 'ghostpilot-extension',
+          version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+          type: 'chat-progress',
+          requestId,
+          conversationId,
+          progress
+        })
+      }
+    } as unknown as vscode.ChatResponseStream
+
+    try {
+      await this.chatHandler(
+        { prompt, references: [] } as unknown as vscode.ChatRequest,
+        {} as vscode.ChatContext,
+        response,
+        cancellation.token
+      )
+      this.postMessage({
+        source: 'ghostpilot-extension',
+        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+        type: 'chat-completed',
+        requestId,
+        conversationId,
+        status: cancellation.token.isCancellationRequested ? 'cancelled' : 'completed'
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'GhostPilot request failed'
+      this.postMessage({
+        source: 'ghostpilot-extension',
+        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+        type: 'chat-error',
+        requestId,
+        conversationId,
+        error: message
+      })
+    } finally {
+      this.requests.delete(requestId)
+      cancellation.dispose()
+    }
+  }
+
+  private cancel(requestId: string): void {
+    this.requests.get(requestId)?.cancel()
+  }
+
+  private cancelRequests(): void {
+    for (const request of this.requests.values()) {
+      request.cancel()
+    }
   }
 
   async export(): Promise<void> {
@@ -85,6 +176,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   dispose(): void {
+    this.cancelRequests()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
     this.view = undefined
@@ -108,6 +200,15 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         return
       case 'export':
         await this.export()
+        return
+      case 'check-status':
+        await vscode.commands.executeCommand('ghostpilot.checkOllamaStatus')
+        return
+      case 'submit':
+        await this.submit(value.requestId, value.conversationId, value.prompt)
+        return
+      case 'cancel':
+        this.cancel(value.requestId)
         return
     }
   }
@@ -304,6 +405,399 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         padding: 8px 12px;
+      }
+
+      .header-actions,
+      .sidebar-header,
+      .composer-footer,
+      .status-footer,
+      .message-header,
+      .message-actions,
+      .code-header,
+      .conversation-item {
+        align-items: center;
+        display: flex;
+      }
+
+      .header-actions {
+        gap: 4px;
+      }
+
+      .icon-button {
+        align-items: center;
+        background: transparent;
+        border-color: transparent;
+        color: var(--vscode-descriptionForeground);
+        display: inline-flex;
+        justify-content: center;
+        min-height: 26px;
+        min-width: 26px;
+        padding: 2px 6px;
+      }
+
+      .icon-button:hover,
+      .conversation-action:hover {
+        background: var(--vscode-toolbar-hoverBackground);
+        color: var(--vscode-foreground);
+      }
+
+      .chat-layout {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--ghostpilot-border);
+        display: flex;
+        flex: 0 0 166px;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .sidebar-header {
+        border-bottom: 1px solid var(--ghostpilot-border);
+        justify-content: space-between;
+        padding: 8px;
+      }
+
+      .sidebar-title {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .conversation-list {
+        overflow: auto;
+        padding: 4px;
+      }
+
+      .conversation-item {
+        border-radius: 3px;
+        gap: 2px;
+        margin-bottom: 2px;
+        min-width: 0;
+      }
+
+      .conversation-item.active {
+        background: var(--vscode-list-activeSelectionBackground);
+        color: var(--vscode-list-activeSelectionForeground);
+      }
+
+      .conversation-select {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        padding: 7px 5px 7px 8px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .conversation-select:hover {
+        background: transparent;
+      }
+
+      .conversation-actions {
+        display: flex;
+        opacity: 0;
+      }
+
+      .conversation-item:hover .conversation-actions,
+      .conversation-item:focus-within .conversation-actions {
+        opacity: 1;
+      }
+
+      .conversation-action {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-descriptionForeground);
+        padding: 4px;
+      }
+
+      .chat-main {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .messages {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 16px 12px;
+        scroll-behavior: smooth;
+      }
+
+      .state-card {
+        background: var(--ghostpilot-surface);
+        border: 1px solid var(--ghostpilot-border);
+        border-radius: 6px;
+        margin: auto;
+        max-width: 420px;
+        padding: 24px 18px;
+        text-align: center;
+      }
+
+      .state-icon {
+        color: var(--ghostpilot-accent);
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .state-card h1 {
+        font-size: 1.1em;
+        margin: 0 0 8px;
+      }
+
+      .state-card p {
+        color: var(--vscode-descriptionForeground);
+        line-height: 1.45;
+        margin: 6px 0;
+      }
+
+      .state-help {
+        font-size: 0.9em;
+      }
+
+      .message {
+        margin: 0 auto 18px;
+        max-width: 780px;
+      }
+
+      .message.user {
+        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
+        border-left: 2px solid var(--ghostpilot-accent);
+        border-radius: 3px;
+        padding: 10px 12px;
+      }
+
+      .message-header {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+
+      .message-header strong {
+        color: var(--vscode-foreground);
+      }
+
+      .message-state {
+        font-style: italic;
+      }
+
+      .message-body {
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .message-body p,
+      .message-body h1,
+      .message-body h2,
+      .message-body h3,
+      .message-body ul,
+      .message-body table {
+        margin: 0 0 10px;
+      }
+
+      .message-body p:last-child,
+      .message-body ul:last-child,
+      .message-body table:last-child {
+        margin-bottom: 0;
+      }
+
+      .message-body h1,
+      .message-body h2,
+      .message-body h3 {
+        font-size: 1.1em;
+      }
+
+      .message-body a {
+        color: var(--vscode-textLink-foreground);
+      }
+
+      .message-body code {
+        background: var(--vscode-textCodeBlock-background);
+        border-radius: 3px;
+        font-family: var(--vscode-editor-font-family);
+        font-size: 0.92em;
+        padding: 1px 4px;
+      }
+
+      .code-block {
+        background: var(--vscode-textCodeBlock-background);
+        border: 1px solid var(--ghostpilot-border);
+        border-radius: 4px;
+        margin: 10px 0;
+        overflow: hidden;
+      }
+
+      .code-header {
+        background: var(--vscode-editorWidget-background);
+        border-bottom: 1px solid var(--ghostpilot-border);
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        justify-content: space-between;
+        padding: 4px 8px;
+      }
+
+      .code-copy {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-textLink-foreground);
+        padding: 2px 4px;
+      }
+
+      .code-block pre {
+        margin: 0;
+        overflow: auto;
+        padding: 10px;
+      }
+
+      .code-block pre code {
+        background: transparent;
+        padding: 0;
+        white-space: pre;
+      }
+
+      .code-comment {
+        color: var(--vscode-charts-green, #6a9955);
+      }
+
+      .code-string {
+        color: var(--vscode-debugTokenExpression-string, #ce9178);
+      }
+
+      .code-number {
+        color: var(--vscode-debugTokenExpression-number, #b5cea8);
+      }
+
+      .code-keyword {
+        color: var(--vscode-debugTokenExpression-name, #569cd6);
+      }
+
+      .message-actions {
+        gap: 6px;
+        margin-top: 8px;
+        opacity: 0;
+      }
+
+      .message:hover .message-actions,
+      .message:focus-within .message-actions,
+      .message.error .message-actions {
+        opacity: 1;
+      }
+
+      .message-action {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        padding: 2px 4px;
+      }
+
+      .message-action:hover {
+        color: var(--vscode-textLink-foreground);
+      }
+
+      .message.error .message-body {
+        color: var(--vscode-errorForeground);
+      }
+
+      .composer {
+        border: 1px solid var(--ghostpilot-border);
+        border-radius: 4px;
+        margin: 0 12px 8px;
+        padding: 8px;
+      }
+
+      .composer:focus-within {
+        border-color: var(--vscode-focusBorder);
+      }
+
+      .composer textarea {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-input-foreground);
+        display: block;
+        font: inherit;
+        line-height: 1.45;
+        max-height: 180px;
+        min-height: 24px;
+        outline: 0;
+        overflow-y: hidden;
+        padding: 2px;
+        resize: none;
+        width: 100%;
+      }
+
+      .composer textarea::placeholder {
+        color: var(--vscode-input-placeholderForeground);
+      }
+
+      .composer-footer {
+        color: var(--vscode-descriptionForeground);
+        gap: 8px;
+        font-size: 0.78em;
+        margin-top: 6px;
+      }
+
+      .composer-hint {
+        flex: 1;
+      }
+
+      .composer-count {
+        white-space: nowrap;
+      }
+
+      .stop-button {
+        background: transparent;
+        border-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
+      }
+
+      .status-footer {
+        border-top: 1px solid var(--ghostpilot-border);
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        gap: 6px;
+        padding: 7px 12px;
+      }
+
+      .status-footer.busy .status-dot {
+        background: var(--ghostpilot-accent);
+      }
+
+      .status-footer.offline .status-dot {
+        background: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      .screen-reader-only,
+      .screen-reader-status {
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        position: absolute;
+        width: 1px;
+        clip: rect(0, 0, 0, 0);
+      }
+
+      @media (max-width: 500px) {
+        .sidebar {
+          flex-basis: 132px;
+        }
+
+        .composer-hint {
+          display: none;
+        }
       }
 
       @media (forced-colors: active) {

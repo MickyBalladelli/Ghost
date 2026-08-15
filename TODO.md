@@ -206,18 +206,18 @@
 
 ### 9.2 Build the Chat UI
 
-- [ ] Create the main chat layout with header, conversation list, message area, prompt composer, and status footer.
-- [ ] Add a conversation sidebar with new-chat, rename, delete, and switch-conversation actions.
-- [ ] Add empty, loading, offline, error, and no-model-installed states.
-- [ ] Add a prompt text area with multiline input, placeholder text, character/token count, and auto-resizing.
-- [ ] Submit prompts with a Send button and `Enter`; use `Shift+Enter` for a new line.
-- [ ] Add Stop/Cancel while a request is running.
-- [ ] Add retry, edit-and-resend, copy, and regenerate actions to assistant messages.
-- [ ] Render Markdown safely, including fenced code blocks, tables, links, and inline formatting.
-- [ ] Add syntax highlighting and a Copy button to every code block.
-- [ ] Render streamed output incrementally without flicker or scroll jumps.
-- [ ] Auto-scroll while the user is at the bottom, but preserve the user’s scroll position when they read older output.
-- [ ] Add accessible labels, keyboard navigation, focus management, and screen-reader-friendly status messages.
+- [x] Create the main chat layout with header, conversation list, message area, prompt composer, and status footer.
+- [x] Add a conversation sidebar with new-chat, rename, delete, and switch-conversation actions.
+- [x] Add empty, loading, offline, error, and no-model-installed states.
+- [x] Add a prompt text area with multiline input, placeholder text, character/token count, and auto-resizing.
+- [x] Submit prompts with a Send button and `Enter`; use `Shift+Enter` for a new line.
+- [x] Add Stop/Cancel while a request is running.
+- [x] Add retry, edit-and-resend, copy, and regenerate actions to assistant messages.
+- [x] Render Markdown safely, including fenced code blocks, tables, links, and inline formatting.
+- [x] Add syntax highlighting and a Copy button to every code block.
+- [x] Render streamed output incrementally without flicker or scroll jumps.
+- [x] Auto-scroll while the user is at the bottom, but preserve the user’s scroll position when they read older output.
+- [x] Add accessible labels, keyboard navigation, focus management, and screen-reader-friendly status messages.
 
 ### 9.3 Add Prompt Context and Composer Controls
 

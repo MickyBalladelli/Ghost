@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { createChatParticipant } from './agent/chatParticipant'
+import { createChatParticipant, createChatParticipantHandler } from './agent/chatParticipant'
 import { ghostPilotConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { OllamaClient } from './services/ollamaClient'
@@ -59,7 +59,9 @@ export function activate(context: vscode.ExtensionContext) {
   const checkModelsCommand = vscode.commands.registerCommand('ghostpilot.checkModels', () => {
     return checkRequiredOllamaModels()
   })
-  const ghostPilotView = new GhostPilotViewProvider(context.extensionUri)
+  const ghostPilotView = new GhostPilotViewProvider(context.extensionUri, {
+    chatHandler: createChatParticipantHandler({ statusBar })
+  })
   const ghostPilotViewRegistration = vscode.window.registerWebviewViewProvider(
     GhostPilotViewProvider.viewType,
     ghostPilotView,
