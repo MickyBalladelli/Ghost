@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 
 import { DEFAULT_MLX_URL, MlxChatOptions, MlxClient } from './mlxClient'
 
-export type LocalPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 
 export interface LlmClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
@@ -16,7 +16,7 @@ export interface LlmProviderClients {
 }
 
 export interface ResolvedLlmClient {
-  provider: LocalPilotProvider
+  provider: GhostPilotProvider
   client: LlmClient
 }
 
@@ -28,7 +28,7 @@ export interface LlmFactoryOptions {
 const MLX_SWITCH_ACTION = 'Switch to MLX VLM'
 const KEEP_PROVIDER_ACTION = 'Keep Current Provider'
 
-function isProvider(value: string): value is LocalPilotProvider {
+function isProvider(value: string): value is GhostPilotProvider {
   return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible'
 }
 
@@ -40,11 +40,11 @@ export class LlmFactory {
 
   constructor(clients: LlmProviderClients, options: LlmFactoryOptions = {}) {
     this.clients = clients
-    this.configuration = options.configuration ?? vscode.workspace.getConfiguration('localpilot')
+    this.configuration = options.configuration ?? vscode.workspace.getConfiguration('ghostpilot')
     this.mlxDetectionTimeoutMs = options.mlxDetectionTimeoutMs ?? 1500
   }
 
-  getConfiguredProvider(): LocalPilotProvider {
+  getConfiguredProvider(): GhostPilotProvider {
     const configuredProvider = this.configuration.get<string>('provider', 'ollama')
     return configuredProvider && isProvider(configuredProvider) ? configuredProvider : 'ollama'
   }
@@ -81,7 +81,7 @@ export class LlmFactory {
     return new MlxClient(mlxUrl)
   }
 
-  private getClient(provider: LocalPilotProvider): LlmClient {
+  private getClient(provider: GhostPilotProvider): LlmClient {
     if (provider === 'ollama') {
       return this.clients.ollamaClient
     }
@@ -91,7 +91,7 @@ export class LlmFactory {
     }
 
     if (!this.clients.openaiCompatibleClient) {
-      throw new Error('No OpenAI-compatible LocalPilot client has been configured')
+      throw new Error('No OpenAI-compatible GhostPilot client has been configured')
     }
 
     return this.clients.openaiCompatibleClient
@@ -107,7 +107,7 @@ export class LlmFactory {
 
     const mlxUrl = this.configuration.get<string>('mlxUrl', DEFAULT_MLX_URL)
     const selection = await vscode.window.showInformationMessage(
-      `MLX VLM server detected at ${mlxUrl}. Switch LocalPilot to MLX VLM?`,
+      `MLX VLM server detected at ${mlxUrl}. Switch GhostPilot to MLX VLM?`,
       MLX_SWITCH_ACTION,
       KEEP_PROVIDER_ACTION
     )

@@ -29,7 +29,7 @@ export function getWorkspaceRoot(): vscode.Uri {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri
 
   if (!root) {
-    throw new Error('Open a workspace before using LocalPilot tools')
+    throw new Error('Open a workspace before using GhostPilot tools')
   }
 
   return root

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { LocalPilotConfig, localPilotConfig } from '../config'
+import { GhostPilotConfig, ghostPilotConfig } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
 
 export type FimCompletionFetcher = (
@@ -71,13 +71,13 @@ function getDocumentPrefixAndSuffix(document: vscode.TextDocument, position: vsc
 }
 
 export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
-  private readonly configuration: LocalPilotConfig
+  private readonly configuration: GhostPilotConfig
   private readonly fetchCompletion: FimCompletionFetcher
   private readonly debounceMs: number
   private requestSequence = 0
 
   constructor(
-    configuration: LocalPilotConfig = localPilotConfig,
+    configuration: GhostPilotConfig = ghostPilotConfig,
     fetchCompletion: FimCompletionFetcher = fetchFimCompletion,
     debounceMs = DEFAULT_DEBOUNCE_MS
   ) {
@@ -135,7 +135,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 }
 
 export function createInlineCompletionProvider(
-  configuration?: LocalPilotConfig,
+  configuration?: GhostPilotConfig,
   fetchCompletion?: FimCompletionFetcher,
   debounceMs?: number
 ): InlineCompletionProvider {

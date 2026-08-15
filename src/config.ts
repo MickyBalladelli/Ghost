@@ -1,22 +1,22 @@
 import * as vscode from 'vscode'
 
-export const LOCALPILOT_CONFIGURATION_SECTION = 'localpilot'
+export const GHOSTPILOT_CONFIGURATION_SECTION = 'ghostpilot'
 
-export type LocalPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 
-export interface LocalPilotSettings {
+export interface GhostPilotSettings {
   ollamaUrl: string
   chatModel: string
   autocompleteModel: string
   maxContextTokens: number
   enableInlineCompletions: boolean
-  provider: LocalPilotProvider
+  provider: GhostPilotProvider
   mlxUrl: string
 }
 
-export type LocalPilotSetting = keyof LocalPilotSettings
+export type GhostPilotSetting = keyof GhostPilotSettings
 
-export const DEFAULT_LOCALPILOT_SETTINGS: Readonly<LocalPilotSettings> = {
+export const DEFAULT_GHOSTPILOT_SETTINGS: Readonly<GhostPilotSettings> = {
   ollamaUrl: 'http://localhost:11434',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
@@ -26,67 +26,67 @@ export const DEFAULT_LOCALPILOT_SETTINGS: Readonly<LocalPilotSettings> = {
   mlxUrl: 'http://localhost:8000'
 }
 
-export type LocalPilotSettingsChangeListener = (
-  settings: LocalPilotSettings,
+export type GhostPilotSettingsChangeListener = (
+  settings: GhostPilotSettings,
   event: vscode.ConfigurationChangeEvent
 ) => void
 
-export class LocalPilotConfig {
-  getSettings(): LocalPilotSettings {
-    const configuration = vscode.workspace.getConfiguration(LOCALPILOT_CONFIGURATION_SECTION)
+export class GhostPilotConfig {
+  getSettings(): GhostPilotSettings {
+    const configuration = vscode.workspace.getConfiguration(GHOSTPILOT_CONFIGURATION_SECTION)
 
     return {
-      ollamaUrl: configuration.get('ollamaUrl', DEFAULT_LOCALPILOT_SETTINGS.ollamaUrl),
-      chatModel: configuration.get('chatModel', DEFAULT_LOCALPILOT_SETTINGS.chatModel),
-      autocompleteModel: configuration.get('autocompleteModel', DEFAULT_LOCALPILOT_SETTINGS.autocompleteModel),
-      maxContextTokens: configuration.get('maxContextTokens', DEFAULT_LOCALPILOT_SETTINGS.maxContextTokens),
+      ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOSTPILOT_SETTINGS.ollamaUrl),
+      chatModel: configuration.get('chatModel', DEFAULT_GHOSTPILOT_SETTINGS.chatModel),
+      autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOSTPILOT_SETTINGS.autocompleteModel),
+      maxContextTokens: configuration.get('maxContextTokens', DEFAULT_GHOSTPILOT_SETTINGS.maxContextTokens),
       enableInlineCompletions: configuration.get(
         'enableInlineCompletions',
-        DEFAULT_LOCALPILOT_SETTINGS.enableInlineCompletions
+        DEFAULT_GHOSTPILOT_SETTINGS.enableInlineCompletions
       ),
-      provider: configuration.get('provider', DEFAULT_LOCALPILOT_SETTINGS.provider),
-      mlxUrl: configuration.get('mlxUrl', DEFAULT_LOCALPILOT_SETTINGS.mlxUrl)
+      provider: configuration.get('provider', DEFAULT_GHOSTPILOT_SETTINGS.provider),
+      mlxUrl: configuration.get('mlxUrl', DEFAULT_GHOSTPILOT_SETTINGS.mlxUrl)
     }
   }
 
-  get<K extends LocalPilotSetting>(setting: K): LocalPilotSettings[K] {
-    const configuration = vscode.workspace.getConfiguration(LOCALPILOT_CONFIGURATION_SECTION)
-    return configuration.get(setting, DEFAULT_LOCALPILOT_SETTINGS[setting]) as LocalPilotSettings[K]
+  get<K extends GhostPilotSetting>(setting: K): GhostPilotSettings[K] {
+    const configuration = vscode.workspace.getConfiguration(GHOSTPILOT_CONFIGURATION_SECTION)
+    return configuration.get(setting, DEFAULT_GHOSTPILOT_SETTINGS[setting]) as GhostPilotSettings[K]
   }
 
-  async update<K extends LocalPilotSetting>(
+  async update<K extends GhostPilotSetting>(
     setting: K,
-    value: LocalPilotSettings[K],
+    value: GhostPilotSettings[K],
     target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Global
   ): Promise<void> {
     await vscode.workspace
-      .getConfiguration(LOCALPILOT_CONFIGURATION_SECTION)
+      .getConfiguration(GHOSTPILOT_CONFIGURATION_SECTION)
       .update(setting, value, target)
   }
 
-  onDidChange(listener: LocalPilotSettingsChangeListener): vscode.Disposable {
+  onDidChange(listener: GhostPilotSettingsChangeListener): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration(event => {
-      if (event.affectsConfiguration(LOCALPILOT_CONFIGURATION_SECTION)) {
+      if (event.affectsConfiguration(GHOSTPILOT_CONFIGURATION_SECTION)) {
         listener(this.getSettings(), event)
       }
     })
   }
 }
 
-export const localPilotConfig = new LocalPilotConfig()
+export const ghostPilotConfig = new GhostPilotConfig()
 
-export function getLocalPilotSettings(): LocalPilotSettings {
-  return localPilotConfig.getSettings()
+export function getGhostPilotSettings(): GhostPilotSettings {
+  return ghostPilotConfig.getSettings()
 }
 
-export function updateLocalPilotSetting<K extends LocalPilotSetting>(
+export function updateGhostPilotSetting<K extends GhostPilotSetting>(
   setting: K,
-  value: LocalPilotSettings[K],
+  value: GhostPilotSettings[K],
   target?: vscode.ConfigurationTarget
 ): Promise<void> {
-  return localPilotConfig.update(setting, value, target)
+  return ghostPilotConfig.update(setting, value, target)
 }
 
-export function onLocalPilotConfigurationChange(listener: LocalPilotSettingsChangeListener): vscode.Disposable {
-  return localPilotConfig.onDidChange(listener)
+export function onGhostPilotConfigurationChange(listener: GhostPilotSettingsChangeListener): vscode.Disposable {
+  return ghostPilotConfig.onDidChange(listener)
 }

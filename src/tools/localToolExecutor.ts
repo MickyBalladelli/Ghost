@@ -52,24 +52,24 @@ export class LocalToolExecutor {
     }
 
     switch (call.name) {
-      case 'localpilot_read_file': {
+      case 'ghostpilot_read_file': {
         const input: ReadFileInput = { path: requiredString(call.arguments, 'path') }
         return resultText(await this.readFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'localpilot_list_directory': {
+      case 'ghostpilot_list_directory': {
         const input: ListDirectoryInput = {
           path: requiredString(call.arguments, 'path'),
           recursive: call.arguments.recursive === true
         }
         return resultText(await this.listDirectoryTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'localpilot_write_file': {
+      case 'ghostpilot_write_file': {
         const input: WriteFileInput = {
           path: requiredString(call.arguments, 'path'),
           content: typeof call.arguments.content === 'string' ? call.arguments.content : ''
         }
         const allowed = await confirmAction(
-          'Allow LocalPilot to write a file?',
+          'Allow GhostPilot to write a file?',
           `Replace the complete contents of ${input.path}?`
         )
 
@@ -79,13 +79,13 @@ export class LocalToolExecutor {
 
         return resultText(await this.writeFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'localpilot_run_terminal_command': {
+      case 'ghostpilot_run_terminal_command': {
         const input: RunTerminalCommandInput = {
           command: requiredString(call.arguments, 'command'),
           cwd: typeof call.arguments.cwd === 'string' ? call.arguments.cwd : undefined
         }
         const allowed = await confirmAction(
-          'Allow LocalPilot to run a terminal command?',
+          'Allow GhostPilot to run a terminal command?',
           input.cwd ? `${input.command}\n\nWorking directory: ${input.cwd}` : input.command
         )
 

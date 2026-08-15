@@ -106,7 +106,7 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
     return {
       invocationMessage: `Running terminal command in ${options.input.cwd ?? 'the workspace'}`,
       confirmationMessages: {
-        title: 'Allow LocalPilot to run this terminal command?',
+        title: 'Allow GhostPilot to run this terminal command?',
         message: new vscode.MarkdownString(`Run this command?\n\n\`\`\`sh\n${options.input.command}\n\`\`\``)
       }
     }
@@ -115,6 +115,6 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
 
 export function registerTerminalTools(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.lm.registerTool('localpilot_run_terminal_command', new RunTerminalCommandTool())
+    vscode.lm.registerTool('ghostpilot_run_terminal_command', new RunTerminalCommandTool())
   )
 }

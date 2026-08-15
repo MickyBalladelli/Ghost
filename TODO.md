@@ -1,6 +1,6 @@
 # TODO: Build "GhostPilot AI" VS Code Extension
 
-**Extension Name:** LocalPilot AI (`localpilot-ai`)  
+**Extension Name:** GhostPilot AI (`ghostpilot-ai`)
 **Objective:** Create a privacy-first, fully local AI coding assistant for Visual Studio Code that provides inline code completions, a sidebar chat agent, workspace file context, and agentic tool execution (terminal commands & file editing) using Ollama / vLLM.
 
 ---
@@ -11,8 +11,8 @@
   - [ ] Install `yo` and `generator-code` globally (`npm i -g yo generator-code`).
   - [x] Run `yo code` and configure:
     - Type: **New Extension (TypeScript)**
-    - Name: `LocalPilot AI`
-    - Identifier: `localpilot-ai`
+    - Name: `GhostPilot AI`
+    - Identifier: `ghostpilot-ai`
     - Description: `Local, offline Copilot & Codex alternative powered by Ollama/vLLM`
     - Enable Git: `Yes`
     - Package manager: `npm` or `pnpm`
@@ -32,26 +32,26 @@
   - [x] Add extension categories: `["AI", "Programming Languages", "Other"]`.
   - [x] Set minimum VS Code engine target: `"vscode": "^1.125.0"` (required by the language-model tool APIs).
   - [x] Add configuration settings under `contributes.configuration`:
-    - [x] `localpilot.ollamaUrl` (default: `"http://localhost:11434"`)
-    - [x] `localpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
-    - [x] `localpilot.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
-    - [x] `localpilot.maxContextTokens` (default: `8192`)
-    - [x] `localpilot.enableInlineCompletions` (default: `true`)
+    - [x] `ghostpilot.ollamaUrl` (default: `"http://localhost:11434"`)
+    - [x] `ghostpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
+    - [x] `ghostpilot.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
+    - [x] `ghostpilot.maxContextTokens` (default: `8192`)
+    - [x] `ghostpilot.enableInlineCompletions` (default: `true`)
   - [x] Register Chat Participant under `contributes.chatParticipants`:
-    - [x] ID: `localpilot.agent`
+    - [x] ID: `ghostpilot.agent`
     - [x] Name: `local`
     - [x] Description: `Local AI Agent (Ollama)`
     - [x] `isDefault`: `true`
   - [x] Register commands under `contributes.commands`:
-    - [x] `localpilot.checkOllamaStatus` -> "LocalPilot: Check Ollama Connection"
-    - [x] `localpilot.toggleInline` -> "LocalPilot: Toggle Autocomplete"
+    - [x] `ghostpilot.checkOllamaStatus` -> "GhostPilot: Check Ollama Connection"
+    - [x] `ghostpilot.toggleInline` -> "GhostPilot: Toggle Autocomplete"
 
 
 ### Update to Phase 1.3 (`package.json` Manifest Configuration)
 
 - [x] **1.3.1 Add MLX Backend Settings**
-  - [x] Add `localpilot.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
-  - [x] Add `localpilot.mlxUrl` setting (default: `"http://localhost:8000"`).
+  - [x] Add `ghostpilot.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
+  - [x] Add `ghostpilot.mlxUrl` setting (default: `"http://localhost:8000"`).
 
 ---
 
@@ -64,7 +64,7 @@
   - [x] Implement response streaming transformer to convert MLX server Server-Sent Events (SSE) into standard token chunks.
 
 - [x] **2.4 Dynamic Provider Switching Logic**
-  - [x] Update `src/services/llmFactory.ts` to route requests based on `localpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).
+  - [x] Update `src/services/llmFactory.ts` to route requests based on `ghostpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).
   - [x] Add auto-detection fallback: if MLX server is detected on port 8000, automatically suggest switching provider to `mlx-vlm`.
 ---
 
@@ -81,7 +81,7 @@
   - [x] Implement `fetchFimCompletion` (Fill-In-the-Middle) for inline code autocompletion.
 
 - [x] **2.2 Settings & Configuration Manager**
-  - [x] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('localpilot')`.
+  - [x] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('ghostpilot')`.
   - [x] Implement event listener for configuration changes (`vscode.workspace.onDidChangeConfiguration`).
 
 ---
@@ -124,10 +124,10 @@
 
 - [x] **5.1 Define Language Model Tools in Manifest**
   - [x] Add `contributes.languageModelTools` in `package.json`:
-    - [x] `localpilot_read_file`: Reads full content of a file in workspace.
-    - [x] `localpilot_write_file`: Creates or replaces file content.
-    - [x] `localpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
-    - [x] `localpilot_list_directory`: Lists workspace file hierarchy.
+    - [x] `ghostpilot_read_file`: Reads full content of a file in workspace.
+    - [x] `ghostpilot_write_file`: Creates or replaces file content.
+    - [x] `ghostpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
+    - [x] `ghostpilot_list_directory`: Lists workspace file hierarchy.
 
 - [x] **5.2 Implement Tool Execution Services**
   - [x] Create `src/tools/fileTools.ts` for file read/write operations using `vscode.workspace.fs`.
@@ -146,8 +146,8 @@
 
 - [x] **6.1 Status Bar Indicator**
   - [x] Create `src/ui/statusBar.ts`.
-  - [x] Show status: `$(chip) LocalPilot: Ready` / `$(sync~spin) LocalPilot: Generating...` / `$(error) LocalPilot: Ollama Offline`.
-  - [x] Clicking status bar item runs `localpilot.checkOllamaStatus` command.
+  - [x] Show status: `$(chip) GhostPilot: Ready` / `$(sync~spin) GhostPilot: Generating...` / `$(error) GhostPilot: Ollama Offline`.
+  - [x] Clicking status bar item runs `ghostpilot.checkOllamaStatus` command.
 
 - [x] **6.2 Welcome & Model Downloader Helper**
   - [x] Add diagnostic command to verify if required Ollama models are pulled (`qwen2.5-coder:7b`, `qwen2.5-coder:1.5b`).
@@ -184,6 +184,6 @@
   - [x] Run `npm run vscode:prepublish` to verify TypeScript compilation.
   - [x] Package extension into `.vsix` file:
     ```bash
-    npx vsce package --out localpilot-ai-1.0.0.vsix
+    npx vsce package --out ghostpilot-ai-1.0.0.vsix
     ```
-  - [ ] Test local installation (`code --install-extension localpilot-ai-1.0.0.vsix`).
+  - [ ] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).

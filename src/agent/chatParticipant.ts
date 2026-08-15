@@ -2,23 +2,23 @@ import * as vscode from 'vscode'
 import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
-import { LocalPilotConfig, localPilotConfig } from '../config'
+import { GhostPilotConfig, ghostPilotConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
-import { LocalPilotStatusBar } from '../ui/statusBar'
+import { GhostPilotStatusBar } from '../ui/statusBar'
 import { parseLocalToolCall } from './toolCallParser'
 
-const CHAT_PARTICIPANT_ID = 'localpilot.agent'
+const CHAT_PARTICIPANT_ID = 'ghostpilot.agent'
 const DEFAULT_TEMPERATURE = 0.2
 
 const SYSTEM_PROMPT = [
-  'You are LocalPilot, a private local coding assistant.',
+  'You are GhostPilot, a private local coding assistant.',
   'Use the supplied editor and workspace context when it helps answer the user.',
   'Be concise. Put code in fenced Markdown blocks with the correct language when useful.',
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
-  'Available tools: localpilot_read_file({"path":"absolute workspace path"}), localpilot_write_file({"path":"absolute workspace path","content":"full text"}), localpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), localpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'Available tools: ghostpilot_read_file({"path":"absolute workspace path"}), ghostpilot_write_file({"path":"absolute workspace path","content":"full text"}), ghostpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghostpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After receiving a tool result, continue the task and provide the final answer.'
 ].join(' ')
 
@@ -26,10 +26,10 @@ const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_RESULT_CHARACTERS = 16000
 
 export interface ChatParticipantOptions {
-  configuration?: LocalPilotConfig
+  configuration?: GhostPilotConfig
   llmFactory?: LlmFactory
   toolExecutor?: LocalToolExecutor
-  statusBar?: LocalPilotStatusBar
+  statusBar?: GhostPilotStatusBar
 }
 
 interface EditorContext {
@@ -62,7 +62,7 @@ export function truncateContext(text: string, maxTokens: number): string {
     return text
   }
 
-  return `${text.slice(0, maxCharacters)}\n\n[Context truncated by LocalPilot]`
+  return `${text.slice(0, maxCharacters)}\n\n[Context truncated by GhostPilot]`
 }
 
 function getActiveEditorContext(maxContextTokens: number): EditorContext | undefined {
@@ -262,7 +262,7 @@ async function getReferenceContext(
 
 async function buildContextPrompt(
   request: vscode.ChatRequest,
-  settings: ReturnType<LocalPilotConfig['getSettings']>,
+  settings: ReturnType<GhostPilotConfig['getSettings']>,
   token: vscode.CancellationToken
 ): Promise<string> {
   const editor = getActiveEditorContext(settings.maxContextTokens)
@@ -292,7 +292,7 @@ async function buildContextPrompt(
   return sections.join('\n\n')
 }
 
-function createDefaultLlmFactory(configuration: LocalPilotConfig): LlmFactory {
+function createDefaultLlmFactory(configuration: GhostPilotConfig): LlmFactory {
   const settings = configuration.getSettings()
 
   return new LlmFactory(
@@ -301,7 +301,7 @@ function createDefaultLlmFactory(configuration: LocalPilotConfig): LlmFactory {
       mlxClient: new MlxClient(settings.mlxUrl)
     },
     {
-      configuration: vscode.workspace.getConfiguration('localpilot')
+      configuration: vscode.workspace.getConfiguration('ghostpilot')
     }
   )
 }
@@ -348,7 +348,7 @@ async function streamModelTurn(
 export function createChatParticipantHandler(
   options: ChatParticipantOptions = {}
 ): vscode.ChatRequestHandler {
-  const configuration = options.configuration ?? localPilotConfig
+  const configuration = options.configuration ?? ghostPilotConfig
   const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration)
   const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
   const statusBar = options.statusBar
@@ -410,7 +410,7 @@ export function createChatParticipantHandler(
         }
 
         if (round === MAX_TOOL_ROUNDS - 1) {
-          response.markdown('LocalPilot stopped after reaching the maximum tool-call limit.')
+          response.markdown('GhostPilot stopped after reaching the maximum tool-call limit.')
           return
         }
 
@@ -434,12 +434,12 @@ export function createChatParticipantHandler(
         )
       }
 
-      response.markdown('LocalPilot stopped after reaching the maximum tool-call limit.')
+      response.markdown('GhostPilot stopped after reaching the maximum tool-call limit.')
     } catch (error) {
       if (!token.isCancellationRequested) {
         finalStatus = 'offline'
         const message = error instanceof Error ? error.message : 'Unknown local model error'
-        response.markdown(`LocalPilot could not reach the local model: ${message}`)
+        response.markdown(`GhostPilot could not reach the local model: ${message}`)
       }
     } finally {
       cancellation.dispose()

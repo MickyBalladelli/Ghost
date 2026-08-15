@@ -78,7 +78,7 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
     return {
       invocationMessage: `Writing ${options.input.path}`,
       confirmationMessages: {
-        title: 'Allow LocalPilot to write this file?',
+        title: 'Allow GhostPilot to write this file?',
         message: new vscode.MarkdownString(`Write the complete contents of **${options.input.path}**?`)
       }
     }
@@ -154,9 +154,9 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
 
 export function registerFileTools(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.lm.registerTool('localpilot_read_file', new ReadFileTool()),
-    vscode.lm.registerTool('localpilot_write_file', new WriteFileTool()),
-    vscode.lm.registerTool('localpilot_list_directory', new ListDirectoryTool())
+    vscode.lm.registerTool('ghostpilot_read_file', new ReadFileTool()),
+    vscode.lm.registerTool('ghostpilot_write_file', new WriteFileTool()),
+    vscode.lm.registerTool('ghostpilot_list_directory', new ListDirectoryTool())
   )
 }
 

@@ -1,49 +1,49 @@
 import * as vscode from 'vscode'
 
 import { createChatParticipant } from './agent/chatParticipant'
-import { localPilotConfig } from './config'
+import { ghostPilotConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { OllamaClient } from './services/ollamaClient'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
-import { LocalPilotStatusBar } from './ui/statusBar'
+import { GhostPilotStatusBar } from './ui/statusBar'
 import { registerLanguageModelTools } from './tools/registerTools'
 
 export function activate(context: vscode.ExtensionContext) {
-  const helloWorldCommand = vscode.commands.registerCommand('localpilot-ai.helloWorld', () => {
-    vscode.window.showInformationMessage('LocalPilot AI is ready.')
+  const helloWorldCommand = vscode.commands.registerCommand('ghostpilot-ai.helloWorld', () => {
+    vscode.window.showInformationMessage('GhostPilot AI is ready.')
   })
   const inlineProvider = createInlineCompletionProvider()
   const inlineProviderRegistration = vscode.languages.registerInlineCompletionItemProvider(
     { pattern: '**' },
     inlineProvider
   )
-  const statusBar = new LocalPilotStatusBar()
+  const statusBar = new GhostPilotStatusBar()
   const inlineStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90)
 
   const updateInlineStatusBar = () => {
-    const enabled = localPilotConfig.get('enableInlineCompletions')
+    const enabled = ghostPilotConfig.get('enableInlineCompletions')
     inlineStatusBar.text = enabled
-      ? '$(sparkle) LocalPilot: Inline On'
-      : '$(circle-slash) LocalPilot: Inline Off'
+      ? '$(sparkle) GhostPilot: Inline On'
+      : '$(circle-slash) GhostPilot: Inline Off'
     inlineStatusBar.tooltip = enabled
-      ? 'LocalPilot inline completions are enabled. Click to disable.'
-      : 'LocalPilot inline completions are disabled. Click to enable.'
-    inlineStatusBar.command = 'localpilot.toggleInline'
+      ? 'GhostPilot inline completions are enabled. Click to disable.'
+      : 'GhostPilot inline completions are disabled. Click to enable.'
+    inlineStatusBar.command = 'ghostpilot.toggleInline'
     inlineStatusBar.show()
   }
 
-  const toggleInlineCommand = vscode.commands.registerCommand('localpilot.toggleInline', async () => {
-    const enabled = localPilotConfig.get('enableInlineCompletions')
-    await localPilotConfig.update('enableInlineCompletions', !enabled)
+  const toggleInlineCommand = vscode.commands.registerCommand('ghostpilot.toggleInline', async () => {
+    const enabled = ghostPilotConfig.get('enableInlineCompletions')
+    await ghostPilotConfig.update('enableInlineCompletions', !enabled)
     updateInlineStatusBar()
   })
-  const configurationListener = localPilotConfig.onDidChange((settings, event) => {
-    if (event.affectsConfiguration('localpilot.enableInlineCompletions')) {
+  const configurationListener = ghostPilotConfig.onDidChange((settings, event) => {
+    if (event.affectsConfiguration('ghostpilot.enableInlineCompletions')) {
       updateInlineStatusBar()
     }
   })
-  const checkOllamaCommand = vscode.commands.registerCommand('localpilot.checkOllamaStatus', async () => {
-    const settings = localPilotConfig.getSettings()
+  const checkOllamaCommand = vscode.commands.registerCommand('ghostpilot.checkOllamaStatus', async () => {
+    const settings = ghostPilotConfig.getSettings()
     const client = new OllamaClient(settings.ollamaUrl)
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')
@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.window.showErrorMessage(`Ollama is offline at ${settings.ollamaUrl}.`)
     }
   })
-  const checkModelsCommand = vscode.commands.registerCommand('localpilot.checkModels', () => {
+  const checkModelsCommand = vscode.commands.registerCommand('ghostpilot.checkModels', () => {
     return checkRequiredOllamaModels()
   })
   const chatParticipant = createChatParticipant({ statusBar })

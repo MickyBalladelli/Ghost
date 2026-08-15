@@ -1,14 +1,14 @@
 {
-  "name": "localpilot-ai",
-  "displayName": "LocalPilot AI",
+  "name": "ghostpilot-ai",
+  "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
   "version": "1.0.0",
-  "publisher": "localpilot",
+  "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/localpilot-ai/localpilot-ai"
+    "url": "https://github.com/ghostpilot-ai/ghostpilot-ai"
   },
   "engines": {
     "vscode": "^1.125.0"
@@ -19,66 +19,66 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:localpilot-ai.helloWorld",
-    "onCommand:localpilot.checkOllamaStatus",
-    "onCommand:localpilot.toggleInline",
-    "onCommand:localpilot.checkModels",
-    "onChatParticipant:localpilot.agent",
-    "onLanguageModelTool:localpilot_read_file",
-    "onLanguageModelTool:localpilot_write_file",
-    "onLanguageModelTool:localpilot_run_terminal_command",
-    "onLanguageModelTool:localpilot_list_directory"
+    "onCommand:ghostpilot-ai.helloWorld",
+    "onCommand:ghostpilot.checkOllamaStatus",
+    "onCommand:ghostpilot.toggleInline",
+    "onCommand:ghostpilot.checkModels",
+    "onChatParticipant:ghostpilot.agent",
+    "onLanguageModelTool:ghostpilot_read_file",
+    "onLanguageModelTool:ghostpilot_write_file",
+    "onLanguageModelTool:ghostpilot_run_terminal_command",
+    "onLanguageModelTool:ghostpilot_list_directory"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "localpilot-ai.helloWorld",
-        "title": "LocalPilot AI: Hello World"
+        "command": "ghostpilot-ai.helloWorld",
+        "title": "GhostPilot AI: Hello World"
       },
       {
-        "command": "localpilot.checkOllamaStatus",
-        "title": "LocalPilot: Check Ollama Connection"
+        "command": "ghostpilot.checkOllamaStatus",
+        "title": "GhostPilot: Check Ollama Connection"
       },
       {
-        "command": "localpilot.toggleInline",
-        "title": "LocalPilot: Toggle Autocomplete"
+        "command": "ghostpilot.toggleInline",
+        "title": "GhostPilot: Toggle Autocomplete"
       },
       {
-        "command": "localpilot.checkModels",
-        "title": "LocalPilot: Check Required Models"
+        "command": "ghostpilot.checkModels",
+        "title": "GhostPilot: Check Required Models"
       }
     ],
     "configuration": {
-      "title": "LocalPilot AI",
+      "title": "GhostPilot AI",
       "properties": {
-        "localpilot.ollamaUrl": {
+        "ghostpilot.ollamaUrl": {
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
         },
-        "localpilot.chatModel": {
+        "ghostpilot.chatModel": {
           "type": "string",
           "default": "qwen2.5-coder:7b",
           "description": "Model used for chat requests."
         },
-        "localpilot.autocompleteModel": {
+        "ghostpilot.autocompleteModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b",
           "description": "Model used for inline code completions."
         },
-        "localpilot.maxContextTokens": {
+        "ghostpilot.maxContextTokens": {
           "type": "integer",
           "default": 8192,
           "minimum": 1,
           "description": "Maximum number of context tokens sent to the model."
         },
-        "localpilot.enableInlineCompletions": {
+        "ghostpilot.enableInlineCompletions": {
           "type": "boolean",
           "default": true,
-          "description": "Enable LocalPilot inline code completions."
+          "description": "Enable GhostPilot inline code completions."
         },
-        "localpilot.provider": {
+        "ghostpilot.provider": {
           "type": "string",
           "enum": [
             "ollama",
@@ -91,9 +91,9 @@
             "Use another OpenAI-compatible server."
           ],
           "default": "ollama",
-          "description": "LocalPilot model provider."
+          "description": "GhostPilot model provider."
         },
-        "localpilot.mlxUrl": {
+        "ghostpilot.mlxUrl": {
           "type": "string",
           "default": "http://localhost:8000",
           "description": "MLX VLM server URL."
@@ -102,7 +102,7 @@
     },
     "chatParticipants": [
       {
-        "id": "localpilot.agent",
+        "id": "ghostpilot.agent",
         "name": "local",
         "description": "Local AI Agent (Ollama)",
         "isDefault": true
@@ -110,9 +110,9 @@
     ],
     "languageModelTools": [
       {
-        "name": "localpilot_read_file",
-        "displayName": "LocalPilot Read File",
-        "toolReferenceName": "localpilot_read_file",
+        "name": "ghostpilot_read_file",
+        "displayName": "GhostPilot Read File",
+        "toolReferenceName": "ghostpilot_read_file",
         "userDescription": "Read a text file from the current workspace.",
         "modelDescription": "Reads the complete content of a text file in the current workspace. Use this for inspecting code or configuration. The path must be absolute and inside the workspace. Do not use it for binary files.",
         "canBeReferencedInPrompt": true,
@@ -133,9 +133,9 @@
         }
       },
       {
-        "name": "localpilot_write_file",
-        "displayName": "LocalPilot Write File",
-        "toolReferenceName": "localpilot_write_file",
+        "name": "ghostpilot_write_file",
+        "displayName": "GhostPilot Write File",
+        "toolReferenceName": "ghostpilot_write_file",
         "userDescription": "Create or replace a text file in the current workspace.",
         "modelDescription": "Creates a new text file or replaces the complete content of an existing file in the current workspace. The path must be absolute and inside the workspace. This changes user files and requires confirmation.",
         "canBeReferencedInPrompt": true,
@@ -161,9 +161,9 @@
         }
       },
       {
-        "name": "localpilot_run_terminal_command",
-        "displayName": "LocalPilot Run Terminal Command",
-        "toolReferenceName": "localpilot_run_terminal_command",
+        "name": "ghostpilot_run_terminal_command",
+        "displayName": "GhostPilot Run Terminal Command",
+        "toolReferenceName": "ghostpilot_run_terminal_command",
         "userDescription": "Run a shell command in the current workspace.",
         "modelDescription": "Runs a bash or PowerShell command in the current workspace and returns its output. Use only when the user asks for command execution or when it is needed to verify a change. Commands can change the system and require confirmation.",
         "canBeReferencedInPrompt": true,
@@ -188,9 +188,9 @@
         }
       },
       {
-        "name": "localpilot_list_directory",
-        "displayName": "LocalPilot List Directory",
-        "toolReferenceName": "localpilot_list_directory",
+        "name": "ghostpilot_list_directory",
+        "displayName": "GhostPilot List Directory",
+        "toolReferenceName": "ghostpilot_list_directory",
         "userDescription": "List files and directories in the current workspace.",
         "modelDescription": "Lists the file and directory hierarchy under a workspace directory. The path must be absolute and inside the current workspace. Use this to discover project structure before reading or editing files.",
         "canBeReferencedInPrompt": true,
@@ -221,7 +221,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --out localpilot-ai-1.0.0.vsix",
+    "package": "vsce package --out ghostpilot-ai-1.0.0.vsix",
     "test": "npm run compile && node ./out/test/runTest.js"
   },
   "devDependencies": {
