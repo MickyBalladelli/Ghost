@@ -1,0 +1,42 @@
+{
+  "name": "localpilot-ai",
+  "displayName": "LocalPilot AI",
+  "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
+  "version": "0.0.1",
+  "publisher": "localpilot",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/localpilot-ai/localpilot-ai"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:localpilot-ai.helloWorld"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "localpilot-ai.helloWorld",
+        "title": "LocalPilot AI: Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.3"
+  }
+}

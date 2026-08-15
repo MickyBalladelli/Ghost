@@ -7,16 +7,16 @@
 
 ## 📋 Phase 1: Project Setup & Environment
 
-- [ ] **1.1 Scaffold Extension Project**
+- [x] **1.1 Scaffold Extension Project**
   - [ ] Install `yo` and `generator-code` globally (`npm i -g yo generator-code`).
-  - [ ] Run `yo code` and configure:
+  - [x] Run `yo code` and configure:
     - Type: **New Extension (TypeScript)**
     - Name: `LocalPilot AI`
     - Identifier: `localpilot-ai`
     - Description: `Local, offline Copilot & Codex alternative powered by Ollama/vLLM`
     - Enable Git: `Yes`
     - Package manager: `npm` or `pnpm`
-  - [ ] Initialize Git repository and commit baseline files.
+  - [x] Initialize Git repository and commit baseline files.
 
 - [ ] **1.2 Install Project Dependencies**
   - [ ] Core dependencies:
