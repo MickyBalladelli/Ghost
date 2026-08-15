@@ -319,16 +319,16 @@
 
 ### 9.11 Reliability, Privacy, and Performance
 
-- [ ] Redact secrets, tokens, passwords, and common credential patterns from displayed diagnostics and optional persisted history.
-- [ ] Make all network requests use configured local or explicitly configured endpoints.
-- [ ] Add a visible indicator when external network access is enabled.
-- [ ] Limit message, attachment, tool-result, and rendered-Markdown sizes to keep the UI responsive.
-- [ ] Virtualize or paginate long conversations.
-- [ ] Debounce settings and model-list refreshes.
-- [ ] Handle webview reloads without corrupting an active request or losing recoverable state.
-- [ ] Handle provider disconnects, malformed SSE, invalid UTF-8, empty responses, and model crashes.
-- [ ] Add telemetry-free structured debug logging behind an opt-in setting.
-- [ ] Verify the interface works with keyboard-only use, high contrast, reduced motion, and narrow sidebar widths.
+- [x] Redact secrets, tokens, passwords, and common credential patterns from displayed diagnostics and optional persisted history.
+- [x] Make all network requests use configured local or explicitly configured endpoints.
+- [x] Add a visible indicator when external network access is enabled.
+- [x] Limit message, attachment, tool-result, and rendered-Markdown sizes to keep the UI responsive.
+- [x] Virtualize or paginate long conversations.
+- [x] Debounce settings and model-list refreshes.
+- [x] Handle webview reloads without corrupting an active request or losing recoverable state.
+- [x] Handle provider disconnects, malformed SSE, invalid UTF-8, empty responses, and model crashes.
+- [x] Add telemetry-free structured debug logging behind an opt-in setting.
+- [x] Verify the interface works with keyboard-only use, high contrast, reduced motion, and narrow sidebar widths.
 
 ### 9.12 Testing and Documentation for the New Interface
 

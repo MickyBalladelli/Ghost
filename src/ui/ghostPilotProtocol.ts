@@ -52,6 +52,7 @@ export interface GhostPilotSettingsUpdate {
   responseLength?: GhostPilotResponseLength
   mode?: GhostPilotMode
   enableConversationPersistence?: boolean
+  enableDebugLogging?: boolean
   ollamaUrl?: string
   mlxUrl?: string
   openaiUrl?: string
@@ -152,6 +153,8 @@ export type GhostPilotExtensionMessage =
         openaiUrl: string
         toolAllowlist: string[]
         toolDenylist: string[]
+        enableDebugLogging: boolean
+        networkAccess: 'local' | 'external'
       }
       models: string[]
       connection: 'online' | 'offline' | 'unknown'
@@ -195,7 +198,7 @@ const isAttachment = (value: unknown): value is GhostPilotAttachment => {
   }
   return (
     (value.path === undefined || isNonEmptyString(value.path)) &&
-    (value.content === undefined || typeof value.content === 'string') &&
+    (value.content === undefined || (typeof value.content === 'string' && value.content.length <= 1024 * 1024)) &&
     (value.mimeType === undefined || typeof value.mimeType === 'string')
   )
 }
@@ -233,8 +236,9 @@ const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => 
     (value.temperature === undefined || typeof value.temperature === 'number') &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
-    (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean')
-    && (value.ollamaUrl === undefined || typeof value.ollamaUrl === 'string')
+    (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
+    (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
+    (value.ollamaUrl === undefined || typeof value.ollamaUrl === 'string')
     && (value.mlxUrl === undefined || typeof value.mlxUrl === 'string')
     && (value.openaiUrl === undefined || typeof value.openaiUrl === 'string')
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
@@ -262,7 +266,7 @@ export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotW
   }
   if (value.type === 'submit') {
     return (
-      isNonEmptyString(value.prompt) &&
+      isNonEmptyString(value.prompt) && value.prompt.length <= 20000 &&
       isOptions(value.options) &&
       (value.attachments === undefined || (Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)))
     )

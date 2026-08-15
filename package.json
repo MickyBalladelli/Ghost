@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -184,6 +184,11 @@
           "type": "boolean",
           "default": false,
           "description": "Persist GhostPilot conversations and preferences in VS Code storage. Disable to keep chat history in memory only."
+        },
+        "ghostpilot.enableDebugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable telemetry-free GhostPilot debug logging in the extension host."
         },
         "ghostpilot.toolAllowlist": {
           "type": "array",

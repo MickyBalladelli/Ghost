@@ -31,6 +31,8 @@ interface ControlSettings {
   openaiUrl: string
   toolAllowlist: string[]
   toolDenylist: string[]
+  enableDebugLogging: boolean
+  networkAccess: 'local' | 'external'
   chatModel: string
   autocompleteModel: string
   maxContextTokens: number
@@ -242,6 +244,27 @@ if (!app) {
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const persistenceSchemaVersion = 2
 
+const redactSensitiveText = (value: string): string => value
+  .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
+  .replace(/(api[_-]?key\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+  .replace(/(token\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+  .replace(/(password\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+  .replace(/\b(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|xox[baprs]-[A-Za-z0-9-]{16,})\b/g, '[REDACTED]')
+  .replace(/-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g, '[REDACTED]')
+
+const redactPersistedValue = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    return redactSensitiveText(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => redactPersistedValue(item))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactPersistedValue(item)]))
+  }
+  return value
+}
+
 const createConversation = (): Conversation => {
   const timestamp = Date.now()
   return {
@@ -308,6 +331,19 @@ const normalizeConversation = (value: Partial<Conversation>): Conversation => {
   }
 }
 
+const recoverInterruptedConversation = (conversation: Conversation): Conversation => {
+  for (const message of conversation.messages) {
+    if (message.status === 'streaming' || message.requestStatus === 'streaming' || message.requestStatus === 'waiting-for-approval') {
+      message.status = 'error'
+      message.requestStatus = 'failed'
+      message.parts.push({ kind: 'error', message: 'Request interrupted while GhostPilot was reloading.', recoverable: true })
+      message.updatedAt = Date.now()
+    }
+  }
+  conversation.activeRequestId = undefined
+  return conversation
+}
+
 const getInitialState = (): GhostPilotState => {
   const stored = vscode.getState<Partial<GhostPilotState>>()
   if (
@@ -316,7 +352,7 @@ const getInitialState = (): GhostPilotState => {
     stored.conversations.length > 0 &&
     typeof stored.activeConversationId === 'string'
   ) {
-    const conversations = stored.conversations.map(conversation => normalizeConversation(conversation))
+    const conversations = stored.conversations.map(conversation => recoverInterruptedConversation(normalizeConversation(conversation)))
     const activeConversationId = conversations.some(conversation => conversation.id === stored.activeConversationId)
       ? stored.activeConversationId
       : conversations[0].id
@@ -352,6 +388,8 @@ let controls: ControlSettings = {
   openaiUrl: 'http://localhost:8001/v1',
   toolAllowlist: [],
   toolDenylist: [],
+  enableDebugLogging: false,
+  networkAccess: 'local',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   maxContextTokens: 8192,
@@ -399,10 +437,13 @@ let uiPreferences: UiPreferences = {
 }
 let persistenceReady = false
 let persistenceTimer: number | undefined
+let settingsTimer: number | undefined
+let modelRefreshTimer: number | undefined
 let historyIndex = -1
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
 let progressTimer: number | undefined
+let visibleMessageCount = 200
 
 const formatElapsed = (milliseconds: number): string => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
@@ -528,6 +569,7 @@ app.innerHTML = `
           <label class="settings-checkbox" for="show-thinking"><input id="show-thinking" type="checkbox"> Show thinking details</label>
           <label class="settings-checkbox" for="show-tool-progress"><input id="show-tool-progress" type="checkbox"> Show tool progress</label>
           <label class="settings-checkbox" for="show-diagnostics"><input id="show-diagnostics" type="checkbox"> Show telemetry-free diagnostics</label>
+          <label class="settings-checkbox" for="debug-logging"><input id="debug-logging" type="checkbox"> Enable local debug logging</label>
           <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
           <label class="settings-checkbox" for="workspace-settings"><input id="workspace-settings" type="checkbox"> Use workspace-specific settings</label>
           <label for="system-instructions">Custom system instructions</label>
@@ -601,6 +643,7 @@ const compactLayoutElement = document.getElementById('compact-layout') as HTMLIn
 const showThinkingElement = document.getElementById('show-thinking') as HTMLInputElement
 const showToolProgressElement = document.getElementById('show-tool-progress') as HTMLInputElement
 const showDiagnosticsElement = document.getElementById('show-diagnostics') as HTMLInputElement
+const debugLoggingElement = document.getElementById('debug-logging') as HTMLInputElement
 const autoContextElement = document.getElementById('auto-context') as HTMLInputElement
 const workspaceSettingsElement = document.getElementById('workspace-settings') as HTMLInputElement
 const systemInstructionsElement = document.getElementById('system-instructions') as HTMLTextAreaElement
@@ -626,10 +669,10 @@ const post = (type: string, details: Record<string, unknown> = {}) => {
 
 const createPersistedState = () => ({
   schemaVersion: persistenceSchemaVersion,
-  conversations: state.conversations,
+  conversations: redactPersistedValue(state.conversations) as Conversation[],
   activeConversationId: state.activeConversationId,
-  promptHistory: state.promptHistory ?? [],
-  presets: state.presets ?? [],
+  promptHistory: (redactPersistedValue(state.promptHistory ?? []) as string[]),
+  presets: redactPersistedValue(state.presets ?? []) as PromptPreset[],
   showReasoning,
   preferences: {
     provider: controls.provider,
@@ -655,13 +698,14 @@ const createPersistedState = () => ({
     showDiagnostics: uiPreferences.showDiagnostics,
     autoContext: uiPreferences.autoContext,
     customSystemInstructions: uiPreferences.customSystemInstructions,
-    workspaceOnly: uiPreferences.workspaceOnly
+    workspaceOnly: uiPreferences.workspaceOnly,
+    enableDebugLogging: controls.enableDebugLogging
   }
 })
 
 const saveState = () => {
   if (controls.enableConversationPersistence) {
-    vscode.setState(state)
+    vscode.setState(redactPersistedValue(state) as GhostPilotState)
   } else {
     vscode.setState({
       schemaVersion: persistenceSchemaVersion,
@@ -706,24 +750,41 @@ const lifecycleEnvelope = (prefix: string) => ({
 })
 
 const sendSettingsUpdate = () => {
-  post('update-settings', {
-    ...lifecycleEnvelope('settings'),
-    settings: {
-      provider: controls.provider,
-      ollamaUrl: controls.ollamaUrl,
-      mlxUrl: controls.mlxUrl,
-      openaiUrl: controls.openaiUrl,
-      toolAllowlist: controls.toolAllowlist,
-      toolDenylist: controls.toolDenylist,
-      chatModel: controls.chatModel,
-      maxContextTokens: controls.maxContextTokens,
-      temperature: controls.temperature,
-      responseLength: controls.responseLength,
-      mode: controls.mode,
-      enableConversationPersistence: controls.enableConversationPersistence,
-      workspaceOnly: uiPreferences.workspaceOnly
-    }
-  })
+  if (settingsTimer !== undefined) {
+    window.clearTimeout(settingsTimer)
+  }
+  settingsTimer = window.setTimeout(() => {
+    settingsTimer = undefined
+    post('update-settings', {
+      ...lifecycleEnvelope('settings'),
+      settings: {
+        provider: controls.provider,
+        ollamaUrl: controls.ollamaUrl,
+        mlxUrl: controls.mlxUrl,
+        openaiUrl: controls.openaiUrl,
+        toolAllowlist: controls.toolAllowlist,
+        toolDenylist: controls.toolDenylist,
+        chatModel: controls.chatModel,
+        maxContextTokens: controls.maxContextTokens,
+        temperature: controls.temperature,
+        responseLength: controls.responseLength,
+        mode: controls.mode,
+        enableConversationPersistence: controls.enableConversationPersistence,
+        workspaceOnly: uiPreferences.workspaceOnly,
+        enableDebugLogging: controls.enableDebugLogging
+      }
+    })
+  }, 200)
+}
+
+const queueModelRefresh = () => {
+  if (modelRefreshTimer !== undefined) {
+    window.clearTimeout(modelRefreshTimer)
+  }
+  modelRefreshTimer = window.setTimeout(() => {
+    modelRefreshTimer = undefined
+    post('refresh-models')
+  }, 300)
 }
 
 const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
@@ -763,6 +824,7 @@ const renderControls = () => {
       : 'Ollama endpoint.'
   toolAllowlistElement.value = controls.toolAllowlist.join(', ')
   toolDenylistElement.value = controls.toolDenylist.join(', ')
+  debugLoggingElement.checked = controls.enableDebugLogging
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
   assistantNameElement.value = uiPreferences.assistantName
@@ -778,10 +840,11 @@ const renderControls = () => {
   applyUiPreferences()
   connectionIndicatorElement.classList.toggle('online', connection === 'online')
   connectionIndicatorElement.classList.toggle('offline', connection === 'offline')
+  connectionIndicatorElement.classList.toggle('external', controls.networkAccess === 'external')
   connectionTextElement.textContent = connection === 'online'
-    ? 'Connected'
+    ? controls.networkAccess === 'external' ? 'Connected · external endpoint' : 'Connected'
     : connection === 'offline'
-      ? 'Offline'
+      ? controls.networkAccess === 'external' ? 'Offline · external endpoint' : 'Offline'
       : 'Checking…'
 
   contextChipsElement.textContent = ''
@@ -1049,7 +1112,7 @@ const isTableSeparator = (line: string): boolean => {
 }
 
 const renderMarkdown = (markdown: string): string => {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  const lines = redactSensitiveText(markdown).slice(0, 120000).replace(/\r\n/g, '\n').split('\n')
   const output: string[] = []
   let paragraph: string[] = []
   let listOpen = false
@@ -1159,6 +1222,7 @@ const messageText = (message: ChatMessage): string => (
 )
 
 const appendTextPart = (message: ChatMessage, delta: string): void => {
+  delta = redactSensitiveText(delta).slice(0, Math.max(0, 120000 - message.content.length))
   const lastPart = message.parts[message.parts.length - 1]
   if (lastPart?.kind === 'text') {
     lastPart.text += delta
@@ -1409,7 +1473,16 @@ const renderMessages = (forceScroll: boolean) => {
   if (conversation.messages.length === 0) {
     messagesElement.innerHTML = stateCard()
   } else {
-    for (const message of conversation.messages) {
+    const firstVisibleIndex = Math.max(0, conversation.messages.length - visibleMessageCount)
+    if (firstVisibleIndex > 0) {
+      const older = document.createElement('button')
+      older.type = 'button'
+      older.className = 'context-button load-older'
+      older.textContent = `Load ${Math.min(200, firstVisibleIndex)} older messages`
+      older.dataset.loadOlder = 'true'
+      messagesElement.append(older)
+    }
+    for (const message of conversation.messages.slice(firstVisibleIndex)) {
       messagesElement.append(createMessageElement(message))
     }
   }
@@ -1515,7 +1588,7 @@ const applySlashCommand = (prompt: string): string | undefined => {
 }
 
 const submitPrompt = (rawPrompt: string) => {
-  const prompt = applySlashCommand(rawPrompt.trim())?.trim() ?? ''
+  const prompt = applySlashCommand(rawPrompt.trim())?.trim().slice(0, 20000) ?? ''
   if (!prompt || activeRequest) {
     return
   }
@@ -1751,7 +1824,7 @@ const handleConversationAction = (action: string, conversationId: string) => {
 const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (message.type === 'persisted-state') {
     if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
-      const conversations = message.state.conversations.map(value => normalizeConversation(value as Partial<Conversation>))
+      const conversations = message.state.conversations.map(value => recoverInterruptedConversation(normalizeConversation(value as Partial<Conversation>)))
       state = {
         schemaVersion: persistenceSchemaVersion,
         conversations,
@@ -1803,6 +1876,9 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
       }
       if (Array.isArray(preferences.toolDenylist)) {
         controls.toolDenylist = preferences.toolDenylist.filter((item): item is string => typeof item === 'string')
+      }
+      if (typeof preferences.enableDebugLogging === 'boolean') {
+        controls.enableDebugLogging = preferences.enableDebugLogging
       }
       if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
         composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
@@ -2015,7 +2091,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
       .reverse()
       .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && (message.toolCallId ? part.toolCall.id === message.toolCallId : part.toolCall.status !== 'completed'))
     if (toolPart) {
-      const detail = message.detail ?? 'Tool completed'
+      const detail = redactSensitiveText(message.detail ?? 'Tool completed').slice(0, 16000)
       const failed = /rejected|denied|cancelled|error|failed/i.test(detail)
       toolPart.toolCall.status = failed
         ? /rejected|denied/i.test(detail) ? 'rejected' : 'failed'
@@ -2149,6 +2225,12 @@ messagesElement.addEventListener('scroll', () => {
 
 messagesElement.addEventListener('click', event => {
   const target = event.target as HTMLElement
+  const loadOlder = target.closest<HTMLButtonElement>('[data-load-older]')
+  if (loadOlder) {
+    visibleMessageCount += 200
+    renderMessages(false)
+    return
+  }
   const codeCopy = target.closest<HTMLButtonElement>('.code-copy')
   if (codeCopy) {
     void copyText(decodeURIComponent(codeCopy.dataset.code ?? ''))
@@ -2272,7 +2354,7 @@ providerElement.addEventListener('change', () => {
   availableModels = []
   renderControls()
   sendSettingsUpdate()
-  post('refresh-models')
+  queueModelRefresh()
 })
 
 providerEndpointElement.addEventListener('change', () => {
@@ -2289,7 +2371,7 @@ providerEndpointElement.addEventListener('change', () => {
     controls.ollamaUrl = endpoint
   }
   sendSettingsUpdate()
-  post('refresh-models')
+  queueModelRefresh()
 })
 testProviderElement.addEventListener('click', () => post('test-provider'))
 const readToolNames = (value: string): string[] => [...new Set(value.split(',').map(item => item.trim()).filter(Boolean))].slice(0, 20)
@@ -2373,6 +2455,11 @@ showToolProgressElement.addEventListener('change', () => {
 showDiagnosticsElement.addEventListener('change', () => {
   uiPreferences.showDiagnostics = showDiagnosticsElement.checked
   updateStatus()
+  saveState()
+})
+debugLoggingElement.addEventListener('change', () => {
+  controls.enableDebugLogging = debugLoggingElement.checked
+  sendSettingsUpdate()
   saveState()
 })
 autoContextElement.addEventListener('change', () => {

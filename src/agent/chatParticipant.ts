@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
+import { redactSensitiveText } from '../privacy/redact'
 import { GhostPilotConfig, ghostPilotConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
@@ -521,6 +522,8 @@ export function createChatParticipantHandler(
         const generated = turn.generated
 
         if (!generated) {
+          response.progress('Provider returned an empty response')
+          response.markdown('The provider returned no content. Check the model and connection, then retry.')
           return
         }
 
@@ -584,7 +587,7 @@ export function createChatParticipantHandler(
     } catch (error) {
       if (!token.isCancellationRequested) {
         finalStatus = 'offline'
-        const message = error instanceof Error ? error.message : 'Unknown local model error'
+        const message = redactSensitiveText(error instanceof Error ? error.message : 'Unknown local model error')
         response.markdown(`GhostPilot could not reach the local model: ${message}`)
       }
     } finally {

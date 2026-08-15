@@ -8,6 +8,7 @@ import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostPilotEdit, parseGhostPilotEdit } from '../tools/editWorkflow'
+import { isExternalEndpoint, redactSensitiveText } from '../privacy/redact'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
   GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
@@ -98,6 +99,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
+  private debugLog(message: string, details?: unknown): void {
+    if (!getGhostPilotSettings().enableDebugLogging) {
+      return
+    }
+    console.debug(JSON.stringify({ scope: 'GhostPilot', message, details: details === undefined ? undefined : redactSensitiveText(JSON.stringify(details)) }))
+  }
+
   constructor(
     private readonly extensionUri: vscode.Uri,
     options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento } = {}
@@ -105,6 +113,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     this.globalState = options.globalState
     this.workspaceState = options.workspaceState
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
+    this.debugLog('view provider created')
     this.disposables.push(ghostPilotConfig.onDidChange(() => {
       void this.sendControlsState()
     }))
@@ -173,6 +182,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
       return
     }
+    this.debugLog('request started', { requestId, conversationId, promptLength: prompt.length })
 
     const cancellation = new vscode.CancellationTokenSource()
     const request: GhostPilotRequestState = {
@@ -365,7 +375,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       })
     } catch (error) {
       if (!cancellation.token.isCancellationRequested || !request.timedOut) {
-        const message = error instanceof Error ? error.message : 'GhostPilot request failed'
+        const message = redactSensitiveText(error instanceof Error ? error.message : 'GhostPilot request failed')
+        this.debugLog('request failed', message)
         this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message })
       }
       this.postStreamEvent(requestId, request, {
@@ -766,7 +777,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       ...(request.outputTokens > 0
         ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
         : {}),
-      ...event
+      ...Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))
     } as GhostPilotStreamEvent)
   }
 
@@ -779,7 +790,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostPilotViewProvider.workspaceStateKey)
     const globalRecord: Record<string, unknown> = isStoredRecord(global) ? global : {}
     const workspaceRecord: Record<string, unknown> = isStoredRecord(workspace) ? workspace : {}
-    return {
+    const state = {
       schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
       conversations: Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
       activeConversationId: typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
@@ -788,6 +799,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
     }
+    return JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
   }
 
   private async sendPersistedState(): Promise<void> {
@@ -811,17 +823,18 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, undefined)
       return
     }
+    const safeState = JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
     await this.globalState.update(GhostPilotViewProvider.globalStateKey, {
       schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
-      promptHistory: state.promptHistory?.slice(0, 100) ?? [],
-      presets: state.presets ?? [],
-      showReasoning: state.showReasoning === true,
-      preferences: state.preferences ?? {}
+      promptHistory: safeState.promptHistory?.slice(0, 100) ?? [],
+      presets: safeState.presets ?? [],
+      showReasoning: safeState.showReasoning === true,
+      preferences: safeState.preferences ?? {}
     } satisfies StoredGlobalState)
     await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, {
       schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
-      conversations: state.conversations ?? [],
-      activeConversationId: state.activeConversationId
+      conversations: safeState.conversations ?? [],
+      activeConversationId: safeState.activeConversationId
     } satisfies StoredWorkspaceState)
   }
 
@@ -926,7 +939,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         mlxUrl: settings.mlxUrl,
         openaiUrl: settings.openaiUrl,
         toolAllowlist: settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES],
-        toolDenylist: settings.toolDenylist ?? []
+        toolDenylist: settings.toolDenylist ?? [],
+        enableDebugLogging: settings.enableDebugLogging,
+        networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       connection,
@@ -1000,6 +1015,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       if (!update.enableConversationPersistence) {
         await this.clearPersistedState()
       }
+    }
+    if (typeof update.enableDebugLogging === 'boolean') {
+      await ghostPilotConfig.update('enableDebugLogging', update.enableDebugLogging, target)
     }
     await this.sendControlsState()
   }
@@ -1397,6 +1415,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .connection-indicator.offline .status-dot {
         background: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      .connection-indicator.external .status-dot {
+        background: var(--vscode-editorWarning-foreground, #cca700);
       }
 
       .control-button,
@@ -2110,12 +2132,28 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         clip: rect(0, 0, 0, 0);
       }
 
+      :focus-visible {
+        outline: 2px solid var(--vscode-focusBorder, var(--ghostpilot-accent));
+        outline-offset: 2px;
+      }
+
       @media (max-width: 500px) {
         .sidebar {
           flex-basis: 132px;
         }
 
         .composer-hint {
+          display: none;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .sidebar {
+          flex-basis: 104px;
+        }
+
+        .header .subtitle,
+        .connection-indicator {
           display: none;
         }
       }
