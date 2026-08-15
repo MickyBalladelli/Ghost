@@ -14,9 +14,7 @@
     - Name: `GhostPilot AI`
     - Identifier: `ghostpilot-ai`
     - Description: `Local, offline Copilot & Codex alternative powered by Ollama/vLLM`
-    - Enable Git: `Yes`
     - Package manager: `npm` or `pnpm`
-  - [x] Initialize Git repository and commit baseline files.
 
 - [x] **1.2 Install Project Dependencies**
   - [x] Core dependencies:
@@ -186,4 +184,158 @@
     ```bash
     npx vsce package --out ghostpilot-ai-1.0.0.vsix
     ```
-  - [ ] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).
+- [ ] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).
+
+---
+
+## 🖥️ Phase 9: Full Copilot / Codex-Style Interface
+
+**Goal:** Replace the native-only chat experience with a customizable GhostPilot interface inside VS Code. The interface must let the user enter prompts, watch live progress, review model output, approve tool actions, and continue the conversation.
+
+### 9.1 Choose and Register the Interface
+
+- [ ] Decide on the primary surface: a persistent `WebviewView` in the GhostPilot Activity Bar, with an optional editor `WebviewPanel` for a larger workspace.
+- [ ] Add an Activity Bar container and GhostPilot view contribution in `package.json`.
+- [ ] Add commands to open, focus, reset, export, and clear the GhostPilot interface.
+- [ ] Add a view icon and product styling that works in light, dark, and high-contrast VS Code themes.
+- [ ] Create a dedicated webview entry point and keep webview code separate from extension-host code.
+- [ ] Configure the webview content security policy, nonce handling, local resource roots, and message origin checks.
+- [ ] Keep the existing native `@local` Chat Participant working while the new interface is introduced.
+
+### 9.2 Build the Chat UI
+
+- [ ] Create the main chat layout with header, conversation list, message area, prompt composer, and status footer.
+- [ ] Add a conversation sidebar with new-chat, rename, delete, and switch-conversation actions.
+- [ ] Add empty, loading, offline, error, and no-model-installed states.
+- [ ] Add a prompt text area with multiline input, placeholder text, character/token count, and auto-resizing.
+- [ ] Submit prompts with a Send button and `Enter`; use `Shift+Enter` for a new line.
+- [ ] Add Stop/Cancel while a request is running.
+- [ ] Add retry, edit-and-resend, copy, and regenerate actions to assistant messages.
+- [ ] Render Markdown safely, including fenced code blocks, tables, links, and inline formatting.
+- [ ] Add syntax highlighting and a Copy button to every code block.
+- [ ] Render streamed output incrementally without flicker or scroll jumps.
+- [ ] Auto-scroll while the user is at the bottom, but preserve the user’s scroll position when they read older output.
+- [ ] Add accessible labels, keyboard navigation, focus management, and screen-reader-friendly status messages.
+
+### 9.3 Add Prompt Context and Composer Controls
+
+- [ ] Add a model selector populated from the configured provider.
+- [ ] Add provider selection and a connection indicator for Ollama, MLX/VLM, and OpenAI-compatible endpoints.
+- [ ] Add temperature, max-context, and response-length controls with saved defaults.
+- [ ] Add a mode selector for Ask, Edit, Agent, Explain, and Inline/Completion workflows.
+- [ ] Add workspace, folder, file, selection, and active-editor context chips.
+- [ ] Add file attachment support through a file picker and drag-and-drop.
+- [ ] Add mention support for `@workspace`, open files, folders, and available tools.
+- [ ] Add a context preview/remove control so the user can inspect what will be sent.
+- [ ] Add prompt history navigation with Up/Down and a searchable prompt history panel.
+- [ ] Add slash commands for common actions such as `/clear`, `/model`, `/explain`, `/fix`, and `/summarize`.
+- [ ] Add reusable prompt presets and a settings screen for creating, editing, deleting, and selecting presets.
+- [ ] Make prompt submission explicit and never send text or files without a user action.
+
+### 9.4 Define the Webview Message Contract
+
+- [ ] Define typed extension-to-webview and webview-to-extension message unions.
+- [ ] Add request IDs and conversation IDs to every prompt lifecycle message.
+- [ ] Support messages for submit, cancel, retry, regenerate, edit, attach, remove-context, select-model, and update-settings.
+- [ ] Support streamed events for request-started, thinking, text-delta, code-delta, tool-requested, tool-result, warning, error, and request-completed.
+- [ ] Validate every incoming message at the extension boundary before acting on it.
+- [ ] Handle stale, duplicated, out-of-order, and late stream events safely.
+- [ ] Ensure cancellation disposes network, stream, timer, and webview resources.
+- [ ] Add a protocol version so future UI and extension-host changes can remain compatible.
+
+### 9.5 Implement Conversation and Request State
+
+- [ ] Create typed models for conversations, messages, message parts, attachments, tool calls, request status, and model metadata.
+- [ ] Track request states: idle, preparing, connecting, thinking, streaming, waiting-for-approval, completed, cancelled, and failed.
+- [ ] Keep user text, assistant text, reasoning/progress, tool activity, and errors as separate message parts.
+- [ ] Support multiple assistant messages and tool rounds in one user request.
+- [ ] Prevent duplicate submissions while a request is active unless the user explicitly chooses retry or regenerate.
+- [ ] Preserve unsent composer text when switching views or conversations.
+- [ ] Add request timeout, retry, and backoff behavior for recoverable provider failures.
+- [ ] Keep sensitive prompt and provider data out of logs by default.
+
+### 9.6 Show Thinking and Agent Progress
+
+- [ ] Define a local-model-compatible progress protocol for models that do not expose native reasoning tokens.
+- [ ] Show a compact “GhostPilot is thinking…” state while context is collected and the provider connects.
+- [ ] Stream visible reasoning only when the provider explicitly returns it and the user enables it.
+- [ ] Default to showing safe progress summaries instead of raw hidden reasoning.
+- [ ] Show context collection steps such as reading the active file, searching the workspace, or preparing attachments.
+- [ ] Show elapsed time, token counts where available, current model, and estimated completion state.
+- [ ] Add collapsible progress details for each request.
+- [ ] Clearly separate model answer, tool activity, warnings, and system diagnostics.
+- [ ] Ensure progress indicators stop on completion, cancellation, disconnect, and error.
+
+### 9.7 Integrate Tools with Approval and Results
+
+- [ ] Move tool execution into a request-scoped agent controller that the webview can observe.
+- [ ] Render each tool call with tool name, arguments, status, duration, and result summary.
+- [ ] Show a clear approval card before file writes, terminal commands, or other destructive actions.
+- [ ] Provide Approve once, Always approve for this session, Reject, and Edit arguments actions where safe.
+- [ ] Allow the user to cancel a tool call and the complete request.
+- [ ] Add diff preview for proposed file changes before applying them.
+- [ ] Add terminal output expansion, truncation, copy, and rerun controls.
+- [ ] Add tool allowlist/denylist settings and per-workspace approval policy.
+- [ ] Record tool errors as structured message parts and let the model continue when recovery is possible.
+- [ ] Prevent the model from bypassing approval through malformed JSON, streamed text, or alternate tool names.
+
+### 9.8 Add File Editing and Diff Workflow
+
+- [ ] Define a structured edit format for local models that need to modify files.
+- [ ] Parse edits robustly and reject incomplete, ambiguous, or out-of-workspace paths.
+- [ ] Show proposed changes in a VS Code diff editor before applying them.
+- [ ] Support apply, reject, apply selected hunks, and restore actions.
+- [ ] Detect external file changes between proposal and apply.
+- [ ] Keep an undo/recovery path for every applied change.
+- [ ] Link each changed file and code location back to the editor.
+- [ ] Show a concise change summary in the conversation.
+
+### 9.9 Persist Conversations and User Preferences
+
+- [ ] Store conversation metadata and messages using `ExtensionContext.globalState` or a versioned local storage file.
+- [ ] Store workspace-specific conversations separately from global conversations.
+- [ ] Persist selected model, provider, mode, prompt presets, composer size, and UI preferences.
+- [ ] Add schema versioning and migrations for stored data.
+- [ ] Add conversation import/export as JSON or Markdown.
+- [ ] Add “delete all history” with confirmation and reliable cleanup.
+- [ ] Add a setting to disable conversation persistence.
+- [ ] Avoid persisting attachments or sensitive content unless the user explicitly chooses it.
+
+### 9.10 Customize the Extension
+
+- [ ] Add a GhostPilot settings page or webview panel for provider, model, context, permissions, appearance, and history settings.
+- [ ] Allow custom system instructions with a visible reset-to-default action.
+- [ ] Allow custom assistant name, avatar, accent color, and compact/full layout preference.
+- [ ] Allow users to enable or disable thinking details, tool progress, telemetry-free diagnostics, and automatic context collection.
+- [ ] Allow per-workspace overrides while preserving global defaults.
+- [ ] Add provider-specific settings without showing irrelevant controls.
+- [ ] Add model discovery, refresh, and validation actions.
+- [ ] Add a connection test with readable failure guidance.
+- [ ] Add import/export for GhostPilot configuration and prompt presets.
+- [ ] Document which settings affect privacy, performance, context size, and tool permissions.
+
+### 9.11 Reliability, Privacy, and Performance
+
+- [ ] Redact secrets, tokens, passwords, and common credential patterns from displayed diagnostics and optional persisted history.
+- [ ] Make all network requests use configured local or explicitly configured endpoints.
+- [ ] Add a visible indicator when external network access is enabled.
+- [ ] Limit message, attachment, tool-result, and rendered-Markdown sizes to keep the UI responsive.
+- [ ] Virtualize or paginate long conversations.
+- [ ] Debounce settings and model-list refreshes.
+- [ ] Handle webview reloads without corrupting an active request or losing recoverable state.
+- [ ] Handle provider disconnects, malformed SSE, invalid UTF-8, empty responses, and model crashes.
+- [ ] Add telemetry-free structured debug logging behind an opt-in setting.
+- [ ] Verify the interface works with keyboard-only use, high contrast, reduced motion, and narrow sidebar widths.
+
+### 9.12 Testing and Documentation for the New Interface
+
+- [ ] Add unit tests for message models, state transitions, message validation, prompt history, storage migrations, and stream event parsing.
+- [ ] Add tests for cancellation, retries, duplicate events, malformed tool calls, approval decisions, and provider failures.
+- [ ] Add webview tests for prompt submission, multiline input, streaming output, scrolling, attachments, settings, and conversation switching.
+- [ ] Add extension-host integration tests for webview messaging and request lifecycle behavior.
+- [ ] Manually verify the interface in light, dark, and high-contrast VS Code themes.
+- [ ] Manually verify Ask, Edit, Agent, Explain, file attachment, workspace search, tool approval, diff review, cancellation, and retry flows.
+- [ ] Update `README.md` with screenshots, interface usage, commands, customization, privacy, and troubleshooting.
+- [ ] Add an architecture document describing the webview, extension host, provider clients, agent controller, and tool approval flow.
+- [ ] Update `CHANGELOG.md` when the full interface is released.
+- [ ] Package and install the extension, then verify the UI in a clean Extension Development Host.
