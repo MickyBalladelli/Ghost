@@ -5,6 +5,7 @@ import { LocalPilotConfig, localPilotConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
+import { LocalPilotStatusBar } from '../ui/statusBar'
 import { parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'localpilot.agent'
@@ -27,6 +28,7 @@ export interface ChatParticipantOptions {
   configuration?: LocalPilotConfig
   llmFactory?: LlmFactory
   toolExecutor?: LocalToolExecutor
+  statusBar?: LocalPilotStatusBar
 }
 
 interface EditorContext {
@@ -344,6 +346,7 @@ export function createChatParticipantHandler(
   const configuration = options.configuration ?? localPilotConfig
   const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration)
   const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
+  const statusBar = options.statusBar
 
   return async (request, _context, response, token) => {
     if (!request.prompt.trim()) {
@@ -367,6 +370,8 @@ export function createChatParticipantHandler(
       { role: 'user', content: contextPrompt }
     ]
     const cancellation = createCancellationSignal(token)
+    let finalStatus: 'ready' | 'offline' = 'ready'
+    statusBar?.setStatus('generating')
 
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -427,11 +432,13 @@ export function createChatParticipantHandler(
       response.markdown('LocalPilot stopped after reaching the maximum tool-call limit.')
     } catch (error) {
       if (!token.isCancellationRequested) {
+        finalStatus = 'offline'
         const message = error instanceof Error ? error.message : 'Unknown local model error'
         response.markdown(`LocalPilot could not reach the local model: ${message}`)
       }
     } finally {
       cancellation.dispose()
+      statusBar?.setStatus(finalStatus)
     }
   }
 }
