@@ -1,9 +1,11 @@
 import * as vscode from 'vscode'
 
+import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { LocalPilotConfig, localPilotConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
+import { parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'localpilot.agent'
 const DEFAULT_TEMPERATURE = 0.2
@@ -12,12 +14,19 @@ const SYSTEM_PROMPT = [
   'You are LocalPilot, a private local coding assistant.',
   'Use the supplied editor and workspace context when it helps answer the user.',
   'Be concise. Put code in fenced Markdown blocks with the correct language when useful.',
-  'Do not claim to have changed files or run commands unless a tool actually did it.'
+  'Do not claim to have changed files or run commands unless a tool actually did it.',
+  'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
+  'Available tools: localpilot_read_file({"path":"absolute workspace path"}), localpilot_write_file({"path":"absolute workspace path","content":"full text"}), localpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), localpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'After receiving a tool result, continue the task and provide the final answer.'
 ].join(' ')
+
+const MAX_TOOL_ROUNDS = 8
+const MAX_TOOL_RESULT_CHARACTERS = 16000
 
 export interface ChatParticipantOptions {
   configuration?: LocalPilotConfig
   llmFactory?: LlmFactory
+  toolExecutor?: LocalToolExecutor
 }
 
 interface EditorContext {
@@ -290,11 +299,51 @@ function createDefaultLlmFactory(configuration: LocalPilotConfig): LlmFactory {
   )
 }
 
+async function streamModelTurn(
+  llmFactory: LlmFactory,
+  options: Parameters<LlmFactory['streamChatCompletion']>[0],
+  response: vscode.ChatResponseStream,
+  token: vscode.CancellationToken
+): Promise<{ generated: string; streamed: boolean }> {
+  let generated = ''
+  let decided = false
+  let bufferingToolCall = false
+
+  for await (const chunk of llmFactory.streamChatCompletion(options)) {
+    if (token.isCancellationRequested) {
+      return { generated: '', streamed: false }
+    }
+
+    if (decided && !bufferingToolCall) {
+      response.markdown(chunk)
+      continue
+    }
+
+    generated += chunk
+
+    if (!decided) {
+      const firstContent = generated.trimStart()
+
+      if (firstContent.startsWith('{') || firstContent.startsWith('<tool_call>')) {
+        decided = true
+        bufferingToolCall = true
+      } else if (firstContent) {
+        decided = true
+        response.markdown(generated)
+        generated = ''
+      }
+    }
+  }
+
+  return { generated: generated.trim(), streamed: decided && !bufferingToolCall }
+}
+
 export function createChatParticipantHandler(
   options: ChatParticipantOptions = {}
 ): vscode.ChatRequestHandler {
   const configuration = options.configuration ?? localPilotConfig
   const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration)
+  const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
 
   return async (request, _context, response, token) => {
     if (!request.prompt.trim()) {
@@ -320,18 +369,62 @@ export function createChatParticipantHandler(
     const cancellation = createCancellationSignal(token)
 
     try {
-      for await (const chunk of llmFactory.streamChatCompletion({
-        model: settings.chatModel,
-        messages,
-        temperature: DEFAULT_TEMPERATURE,
-        signal: cancellation.signal
-      })) {
-        if (token.isCancellationRequested) {
-          break
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+        const turn = await streamModelTurn(
+          llmFactory,
+          {
+            model: settings.chatModel,
+            messages,
+            temperature: DEFAULT_TEMPERATURE,
+            signal: cancellation.signal
+          },
+          response,
+          token
+        )
+
+        if (token.isCancellationRequested || turn.streamed) {
+          return
         }
 
-        response.markdown(chunk)
+        const generated = turn.generated
+
+        if (!generated) {
+          return
+        }
+
+        const toolCall = parseLocalToolCall(generated)
+
+        if (!toolCall) {
+          response.markdown(generated)
+          return
+        }
+
+        if (round === MAX_TOOL_ROUNDS - 1) {
+          response.markdown('LocalPilot stopped after reaching the maximum tool-call limit.')
+          return
+        }
+
+        response.progress(`Running ${toolCall.name}`)
+        let toolResult: string
+
+        try {
+          toolResult = await toolExecutor.execute(toolCall, token)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown tool error'
+          toolResult = `Tool error: ${message}`
+        }
+
+        if (toolResult.length > MAX_TOOL_RESULT_CHARACTERS) {
+          toolResult = `${toolResult.slice(0, MAX_TOOL_RESULT_CHARACTERS)}\n[Tool result truncated]`
+        }
+
+        messages.push(
+          { role: 'assistant', content: generated },
+          { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolResult}` }
+        )
       }
+
+      response.markdown('LocalPilot stopped after reaching the maximum tool-call limit.')
     } catch (error) {
       if (!token.isCancellationRequested) {
         const message = error instanceof Error ? error.message : 'Unknown local model error'
