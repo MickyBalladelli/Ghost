@@ -86,32 +86,169 @@ function getWorkspaceContext(): string {
   ].join('\n')
 }
 
-function getReferenceContext(request: vscode.ChatRequest): string {
+function getWorkspaceQuery(prompt: string): string[] {
+  const match = /@workspace\b([^\n]*)/i.exec(prompt)
+
+  if (!match?.[1]) {
+    return []
+  }
+
+  return match[1]
+    .toLowerCase()
+    .match(/[a-z0-9][a-z0-9._/-]{1,}/g)
+    ?.slice(0, 5) ?? []
+}
+
+function escapeGlobToken(token: string): string {
+  return token.replace(/[\\*?[\]{}]/g, '\\$&')
+}
+
+function isBinary(bytes: Uint8Array): boolean {
+  return bytes.subarray(0, Math.min(bytes.length, 4096)).includes(0)
+}
+
+function decodeText(bytes: Uint8Array): string | undefined {
+  if (isBinary(bytes)) {
+    return undefined
+  }
+
+  return Buffer.from(bytes).toString('utf8')
+}
+
+function getReferenceUri(value: unknown): { uri: vscode.Uri; range?: vscode.Range } | undefined {
+  if (value instanceof vscode.Uri) {
+    return { uri: value }
+  }
+
+  if (value && typeof value === 'object' && 'uri' in value) {
+    const location = value as vscode.Location
+    return { uri: location.uri, range: location.range }
+  }
+
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return { uri: vscode.Uri.parse(value) }
+  }
+
+  return undefined
+}
+
+async function readTextFile(uri: vscode.Uri, range?: vscode.Range): Promise<string | undefined> {
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri)
+    const text = decodeText(bytes)
+
+    if (text === undefined) {
+      return undefined
+    }
+
+    if (!range) {
+      return text
+    }
+
+    return text
+      .split(/\r?\n/)
+      .slice(range.start.line, range.end.line + 1)
+      .join('\n')
+  } catch {
+    return undefined
+  }
+}
+
+async function findWorkspaceFiles(query: string, token: vscode.CancellationToken): Promise<vscode.Uri[]> {
+  const folders = vscode.workspace.workspaceFolders ?? []
+  const tokens = getWorkspaceQuery(query)
+  const matches = new Map<string, vscode.Uri>()
+
+  for (const folder of folders) {
+    for (const searchToken of tokens) {
+      if (token.isCancellationRequested) {
+        return []
+      }
+
+      const pattern = new vscode.RelativePattern(folder, `**/*${escapeGlobToken(searchToken)}*`)
+      const uris = await vscode.workspace.findFiles(pattern, '**/{node_modules,.git,out,dist}/**', 8)
+
+      for (const uri of uris) {
+        matches.set(uri.toString(), uri)
+      }
+    }
+  }
+
+  return [...matches.values()].slice(0, 12)
+}
+
+async function getWorkspaceSearchContext(
+  prompt: string,
+  maxContextTokens: number,
+  token: vscode.CancellationToken
+): Promise<string> {
+  const query = getWorkspaceQuery(prompt)
+
+  if (query.length === 0) {
+    return ''
+  }
+
+  const files = await findWorkspaceFiles(prompt, token)
+  const maxFileCharacters = Math.max(1000, Math.floor((maxContextTokens * 4) / Math.max(files.length, 1)))
+  const sections: string[] = []
+
+  for (const file of files) {
+    const text = await readTextFile(file)
+
+    if (text === undefined) {
+      continue
+    }
+
+    sections.push(`File: ${file.fsPath}\n\n${truncateContext(text, Math.floor(maxFileCharacters / 4))}`)
+  }
+
+  return sections.length > 0
+    ? `@workspace matches for ${query.join(', ')}:\n\n${sections.join('\n\n')}`
+    : `@workspace found no readable files matching: ${query.join(', ')}`
+}
+
+async function getReferenceContext(
+  request: vscode.ChatRequest,
+  maxContextTokens: number,
+  token: vscode.CancellationToken
+): Promise<string> {
   if (request.references.length === 0) {
     return ''
   }
 
-  const references = request.references.map(reference => {
-    if (typeof reference.value === 'string') {
-      return reference.value
+  const maxFileCharacters = Math.max(1000, Math.floor((maxContextTokens * 4) / request.references.length))
+  const sections: string[] = []
+
+  for (const reference of request.references) {
+    if (token.isCancellationRequested) {
+      return ''
     }
 
-    if (reference.value instanceof vscode.Uri) {
-      return reference.value.fsPath
+    const location = getReferenceUri(reference.value)
+
+    if (location) {
+      const text = await readTextFile(location.uri, location.range)
+
+      if (text !== undefined) {
+        sections.push(`Attached file: ${location.uri.fsPath}\n\n${truncateContext(text, Math.floor(maxFileCharacters / 4))}`)
+        continue
+      }
     }
 
-    if (reference.value && typeof reference.value === 'object' && 'uri' in reference.value) {
-      const location = reference.value as vscode.Location
-      return `${location.uri.fsPath}:${location.range.start.line + 1}`
-    }
+    const label = typeof reference.value === 'string'
+      ? reference.value
+      : reference.modelDescription ?? reference.id
+    sections.push(`Chat reference: ${label}`)
+  }
 
-    return reference.modelDescription ?? reference.id
-  })
-
-  return `Chat references:\n${references.map(reference => `- ${reference}`).join('\n')}`
+  return sections.join('\n\n')
 }
 
-function buildContextPrompt(request: vscode.ChatRequest, settings: ReturnType<LocalPilotConfig['getSettings']>): string {
+async function buildContextPrompt(
+  request: vscode.ChatRequest,
+  settings: ReturnType<LocalPilotConfig['getSettings']>,
+  token: vscode.CancellationToken
+): Promise<string> {
   const editor = getActiveEditorContext(settings.maxContextTokens)
   const sections = [`User request:\n${request.prompt.trim()}`]
 
@@ -124,7 +261,13 @@ function buildContextPrompt(request: vscode.ChatRequest, settings: ReturnType<Lo
 
   sections.push(getWorkspaceContext())
 
-  const references = getReferenceContext(request)
+  const workspaceSearch = await getWorkspaceSearchContext(request.prompt, settings.maxContextTokens, token)
+
+  if (workspaceSearch) {
+    sections.push(workspaceSearch)
+  }
+
+  const references = await getReferenceContext(request, settings.maxContextTokens, token)
 
   if (references) {
     sections.push(references)
@@ -164,9 +307,15 @@ export function createChatParticipantHandler(
     }
 
     const settings = configuration.getSettings()
+    const contextPrompt = await buildContextPrompt(request, settings, token)
+
+    if (token.isCancellationRequested) {
+      return
+    }
+
     const messages: MlxMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildContextPrompt(request, settings) }
+      { role: 'user', content: contextPrompt }
     ]
     const cancellation = createCancellationSignal(token)
 
