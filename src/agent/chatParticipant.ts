@@ -32,6 +32,25 @@ export interface ChatParticipantOptions {
   statusBar?: GhostPilotStatusBar
 }
 
+export interface GhostPilotContextSelection {
+  workspace?: boolean
+  folders?: boolean
+  activeFile?: boolean
+  selection?: boolean
+  openFiles?: boolean
+  tools?: boolean
+}
+
+export interface GhostPilotRequestOptions {
+  model?: string
+  temperature?: number
+  maxContextTokens?: number
+  maxTokens?: number
+  mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+  context?: GhostPilotContextSelection
+  additionalContext?: string
+}
+
 interface EditorContext {
   text: string
   filePath: string
@@ -65,7 +84,7 @@ export function truncateContext(text: string, maxTokens: number): string {
   return `${text.slice(0, maxCharacters)}\n\n[Context truncated by GhostPilot]`
 }
 
-function getActiveEditorContext(maxContextTokens: number): EditorContext | undefined {
+function getActiveEditorContext(maxContextTokens: number, includeSelection: boolean): EditorContext | undefined {
   const editor = vscode.window.activeTextEditor
 
   if (!editor) {
@@ -73,7 +92,7 @@ function getActiveEditorContext(maxContextTokens: number): EditorContext | undef
   }
 
   const document = editor.document
-  const selectedText = document.getText(editor.selection)
+  const selectedText = includeSelection ? document.getText(editor.selection) : ''
   const text = selectedText || document.getText()
 
   return {
@@ -83,15 +102,17 @@ function getActiveEditorContext(maxContextTokens: number): EditorContext | undef
   }
 }
 
-function getWorkspaceContext(): string {
+function getWorkspaceContext(includeOpenFiles: boolean, includeFolders: boolean): string {
   const workspaceName = vscode.workspace.name ?? 'untitled workspace'
   const workspaceFolders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-  const openTabs = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
+  const openTabs = includeOpenFiles
+    ? vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
+    : []
   const terminals = vscode.window.terminals.map(terminal => terminal.name)
 
   return [
     `Workspace: ${workspaceName}`,
-    `Workspace folders: ${workspaceFolders.length > 0 ? workspaceFolders.join(', ') : 'none'}`,
+    `Workspace folders: ${includeFolders && workspaceFolders.length > 0 ? workspaceFolders.join(', ') : 'none'}`,
     `Open tabs: ${openTabs.length > 0 ? openTabs.join(', ') : 'none'}`,
     `Open terminals: ${terminals.length > 0 ? terminals.join(', ') : 'none'}`,
     'Terminal output: unavailable unless captured by an extension-owned terminal.'
@@ -263,9 +284,13 @@ async function getReferenceContext(
 async function buildContextPrompt(
   request: vscode.ChatRequest,
   settings: ReturnType<GhostPilotConfig['getSettings']>,
-  token: vscode.CancellationToken
+  token: vscode.CancellationToken,
+  options: GhostPilotRequestOptions = {}
 ): Promise<string> {
-  const editor = getActiveEditorContext(settings.maxContextTokens)
+  const context = options.context ?? {}
+  const editor = context.activeFile === false
+    ? undefined
+    : getActiveEditorContext(settings.maxContextTokens, context.selection !== false)
   const sections = [`User request:\n${request.prompt.trim()}`]
 
   if (editor) {
@@ -275,9 +300,13 @@ async function buildContextPrompt(
     )
   }
 
-  sections.push(getWorkspaceContext())
+  if (context.workspace !== false) {
+    sections.push(getWorkspaceContext(context.openFiles !== false, context.folders !== false))
+  }
 
-  const workspaceSearch = await getWorkspaceSearchContext(request.prompt, settings.maxContextTokens, token)
+  const workspaceSearch = context.workspace === false
+    ? ''
+    : await getWorkspaceSearchContext(request.prompt, settings.maxContextTokens, token)
 
   if (workspaceSearch) {
     sections.push(workspaceSearch)
@@ -289,7 +318,20 @@ async function buildContextPrompt(
     sections.push(references)
   }
 
+  if (options.mode) {
+    sections.unshift(`Workflow mode: ${options.mode}`)
+  }
+
+  if (options.additionalContext?.trim()) {
+    sections.push(`Additional prompt context:\n${options.additionalContext.trim()}`)
+  }
+
   return sections.join('\n\n')
+}
+
+function getRequestOptions(request: vscode.ChatRequest): GhostPilotRequestOptions {
+  const value = (request as vscode.ChatRequest & { ghostPilot?: GhostPilotRequestOptions }).ghostPilot
+  return value ?? {}
 }
 
 function createDefaultLlmFactory(configuration: GhostPilotConfig): LlmFactory {
@@ -364,14 +406,24 @@ export function createChatParticipantHandler(
     }
 
     const settings = configuration.getSettings()
-    const contextPrompt = await buildContextPrompt(request, settings, token)
+    const requestOptions = getRequestOptions(request)
+    const effectiveSettings = {
+      ...settings,
+      maxContextTokens: Math.max(1, Math.floor(requestOptions.maxContextTokens ?? settings.maxContextTokens))
+    }
+    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions)
 
     if (token.isCancellationRequested) {
       return
     }
 
     const messages: MlxMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'system',
+        content: requestOptions.context?.tools === false
+          ? 'You are GhostPilot, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
+          : SYSTEM_PROMPT
+      },
       { role: 'user', content: contextPrompt }
     ]
     const cancellation = createCancellationSignal(token)
@@ -383,9 +435,10 @@ export function createChatParticipantHandler(
         const turn = await streamModelTurn(
           llmFactory,
           {
-            model: settings.chatModel,
+            model: requestOptions.model?.trim() || settings.chatModel,
             messages,
-            temperature: DEFAULT_TEMPERATURE,
+            temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
+            maxTokens: requestOptions.maxTokens,
             signal: cancellation.signal
           },
           response,

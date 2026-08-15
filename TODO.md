@@ -221,18 +221,18 @@
 
 ### 9.3 Add Prompt Context and Composer Controls
 
-- [ ] Add a model selector populated from the configured provider.
-- [ ] Add provider selection and a connection indicator for Ollama, MLX/VLM, and OpenAI-compatible endpoints.
-- [ ] Add temperature, max-context, and response-length controls with saved defaults.
-- [ ] Add a mode selector for Ask, Edit, Agent, Explain, and Inline/Completion workflows.
-- [ ] Add workspace, folder, file, selection, and active-editor context chips.
-- [ ] Add file attachment support through a file picker and drag-and-drop.
-- [ ] Add mention support for `@workspace`, open files, folders, and available tools.
-- [ ] Add a context preview/remove control so the user can inspect what will be sent.
-- [ ] Add prompt history navigation with Up/Down and a searchable prompt history panel.
-- [ ] Add slash commands for common actions such as `/clear`, `/model`, `/explain`, `/fix`, and `/summarize`.
-- [ ] Add reusable prompt presets and a settings screen for creating, editing, deleting, and selecting presets.
-- [ ] Make prompt submission explicit and never send text or files without a user action.
+- [x] Add a model selector populated from the configured provider.
+- [x] Add provider selection and a connection indicator for Ollama, MLX/VLM, and OpenAI-compatible endpoints.
+- [x] Add temperature, max-context, and response-length controls with saved defaults.
+- [x] Add a mode selector for Ask, Edit, Agent, Explain, and Inline/Completion workflows.
+- [x] Add workspace, folder, file, selection, and active-editor context chips.
+- [x] Add file attachment support through a file picker and drag-and-drop.
+- [x] Add mention support for `@workspace`, open files, folders, and available tools.
+- [x] Add a context preview/remove control so the user can inspect what will be sent.
+- [x] Add prompt history navigation with Up/Down and a searchable prompt history panel.
+- [x] Add slash commands for common actions such as `/clear`, `/model`, `/explain`, `/fix`, and `/summarize`.
+- [x] Add reusable prompt presets and a settings screen for creating, editing, deleting, and selecting presets.
+- [x] Make prompt submission explicit and never send text or files without a user action.
 
 ### 9.4 Define the Webview Message Contract
 
@@ -267,6 +267,7 @@
 - [ ] Add collapsible progress details for each request.
 - [ ] Clearly separate model answer, tool activity, warnings, and system diagnostics.
 - [ ] Ensure progress indicators stop on completion, cancellation, disconnect, and error.
+- [ ] Provide indicators for tokens/sec
 
 ### 9.7 Integrate Tools with Approval and Results
 

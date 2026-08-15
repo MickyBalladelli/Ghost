@@ -1,6 +1,44 @@
 type GhostPilotViewStatus = 'ready' | 'offline'
 type NoticeKind = 'error' | 'no-model' | 'info'
 type MessageRole = 'user' | 'assistant'
+type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+
+interface Attachment {
+  name: string
+  path?: string
+  content?: string
+  mimeType?: string
+}
+
+interface PromptPreset {
+  id: string
+  name: string
+  prompt: string
+  mode: GhostPilotMode
+  temperature: number
+  maxContextTokens: number
+  responseLength: ResponseLength
+}
+
+interface ControlSettings {
+  provider: GhostPilotProvider
+  chatModel: string
+  autocompleteModel: string
+  maxContextTokens: number
+  temperature: number
+  responseLength: ResponseLength
+  mode: GhostPilotMode
+}
+
+interface ContextData {
+  workspaceName: string
+  folders: string[]
+  activeFile?: { name: string; path: string; languageId: string; hasSelection: boolean }
+  openFiles: string[]
+  tools: string[]
+}
 
 interface ChatMessage {
   id: string
@@ -18,6 +56,8 @@ interface Conversation {
 interface GhostPilotState {
   conversations: Conversation[]
   activeConversationId: string
+  promptHistory?: string[]
+  presets?: PromptPreset[]
 }
 
 type GhostPilotExtensionMessage =
@@ -32,6 +72,22 @@ type GhostPilotExtensionMessage =
       source: 'ghostpilot-extension'
       version: 1
       type: 'reset' | 'clear'
+    }
+  | {
+      source: 'ghostpilot-extension'
+      version: 1
+      type: 'controls-state'
+      settings: ControlSettings
+      models: string[]
+      connection: 'online' | 'offline' | 'unknown'
+      context: Omit<ContextData, 'tools'>
+      tools: string[]
+    }
+  | {
+      source: 'ghostpilot-extension'
+      version: 1
+      type: 'file-picked'
+      attachments: Attachment[]
     }
   | {
       source: 'ghostpilot-extension'
@@ -55,6 +111,22 @@ interface ActiveRequest {
   requestId: string
   conversationId: string
   assistantMessageId: string
+}
+
+interface WebviewRequestOptions {
+  model: string
+  temperature: number
+  maxContextTokens: number
+  maxTokens?: number
+  mode: GhostPilotMode
+  context: {
+    workspace: boolean
+    folders: boolean
+    activeFile: boolean
+    selection: boolean
+    openFiles: boolean
+    tools: boolean
+  }
 }
 
 declare function acquireVsCodeApi(): GhostPilotWebviewApi
@@ -97,6 +169,34 @@ let viewStatus: GhostPilotViewStatus = 'ready'
 let activeRequest: ActiveRequest | undefined
 let notice: { kind: NoticeKind; message: string } | undefined
 let userIsAtBottom = true
+let controls: ControlSettings = {
+  provider: 'ollama',
+  chatModel: 'qwen2.5-coder:7b',
+  autocompleteModel: 'qwen2.5-coder:1.5b',
+  maxContextTokens: 8192,
+  temperature: 0.2,
+  responseLength: 'balanced',
+  mode: 'ask'
+}
+let availableModels: string[] = [controls.chatModel]
+let connection: 'online' | 'offline' | 'unknown' = 'unknown'
+let contextData: ContextData = {
+  workspaceName: 'Untitled workspace',
+  folders: [],
+  openFiles: [],
+  tools: []
+}
+let contextEnabled = {
+  workspace: true,
+  folders: true,
+  activeFile: true,
+  selection: true,
+  openFiles: true,
+  tools: true
+}
+let attachments: Attachment[] = []
+let historyIndex = -1
+let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
 
 app.innerHTML = `
@@ -114,6 +214,18 @@ app.innerHTML = `
         <button type="button" class="icon-button" id="reset" aria-label="Reset interface" title="Reset interface">↻</button>
       </div>
     </header>
+    <section class="control-strip" aria-label="Prompt controls">
+      <label class="control-label" for="provider">Provider</label>
+      <select id="provider" aria-label="Model provider">
+        <option value="ollama">Ollama</option>
+        <option value="mlx-vlm">MLX / VLM</option>
+        <option value="openai-compatible">OpenAI-compatible</option>
+      </select>
+      <label class="control-label" for="model">Model</label>
+      <select id="model" aria-label="Chat model"></select>
+      <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
+      <button type="button" class="control-button" id="settings" aria-haspopup="dialog">Controls</button>
+    </section>
     <div class="chat-layout">
       <aside class="sidebar" aria-label="Conversations">
         <div class="sidebar-header">
@@ -127,10 +239,21 @@ app.innerHTML = `
         <div class="screen-reader-status" id="screen-reader-status" role="status" aria-live="polite"></div>
         <form class="composer" id="composer">
           <label class="screen-reader-only" for="prompt">Message GhostPilot</label>
-          <textarea id="prompt" rows="1" placeholder="Ask GhostPilot anything..." aria-describedby="composer-hint composer-count"></textarea>
+          <div class="context-row">
+            <div class="context-chips" id="context-chips" aria-label="Prompt context"></div>
+            <button type="button" class="context-button" id="context-preview">Context</button>
+            <button type="button" class="context-button" id="attach">Attach</button>
+            <input id="file-input" type="file" multiple hidden>
+          </div>
+          <div class="attachment-list" id="attachment-list" aria-label="Attachments"></div>
+          <div class="prompt-wrap">
+            <textarea id="prompt" rows="1" placeholder="Ask GhostPilot anything..." aria-describedby="composer-hint composer-count"></textarea>
+            <div class="mention-menu" id="mention-menu" role="listbox" hidden></div>
+          </div>
           <div class="composer-footer">
             <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line</span>
             <span class="composer-count" id="composer-count">0 chars · ~0 tokens</span>
+            <button type="button" class="context-button" id="history" aria-haspopup="dialog">History</button>
             <button type="button" class="stop-button" id="stop" hidden>Stop</button>
             <button type="submit" id="send">Send</button>
           </div>
@@ -140,6 +263,44 @@ app.innerHTML = `
           <span id="status-text">Ready</span>
         </footer>
       </main>
+    </div>
+    <div class="modal-backdrop" id="settings-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-header"><h2 id="settings-title">Composer controls</h2><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div>
+        <div class="settings-grid">
+          <label for="temperature">Temperature <output id="temperature-value">0.2</output></label>
+          <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.2">
+          <label for="max-context">Max context tokens</label>
+          <input id="max-context" type="number" min="1" step="256" value="8192">
+          <label for="response-length">Response length</label>
+          <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
+          <label for="mode">Workflow mode</label>
+          <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+        </div>
+        <div class="preset-section">
+          <div class="modal-subheader"><h3>Prompt presets</h3><button type="button" class="context-button" id="new-preset">New</button></div>
+          <div class="preset-row"><select id="preset-select" aria-label="Prompt preset"><option value="">Choose a preset</option></select><button type="button" class="context-button" id="delete-preset">Delete</button></div>
+          <input id="preset-name" type="text" placeholder="Preset name" aria-label="Preset name">
+          <textarea id="preset-prompt" rows="3" placeholder="Reusable prompt text" aria-label="Preset prompt"></textarea>
+          <button type="button" id="save-preset">Save preset</button>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="settings-modal">Close</button></div>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="context-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="context-title">
+        <div class="modal-header"><h2 id="context-title">Prompt context</h2><button type="button" class="icon-button" data-close-modal="context-modal" aria-label="Close context">×</button></div>
+        <p class="modal-description">Choose what GhostPilot may include when you submit this prompt.</p>
+        <div class="context-preview" id="context-preview-list"></div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="context-modal">Done</button></div>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="history-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+        <div class="modal-header"><h2 id="history-title">Prompt history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close history">×</button></div>
+        <input id="history-search" type="search" placeholder="Search prompts" aria-label="Search prompt history">
+        <div class="history-list" id="history-list"></div>
+      </section>
     </div>
   </div>
 `
@@ -154,6 +315,28 @@ const statusTextElement = document.getElementById('status-text') as HTMLElement
 const statusFooterElement = document.getElementById('status-footer') as HTMLElement
 const screenReaderStatusElement = document.getElementById('screen-reader-status') as HTMLElement
 const composerCountElement = document.getElementById('composer-count') as HTMLElement
+const providerElement = document.getElementById('provider') as HTMLSelectElement
+const modelElement = document.getElementById('model') as HTMLSelectElement
+const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
+const connectionTextElement = document.getElementById('connection-text') as HTMLElement
+const contextChipsElement = document.getElementById('context-chips') as HTMLElement
+const attachmentListElement = document.getElementById('attachment-list') as HTMLElement
+const fileInputElement = document.getElementById('file-input') as HTMLInputElement
+const mentionMenuElement = document.getElementById('mention-menu') as HTMLElement
+const temperatureElement = document.getElementById('temperature') as HTMLInputElement
+const temperatureValueElement = document.getElementById('temperature-value') as HTMLOutputElement
+const maxContextElement = document.getElementById('max-context') as HTMLInputElement
+const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
+const modeElement = document.getElementById('mode') as HTMLSelectElement
+const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
+const contextModalElement = document.getElementById('context-modal') as HTMLElement
+const historyModalElement = document.getElementById('history-modal') as HTMLElement
+const contextPreviewElement = document.getElementById('context-preview-list') as HTMLElement
+const historySearchElement = document.getElementById('history-search') as HTMLInputElement
+const historyListElement = document.getElementById('history-list') as HTMLElement
+const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
+const presetNameElement = document.getElementById('preset-name') as HTMLInputElement
+const presetPromptElement = document.getElementById('preset-prompt') as HTMLTextAreaElement
 
 const post = (type: string, details: Record<string, unknown> = {}) => {
   vscode.postMessage({
@@ -165,6 +348,198 @@ const post = (type: string, details: Record<string, unknown> = {}) => {
 }
 
 const saveState = () => vscode.setState(state)
+
+const maxTokensForLength = (length: ResponseLength): number | undefined => {
+  if (length === 'short') {
+    return 512
+  }
+  if (length === 'balanced') {
+    return 1024
+  }
+  if (length === 'long') {
+    return 2048
+  }
+  return undefined
+}
+
+const promptHistory = (): string[] => state.promptHistory ?? []
+
+const presets = (): PromptPreset[] => state.presets ?? []
+
+const sendSettingsUpdate = () => {
+  post('update-settings', {
+    settings: {
+      provider: controls.provider,
+      chatModel: controls.chatModel,
+      maxContextTokens: controls.maxContextTokens,
+      temperature: controls.temperature,
+      responseLength: controls.responseLength,
+      mode: controls.mode
+    }
+  })
+}
+
+const renderControls = () => {
+  providerElement.value = controls.provider
+  modelElement.textContent = ''
+  for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
+    const option = document.createElement('option')
+    option.value = model
+    option.textContent = model
+    modelElement.append(option)
+  }
+  modelElement.value = controls.chatModel
+  temperatureElement.value = String(controls.temperature)
+  temperatureValueElement.value = controls.temperature.toFixed(1)
+  maxContextElement.value = String(controls.maxContextTokens)
+  responseLengthElement.value = controls.responseLength
+  modeElement.value = controls.mode
+  connectionIndicatorElement.classList.toggle('online', connection === 'online')
+  connectionIndicatorElement.classList.toggle('offline', connection === 'offline')
+  connectionTextElement.textContent = connection === 'online'
+    ? 'Connected'
+    : connection === 'offline'
+      ? 'Offline'
+      : 'Checking…'
+
+  contextChipsElement.textContent = ''
+  const chips: Array<{ key: keyof typeof contextEnabled; label: string }> = []
+  if (contextData.workspaceName) {
+    chips.push({ key: 'workspace', label: contextData.workspaceName })
+  }
+  if (contextData.folders.length > 0) {
+    chips.push({ key: 'folders', label: `${contextData.folders.length} folder${contextData.folders.length === 1 ? '' : 's'}` })
+  }
+  if (contextData.activeFile) {
+    chips.push({ key: 'activeFile', label: contextData.activeFile.name })
+    if (contextData.activeFile.hasSelection) {
+      chips.push({ key: 'selection', label: 'Selection' })
+    }
+  }
+  if (contextData.openFiles.length > 0) {
+    chips.push({ key: 'openFiles', label: `${contextData.openFiles.length} open file${contextData.openFiles.length === 1 ? '' : 's'}` })
+  }
+  if (contextData.tools.length > 0) {
+    chips.push({ key: 'tools', label: `${contextData.tools.length} tools` })
+  }
+  for (const chip of chips) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = `context-chip${contextEnabled[chip.key] ? '' : ' removed'}`
+    button.textContent = `${contextEnabled[chip.key] ? '✓ ' : '＋ '}${chip.label}`
+    button.title = contextEnabled[chip.key] ? `Remove ${chip.label} from prompt context` : `Add ${chip.label} to prompt context`
+    button.dataset.contextKey = chip.key
+    contextChipsElement.append(button)
+  }
+
+  attachmentListElement.textContent = ''
+  for (const attachment of attachments) {
+    const chip = document.createElement('span')
+    chip.className = 'attachment-chip'
+    chip.textContent = attachment.name
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.textContent = '×'
+    remove.setAttribute('aria-label', `Remove ${attachment.name}`)
+    remove.dataset.attachmentName = attachment.name
+    chip.append(remove)
+    attachmentListElement.append(chip)
+  }
+  renderPresets()
+}
+
+const renderContextPreview = () => {
+  contextPreviewElement.textContent = ''
+  const items: Array<{ key: keyof typeof contextEnabled; label: string; detail: string }> = [
+    { key: 'workspace', label: 'Workspace', detail: contextData.workspaceName },
+    { key: 'folders', label: 'Folders', detail: `${contextData.folders.length} folder${contextData.folders.length === 1 ? '' : 's'}` },
+    { key: 'activeFile', label: 'Active editor', detail: contextData.activeFile?.name ?? 'No active file' },
+    { key: 'selection', label: 'Selection', detail: contextData.activeFile?.hasSelection ? 'Selected text' : 'No selection' },
+    { key: 'openFiles', label: 'Open files', detail: `${contextData.openFiles.length} file${contextData.openFiles.length === 1 ? '' : 's'}` },
+    { key: 'tools', label: 'Available tools', detail: `${contextData.tools.length} tools` }
+  ]
+  for (const item of items) {
+    const label = document.createElement('label')
+    label.className = 'context-preview-item'
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.checked = contextEnabled[item.key]
+    checkbox.disabled = item.detail.startsWith('No ') || item.detail === '0 files' || item.detail === '0 tools'
+    checkbox.dataset.contextKey = item.key
+    const text = document.createElement('span')
+    text.innerHTML = `<strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small>`
+    label.append(checkbox, text)
+    contextPreviewElement.append(label)
+  }
+}
+
+const renderHistory = () => {
+  const query = historySearchElement.value.trim().toLowerCase()
+  historyListElement.textContent = ''
+  const entries = promptHistory().filter(prompt => prompt.toLowerCase().includes(query))
+  if (entries.length === 0) {
+    historyListElement.innerHTML = '<p class="modal-description">No matching prompts.</p>'
+    return
+  }
+  for (const prompt of entries) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'history-item'
+    button.textContent = prompt
+    button.title = 'Use this prompt'
+    button.dataset.historyPrompt = prompt
+    historyListElement.append(button)
+  }
+}
+
+const renderPresets = () => {
+  const selected = presetSelectElement.value
+  presetSelectElement.textContent = ''
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  placeholder.textContent = 'Choose a preset'
+  presetSelectElement.append(placeholder)
+  for (const preset of presets()) {
+    const option = document.createElement('option')
+    option.value = preset.id
+    option.textContent = preset.name
+    presetSelectElement.append(option)
+  }
+  presetSelectElement.value = presets().some(preset => preset.id === selected) ? selected : ''
+}
+
+const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
+  modal.hidden = !visible
+  if (visible) {
+    const focusable = modal.querySelector<HTMLElement>('button, input, select, textarea')
+    focusable?.focus()
+  }
+}
+
+const buildRequestOptions = (): WebviewRequestOptions => ({
+  model: controls.chatModel,
+  temperature: controls.temperature,
+  maxContextTokens: controls.maxContextTokens,
+  maxTokens: maxTokensForLength(controls.responseLength),
+  mode: controls.mode,
+  context: { ...contextEnabled }
+})
+
+const addAttachment = (attachment: Attachment) => {
+  if (!attachments.some(existing => existing.name === attachment.name && existing.path === attachment.path)) {
+    attachments = [...attachments, attachment]
+    renderControls()
+  }
+}
+
+const readDroppedFile = async (file: File) => {
+  if (file.size > 1024 * 1024) {
+    setNotice('error', `${file.name} is larger than 1 MB.`)
+    return
+  }
+  const content = await file.text()
+  addAttachment({ name: file.name, content, mimeType: file.type })
+}
 
 const getActiveConversation = (): Conversation => {
   const existing = state.conversations.find(conversation => conversation.id === state.activeConversationId)
@@ -545,10 +920,16 @@ const updateStatus = () => {
 }
 
 const render = (forceScroll = false) => {
+  renderControls()
   renderConversationList()
   renderMessages(forceScroll)
   updateStatus()
   saveState()
+}
+
+const setNotice = (kind: NoticeKind, message: string) => {
+  notice = { kind, message }
+  render(false)
 }
 
 const startNewConversation = () => {
@@ -562,8 +943,42 @@ const startNewConversation = () => {
   promptElement.focus()
 }
 
+const applySlashCommand = (prompt: string): string | undefined => {
+  const command = /^\/(clear|model|explain|fix|summarize)\b\s*(.*)$/i.exec(prompt)
+  if (!command) {
+    return prompt
+  }
+  const name = command[1].toLowerCase()
+  const rest = command[2].trim()
+  if (name === 'clear') {
+    post('clear')
+    const conversation = getActiveConversation()
+    conversation.messages = []
+    attachments = []
+    notice = undefined
+    activeRequest = undefined
+    requests.clear()
+    render(true)
+    return undefined
+  }
+  if (name === 'model') {
+    setModalVisibility(settingsModalElement, true)
+    return undefined
+  }
+  if (name === 'explain') {
+    controls.mode = 'explain'
+  } else if (name === 'fix') {
+    controls.mode = 'edit'
+  } else if (name === 'summarize') {
+    return rest ? `Summarize this for me:\n\n${rest}` : 'Summarize the current context for me.'
+  }
+  renderControls()
+  sendSettingsUpdate()
+  return rest || prompt
+}
+
 const submitPrompt = (rawPrompt: string) => {
-  const prompt = rawPrompt.trim()
+  const prompt = applySlashCommand(rawPrompt.trim())?.trim() ?? ''
   if (!prompt || activeRequest) {
     return
   }
@@ -588,12 +1003,17 @@ const submitPrompt = (rawPrompt: string) => {
   }
   requests.set(requestId, activeRequest)
   notice = undefined
+  state.promptHistory = [prompt, ...promptHistory().filter(item => item !== prompt)].slice(0, 100)
   promptElement.value = ''
+  const submittedAttachments = attachments
+  attachments = []
   render(true)
   post('submit', {
     requestId,
     conversationId: conversation.id,
-    prompt
+    prompt,
+    options: buildRequestOptions(),
+    attachments: submittedAttachments
   })
 }
 
@@ -691,6 +1111,21 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     render(false)
     return
   }
+  if (message.type === 'controls-state') {
+    controls = message.settings
+    availableModels = message.models
+    connection = message.connection
+    viewStatus = connection === 'offline' ? 'offline' : 'ready'
+    contextData = { ...message.context, tools: message.tools }
+    render(false)
+    return
+  }
+  if (message.type === 'file-picked') {
+    for (const attachment of message.attachments) {
+      addAttachment(attachment)
+    }
+    return
+  }
   if (message.type === 'reset') {
     state = {
       conversations: [createConversation()],
@@ -777,6 +1212,17 @@ const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage
   if (message.type === 'reset' || message.type === 'clear') {
     return true
   }
+  if (message.type === 'controls-state') {
+    return (
+      message.settings !== undefined &&
+      typeof message.settings === 'object' &&
+      Array.isArray(message.models) &&
+      (message.connection === 'online' || message.connection === 'offline' || message.connection === 'unknown')
+    )
+  }
+  if (message.type === 'file-picked') {
+    return Array.isArray(message.attachments)
+  }
   if (!['chat-started', 'chat-delta', 'chat-progress', 'chat-completed', 'chat-error'].includes(message.type)) {
     return false
   }
@@ -810,6 +1256,78 @@ messagesElement.addEventListener('click', event => {
   }
 })
 
+contextChipsElement.addEventListener('click', event => {
+  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-context-key]')
+  const key = target?.dataset.contextKey as keyof typeof contextEnabled | undefined
+  if (!key) {
+    return
+  }
+  contextEnabled[key] = !contextEnabled[key]
+  renderControls()
+})
+
+contextPreviewElement.addEventListener('change', event => {
+  const checkbox = event.target as HTMLInputElement
+  const key = checkbox.dataset.contextKey as keyof typeof contextEnabled | undefined
+  if (!key) {
+    return
+  }
+  contextEnabled[key] = checkbox.checked
+  renderControls()
+})
+
+const updateMentionMenu = () => {
+  const beforeCursor = promptElement.value.slice(0, promptElement.selectionStart ?? promptElement.value.length)
+  const match = /(?:^|\s)@([a-zA-Z0-9._/-]*)$/.exec(beforeCursor)
+  if (!match) {
+    mentionMenuElement.hidden = true
+    mentionMenu = undefined
+    return
+  }
+  const query = match[1].toLowerCase()
+  const candidates = [
+    '@workspace',
+    ...contextData.openFiles.map(file => `@${file}`),
+    ...contextData.folders.map(folder => `@${folder.split(/[\\/]/).pop() ?? folder}`),
+    ...contextData.tools.map(tool => `@${tool}`)
+  ].filter(item => item.toLowerCase().includes(query)).slice(0, 8)
+  if (candidates.length === 0) {
+    mentionMenuElement.hidden = true
+    mentionMenu = undefined
+    return
+  }
+  mentionMenuElement.textContent = ''
+  for (const candidate of candidates) {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.className = 'mention-option'
+    option.setAttribute('role', 'option')
+    option.textContent = candidate
+    option.dataset.mention = candidate
+    mentionMenuElement.append(option)
+  }
+  mentionMenuElement.hidden = false
+  mentionMenu = mentionMenuElement
+}
+
+mentionMenuElement.addEventListener('click', event => {
+  const option = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mention]')
+  const mention = option?.dataset.mention
+  if (!mention) {
+    return
+  }
+  const cursor = promptElement.selectionStart ?? promptElement.value.length
+  const before = promptElement.value.slice(0, cursor)
+  const after = promptElement.value.slice(cursor)
+  const replaced = before.replace(/@([a-zA-Z0-9._/-]*)$/, mention)
+  promptElement.value = `${replaced} ${after}`
+  promptElement.focus()
+  promptElement.setSelectionRange(replaced.length + 1, replaced.length + 1)
+  mentionMenuElement.hidden = true
+  mentionMenu = undefined
+  updateComposer()
+})
+
 conversationListElement.addEventListener('click', event => {
   const target = event.target as HTMLElement
   const action = target.closest<HTMLButtonElement>('[data-conversation-action]')
@@ -822,6 +1340,164 @@ conversationListElement.addEventListener('click', event => {
     state.activeConversationId = select.dataset.conversationId
     notice = undefined
     render(true)
+  }
+})
+
+providerElement.addEventListener('change', () => {
+  controls.provider = providerElement.value as GhostPilotProvider
+  availableModels = []
+  renderControls()
+  sendSettingsUpdate()
+  post('refresh-models')
+})
+
+modelElement.addEventListener('change', () => {
+  controls.chatModel = modelElement.value
+  sendSettingsUpdate()
+})
+
+temperatureElement.addEventListener('input', () => {
+  controls.temperature = Number(temperatureElement.value)
+  temperatureValueElement.value = controls.temperature.toFixed(1)
+})
+temperatureElement.addEventListener('change', sendSettingsUpdate)
+maxContextElement.addEventListener('change', () => {
+  controls.maxContextTokens = Math.max(1, Number(maxContextElement.value) || 8192)
+  maxContextElement.value = String(controls.maxContextTokens)
+  sendSettingsUpdate()
+})
+responseLengthElement.addEventListener('change', () => {
+  controls.responseLength = responseLengthElement.value as ResponseLength
+  sendSettingsUpdate()
+})
+modeElement.addEventListener('change', () => {
+  controls.mode = modeElement.value as GhostPilotMode
+  sendSettingsUpdate()
+})
+
+document.getElementById('settings')?.addEventListener('click', () => {
+  setModalVisibility(settingsModalElement, true)
+})
+document.getElementById('context-preview')?.addEventListener('click', () => {
+  renderContextPreview()
+  setModalVisibility(contextModalElement, true)
+})
+document.getElementById('history')?.addEventListener('click', () => {
+  renderHistory()
+  setModalVisibility(historyModalElement, true)
+})
+document.querySelectorAll<HTMLElement>('[data-close-modal]').forEach(button => {
+  button.addEventListener('click', () => {
+    const modalId = button.dataset.closeModal
+    if (modalId) {
+      const modal = document.getElementById(modalId)
+      if (modal) {
+        setModalVisibility(modal, false)
+      }
+    }
+  })
+})
+historySearchElement.addEventListener('input', renderHistory)
+historyListElement.addEventListener('click', event => {
+  const item = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-history-prompt]')
+  if (!item?.dataset.historyPrompt) {
+    return
+  }
+  promptElement.value = item.dataset.historyPrompt
+  setModalVisibility(historyModalElement, false)
+  promptElement.focus()
+  updateComposer()
+})
+
+document.getElementById('new-preset')?.addEventListener('click', () => {
+  presetSelectElement.value = ''
+  presetNameElement.value = ''
+  presetPromptElement.value = ''
+})
+presetSelectElement.addEventListener('change', () => {
+  const preset = presets().find(item => item.id === presetSelectElement.value)
+  if (!preset) {
+    return
+  }
+  presetNameElement.value = preset.name
+  presetPromptElement.value = preset.prompt
+  controls.mode = preset.mode
+  controls.temperature = preset.temperature
+  controls.maxContextTokens = preset.maxContextTokens
+  controls.responseLength = preset.responseLength
+  renderControls()
+  sendSettingsUpdate()
+})
+document.getElementById('save-preset')?.addEventListener('click', () => {
+  const name = presetNameElement.value.trim()
+  if (!name) {
+    return
+  }
+  const existingId = presetSelectElement.value
+  const preset: PromptPreset = {
+    id: existingId || createId('preset'),
+    name,
+    prompt: presetPromptElement.value,
+    mode: controls.mode,
+    temperature: controls.temperature,
+    maxContextTokens: controls.maxContextTokens,
+    responseLength: controls.responseLength
+  }
+  const next = presets().filter(item => item.id !== preset.id)
+  state.presets = [preset, ...next]
+  presetSelectElement.value = preset.id
+  saveState()
+  renderPresets()
+  presetSelectElement.value = preset.id
+})
+document.getElementById('delete-preset')?.addEventListener('click', () => {
+  const id = presetSelectElement.value
+  if (!id) {
+    return
+  }
+  state.presets = presets().filter(preset => preset.id !== id)
+  presetNameElement.value = ''
+  presetPromptElement.value = ''
+  renderPresets()
+  saveState()
+})
+
+document.getElementById('attach')?.addEventListener('click', () => fileInputElement.click())
+fileInputElement.addEventListener('change', () => {
+  for (const file of Array.from(fileInputElement.files ?? [])) {
+    void readDroppedFile(file)
+  }
+  fileInputElement.value = ''
+})
+composerElement.addEventListener('dragover', event => {
+  event.preventDefault()
+  composerElement.classList.add('dragging')
+})
+composerElement.addEventListener('dragleave', () => composerElement.classList.remove('dragging'))
+composerElement.addEventListener('drop', event => {
+  event.preventDefault()
+  composerElement.classList.remove('dragging')
+  for (const file of Array.from(event.dataTransfer?.files ?? [])) {
+    void readDroppedFile(file)
+  }
+})
+
+promptElement.addEventListener('keyup', updateMentionMenu)
+promptElement.addEventListener('keydown', event => {
+  if (event.key === 'ArrowUp' && promptElement.selectionStart === 0 && !mentionMenu) {
+    const entries = promptHistory()
+    if (entries.length > 0) {
+      historyIndex = Math.min(historyIndex + 1, entries.length - 1)
+      promptElement.value = entries[historyIndex]
+      updateComposer()
+      event.preventDefault()
+    }
+  } else if (event.key === 'ArrowDown' && historyIndex >= 0 && !mentionMenu) {
+    const entries = promptHistory()
+    historyIndex -= 1
+    promptElement.value = historyIndex >= 0 ? entries[historyIndex] : ''
+    updateComposer()
+    event.preventDefault()
   }
 })
 

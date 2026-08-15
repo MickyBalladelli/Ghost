@@ -3,6 +3,8 @@ import * as vscode from 'vscode'
 export const GHOSTPILOT_CONFIGURATION_SECTION = 'ghostpilot'
 
 export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 
 export interface GhostPilotSettings {
   ollamaUrl: string
@@ -12,6 +14,9 @@ export interface GhostPilotSettings {
   enableInlineCompletions: boolean
   provider: GhostPilotProvider
   mlxUrl: string
+  temperature: number
+  responseLength: GhostPilotResponseLength
+  mode: GhostPilotMode
 }
 
 export type GhostPilotSetting = keyof GhostPilotSettings
@@ -23,7 +28,10 @@ export const DEFAULT_GHOSTPILOT_SETTINGS: Readonly<GhostPilotSettings> = {
   maxContextTokens: 8192,
   enableInlineCompletions: true,
   provider: 'ollama',
-  mlxUrl: 'http://localhost:8000'
+  mlxUrl: 'http://localhost:8000',
+  temperature: 0.2,
+  responseLength: 'balanced',
+  mode: 'ask'
 }
 
 export type GhostPilotSettingsChangeListener = (
@@ -45,7 +53,10 @@ export class GhostPilotConfig {
         DEFAULT_GHOSTPILOT_SETTINGS.enableInlineCompletions
       ),
       provider: configuration.get('provider', DEFAULT_GHOSTPILOT_SETTINGS.provider),
-      mlxUrl: configuration.get('mlxUrl', DEFAULT_GHOSTPILOT_SETTINGS.mlxUrl)
+      mlxUrl: configuration.get('mlxUrl', DEFAULT_GHOSTPILOT_SETTINGS.mlxUrl),
+      temperature: configuration.get('temperature', DEFAULT_GHOSTPILOT_SETTINGS.temperature),
+      responseLength: configuration.get('responseLength', DEFAULT_GHOSTPILOT_SETTINGS.responseLength),
+      mode: configuration.get('mode', DEFAULT_GHOSTPILOT_SETTINGS.mode)
     }
   }
 

@@ -1,12 +1,17 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
-import { createChatParticipantHandler } from '../agent/chatParticipant'
-import { getGhostPilotSettings } from '../config'
+import { createChatParticipantHandler, GhostPilotRequestOptions } from '../agent/chatParticipant'
+import { ghostPilotConfig, getGhostPilotSettings } from '../config'
+import { MlxClient } from '../services/mlxClient'
+import { OllamaClient } from '../services/ollamaClient'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+  GhostPilotAttachment,
   GhostPilotExtensionMessage,
+  GhostPilotSettingsUpdate,
   GhostPilotViewStatus,
+  GhostPilotWebviewRequestOptions,
   isGhostPilotWebviewMessage
 } from './ghostPilotProtocol'
 
@@ -26,6 +31,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     options: { chatHandler?: vscode.ChatRequestHandler } = {}
   ) {
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
+    this.disposables.push(ghostPilotConfig.onDidChange(() => {
+      void this.sendControlsState()
+    }))
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -51,11 +59,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     for (const message of pendingMessages) {
       this.postMessage(message)
     }
+    void this.sendControlsState()
   }
 
   setStatus(status: GhostPilotViewStatus): void {
     this.status = status
     this.postState()
+    void this.sendControlsState()
   }
 
   reset(): void {
@@ -70,7 +80,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     this.postMessage(this.createMessage('clear'))
   }
 
-  private async submit(requestId: string, conversationId: string, prompt: string): Promise<void> {
+  private async submit(
+    requestId: string,
+    conversationId: string,
+    prompt: string,
+    options: GhostPilotWebviewRequestOptions = {},
+    attachments: GhostPilotAttachment[] = []
+  ): Promise<void> {
     if (this.requests.has(requestId)) {
       return
     }
@@ -108,9 +124,36 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
     } as unknown as vscode.ChatResponseStream
 
+    const safeAttachments = attachments.slice(0, 8).map(attachment => ({
+      ...attachment,
+      name: attachment.name.slice(0, 200),
+      content: attachment.content?.slice(0, 1024 * 1024)
+    }))
+    const workspaceReferences = safeAttachments.flatMap(attachment => {
+      if (!attachment.path) {
+        return []
+      }
+      const uri = vscode.Uri.file(attachment.path)
+      return vscode.workspace.getWorkspaceFolder(uri)
+        ? [{ value: uri, id: attachment.name, modelDescription: attachment.name }]
+        : []
+    })
+    const droppedContext = safeAttachments
+      .filter(attachment => attachment.content)
+      .map(attachment => `Dropped attachment: ${attachment.name}\n\n${attachment.content}`)
+      .join('\n\n')
+    const requestOptions: GhostPilotRequestOptions = {
+      ...options,
+      additionalContext: droppedContext || undefined
+    }
+
     try {
       await this.chatHandler(
-        { prompt, references: [] } as unknown as vscode.ChatRequest,
+        {
+          prompt,
+          references: workspaceReferences,
+          ghostPilot: requestOptions
+        } as unknown as vscode.ChatRequest,
         {} as vscode.ChatContext,
         response,
         cancellation.token
@@ -147,6 +190,113 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     for (const request of this.requests.values()) {
       request.cancel()
     }
+  }
+
+  private async sendControlsState(): Promise<void> {
+    const settings = getGhostPilotSettings()
+    let models: string[] = []
+    let connection: 'online' | 'offline' | 'unknown' = 'unknown'
+
+    try {
+      const client = settings.provider === 'mlx-vlm'
+        ? new MlxClient(settings.mlxUrl)
+        : new OllamaClient(settings.ollamaUrl, settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto')
+      const online = await client.checkHealth(1500)
+      connection = online ? 'online' : 'offline'
+      if (online) {
+        models = await client.listModels()
+      }
+    } catch {
+      connection = 'offline'
+    }
+
+    if (models.length === 0) {
+      models = [settings.chatModel]
+    }
+
+    const editor = vscode.window.activeTextEditor
+    const activeFile = editor
+      ? {
+          name: editor.document.fileName.split(/[\\/]/).pop() ?? editor.document.fileName,
+          path: editor.document.uri.fsPath,
+          languageId: editor.document.languageId,
+          hasSelection: !editor.selection.isEmpty
+        }
+      : undefined
+    const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
+    const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
+
+    this.postMessage({
+      source: 'ghostpilot-extension',
+      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      type: 'controls-state',
+      settings: {
+        provider: settings.provider,
+        chatModel: settings.chatModel,
+        autocompleteModel: settings.autocompleteModel,
+        maxContextTokens: settings.maxContextTokens,
+        temperature: settings.temperature,
+        responseLength: settings.responseLength,
+        mode: settings.mode
+      },
+      models,
+      connection,
+      context: {
+        workspaceName: vscode.workspace.name ?? 'Untitled workspace',
+        folders,
+        ...(activeFile ? { activeFile } : {}),
+        openFiles
+      },
+      tools: [
+        'ghostpilot_read_file',
+        'ghostpilot_write_file',
+        'ghostpilot_run_terminal_command',
+        'ghostpilot_list_directory'
+      ]
+    })
+  }
+
+  private async updateSettings(update: GhostPilotSettingsUpdate): Promise<void> {
+    if (update.provider) {
+      await ghostPilotConfig.update('provider', update.provider)
+    }
+    if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
+      await ghostPilotConfig.update('chatModel', update.chatModel.trim())
+    }
+    if (typeof update.autocompleteModel === 'string' && update.autocompleteModel.trim()) {
+      await ghostPilotConfig.update('autocompleteModel', update.autocompleteModel.trim())
+    }
+    if (typeof update.maxContextTokens === 'number' && Number.isFinite(update.maxContextTokens)) {
+      await ghostPilotConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)))
+    }
+    if (typeof update.temperature === 'number' && Number.isFinite(update.temperature)) {
+      await ghostPilotConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)))
+    }
+    if (update.responseLength) {
+      await ghostPilotConfig.update('responseLength', update.responseLength)
+    }
+    if (update.mode) {
+      await ghostPilotConfig.update('mode', update.mode)
+    }
+    await this.sendControlsState()
+  }
+
+  private async pickFiles(): Promise<void> {
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: true,
+      canSelectFolders: false,
+      canSelectFiles: true,
+      openLabel: 'Attach to GhostPilot'
+    })
+    if (!files) {
+      return
+    }
+    this.postMessage({
+      source: 'ghostpilot-extension',
+      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      type: 'file-picked',
+      attachments: files.map(file => ({ name: file.path.split(/[\\/]/).pop() ?? file.fsPath, path: file.fsPath }))
+    })
   }
 
   async export(): Promise<void> {
@@ -205,10 +355,20 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         await vscode.commands.executeCommand('ghostpilot.checkOllamaStatus')
         return
       case 'submit':
-        await this.submit(value.requestId, value.conversationId, value.prompt)
+        await this.submit(value.requestId, value.conversationId, value.prompt, value.options, value.attachments)
         return
       case 'cancel':
         this.cancel(value.requestId)
+        return
+      case 'load-controls':
+      case 'refresh-models':
+        await this.sendControlsState()
+        return
+      case 'update-settings':
+        await this.updateSettings(value.settings)
+        return
+      case 'pick-file':
+        await this.pickFiles()
         return
     }
   }
@@ -405,6 +565,285 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         padding: 8px 12px;
+      }
+
+      .control-strip {
+        align-items: center;
+        border-bottom: 1px solid var(--ghostpilot-border);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 7px 10px;
+      }
+
+      .control-label {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.78em;
+      }
+
+      select,
+      input[type='text'],
+      input[type='search'],
+      input[type='number'],
+      textarea {
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, var(--ghostpilot-border));
+        border-radius: 2px;
+        color: var(--vscode-input-foreground);
+        font: inherit;
+      }
+
+      .control-strip select {
+        max-width: 150px;
+        min-width: 0;
+        padding: 3px 5px;
+      }
+
+      .connection-indicator {
+        align-items: center;
+        color: var(--vscode-descriptionForeground);
+        display: flex;
+        font-size: 0.78em;
+        gap: 4px;
+        margin-left: auto;
+        white-space: nowrap;
+      }
+
+      .connection-indicator .status-dot {
+        background: var(--vscode-descriptionForeground);
+      }
+
+      .connection-indicator.online .status-dot {
+        background: var(--vscode-testing-iconPassed, #73c991);
+      }
+
+      .connection-indicator.offline .status-dot {
+        background: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      .control-button,
+      .context-button {
+        background: transparent;
+        border: 1px solid var(--ghostpilot-border);
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        padding: 3px 7px;
+      }
+
+      .control-button:hover,
+      .context-button:hover {
+        color: var(--vscode-foreground);
+      }
+
+      .context-row {
+        align-items: center;
+        display: flex;
+        gap: 5px;
+        min-height: 25px;
+      }
+
+      .context-chips,
+      .attachment-list {
+        display: flex;
+        flex: 1;
+        flex-wrap: wrap;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .context-chip,
+      .attachment-chip {
+        background: var(--vscode-badge-background);
+        border: 0;
+        border-radius: 10px;
+        color: var(--vscode-badge-foreground);
+        font-size: 0.75em;
+        max-width: 180px;
+        overflow: hidden;
+        padding: 3px 7px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .context-chip.removed {
+        background: transparent;
+        border: 1px dashed var(--ghostpilot-border);
+        color: var(--vscode-descriptionForeground);
+      }
+
+      .attachment-list:empty {
+        display: none;
+      }
+
+      .attachment-list {
+        margin: 4px 0;
+      }
+
+      .attachment-chip {
+        align-items: center;
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .attachment-chip button {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+
+      .prompt-wrap {
+        position: relative;
+      }
+
+      .mention-menu {
+        background: var(--vscode-quickInput-background, var(--ghostpilot-surface));
+        border: 1px solid var(--ghostpilot-border);
+        border-radius: 3px;
+        bottom: calc(100% + 4px);
+        box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
+        left: 0;
+        max-height: 180px;
+        overflow: auto;
+        position: absolute;
+        width: min(100%, 300px);
+        z-index: 2;
+      }
+
+      .mention-option,
+      .history-item {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-foreground);
+        display: block;
+        overflow: hidden;
+        padding: 7px 9px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+      }
+
+      .mention-option:hover,
+      .history-item:hover {
+        background: var(--vscode-list-hoverBackground);
+      }
+
+      .modal-backdrop {
+        align-items: center;
+        background: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+        display: flex;
+        inset: 0;
+        justify-content: center;
+        padding: 16px;
+        position: fixed;
+        z-index: 5;
+      }
+
+      .modal {
+        background: var(--vscode-quickInput-background, var(--ghostpilot-surface));
+        border: 1px solid var(--ghostpilot-border);
+        border-radius: 5px;
+        box-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+        max-height: 90vh;
+        max-width: 460px;
+        overflow: auto;
+        padding: 14px;
+        width: 100%;
+      }
+
+      .modal-header,
+      .modal-footer,
+      .modal-subheader,
+      .preset-row {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+      }
+
+      .modal-header h2,
+      .modal-subheader h3 {
+        font-size: 1em;
+        margin: 0;
+      }
+
+      .settings-grid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr 1fr;
+        margin: 16px 0;
+      }
+
+      .settings-grid label {
+        align-self: center;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+      }
+
+      .settings-grid input,
+      .settings-grid select,
+      .preset-section input,
+      .preset-section textarea,
+      #history-search {
+        padding: 5px 7px;
+        width: 100%;
+      }
+
+      .preset-section {
+        border-top: 1px solid var(--ghostpilot-border);
+        padding-top: 12px;
+      }
+
+      .preset-section > * {
+        margin-bottom: 8px;
+      }
+
+      .preset-row select {
+        flex: 1;
+      }
+
+      .modal-description {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        line-height: 1.4;
+      }
+
+      .context-preview,
+      .history-list {
+        margin: 12px 0;
+      }
+
+      .context-preview-item {
+        align-items: center;
+        border-bottom: 1px solid var(--ghostpilot-border);
+        display: flex;
+        gap: 8px;
+        padding: 8px 0;
+      }
+
+      .context-preview-item span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .context-preview-item small {
+        color: var(--vscode-descriptionForeground);
+      }
+
+      .history-list {
+        max-height: 260px;
+        overflow: auto;
+      }
+
+      .history-item {
+        border-bottom: 1px solid var(--ghostpilot-border);
+      }
+
+      .composer.dragging {
+        border-color: var(--vscode-focusBorder);
+        outline: 1px dashed var(--vscode-focusBorder);
       }
 
       .header-actions,

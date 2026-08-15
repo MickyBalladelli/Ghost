@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -143,6 +143,36 @@
           "type": "string",
           "default": "http://localhost:8000",
           "description": "MLX VLM server URL."
+        },
+        "ghostpilot.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature for chat responses."
+        },
+        "ghostpilot.responseLength": {
+          "type": "string",
+          "enum": [
+            "short",
+            "balanced",
+            "long",
+            "unlimited"
+          ],
+          "default": "balanced",
+          "description": "Default response length for the GhostPilot interface."
+        },
+        "ghostpilot.mode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "edit",
+            "agent",
+            "explain",
+            "inline"
+          ],
+          "default": "ask",
+          "description": "Default workflow mode for the GhostPilot interface."
         }
       }
     },
