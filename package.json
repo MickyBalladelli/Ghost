@@ -105,7 +105,7 @@
         "id": "ghostpilot.agent",
         "name": "local",
         "description": "Local AI Agent (Ollama)",
-        "isDefault": true
+        "isSticky": true
       }
     ],
     "languageModelTools": [

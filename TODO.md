@@ -41,7 +41,7 @@
     - [x] ID: `ghostpilot.agent`
     - [x] Name: `local`
     - [x] Description: `Local AI Agent (Ollama)`
-    - [x] `isDefault`: `true`
+    - [x] `isSticky`: `true` (stable Chat Participant API)
   - [x] Register commands under `contributes.commands`:
     - [x] `ghostpilot.checkOllamaStatus` -> "GhostPilot: Check Ollama Connection"
     - [x] `ghostpilot.toggleInline` -> "GhostPilot: Toggle Autocomplete"
