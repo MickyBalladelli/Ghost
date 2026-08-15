@@ -1,3 +1,5 @@
+import type { GhostPilotRequestStatus } from './ghostPilotState'
+
 export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1 as const
 
 export type GhostPilotViewStatus = 'ready' | 'offline'
@@ -5,6 +7,7 @@ export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostPilotContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
+export type { GhostPilotRequestStatus }
 
 export interface GhostPilotAttachment {
   name: string
@@ -78,6 +81,7 @@ export type GhostPilotStreamEvent =
 interface GhostPilotRequestEnvelopeBase {
   requestId: string
   conversationId: string
+  state?: GhostPilotRequestStatus
 }
 
 export type GhostPilotExtensionMessage =

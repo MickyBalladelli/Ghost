@@ -15,16 +15,24 @@ import {
   GhostPilotWebviewRequestOptions,
   isGhostPilotWebviewMessage
 } from './ghostPilotProtocol'
+import type { GhostPilotRequestStatus } from './ghostPilotState'
 
 interface GhostPilotRequestState {
   cancellation: vscode.CancellationTokenSource
   conversationId: string
   sequence: number
   codeMode: boolean
+  status: GhostPilotRequestStatus
+  attempt: number
+  startedAt: number
+  lastActivityAt: number
+  timedOut: boolean
 }
 
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghostpilot.chat'
+  private static readonly requestTimeoutMs = 120_000
+  private static readonly maxProviderAttempts = 3
 
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
@@ -106,7 +114,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       cancellation,
       conversationId,
       sequence: 0,
-      codeMode: false
+      codeMode: false,
+      status: 'preparing',
+      attempt: 0,
+      startedAt: Date.now(),
+      lastActivityAt: Date.now(),
+      timedOut: false
     }
     this.requests.set(requestId, request)
     this.postStreamEvent(requestId, request, {
@@ -171,26 +184,98 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       additionalContext: droppedContext || undefined
     }
 
+    const timeout = setTimeout(() => {
+      if (!this.requests.has(requestId)) {
+        return
+      }
+      request.timedOut = true
+      request.status = 'failed'
+      request.cancellation.cancel()
+      this.postStreamEvent(requestId, request, {
+        type: 'warning',
+        message: 'GhostPilot timed out. You can retry this request.'
+      })
+      this.postStreamEvent(requestId, request, {
+        type: 'error',
+        message: 'The provider did not respond before the request timeout.'
+      })
+    }, GhostPilotViewProvider.requestTimeoutMs)
+
+    const waitForBackoff = (milliseconds: number): Promise<boolean> => new Promise(resolve => {
+      const timer = setTimeout(() => resolve(true), milliseconds)
+      const cancellationListener = cancellation.token.onCancellationRequested(() => {
+        clearTimeout(timer)
+        cancellationListener.dispose()
+        resolve(false)
+      })
+    })
+
+    const isRecoverable = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+      return /timeout|timed out|network|fetch|connect|socket|econn|429|500|502|503|504|temporarily unavailable|offline/.test(message)
+    }
+
     try {
-      await this.chatHandler(
-        {
-          prompt,
-          references: workspaceReferences,
-          ghostPilot: requestOptions
-        } as unknown as vscode.ChatRequest,
-        {} as vscode.ChatContext,
-        response,
-        cancellation.token
-      )
+      let lastError: unknown
+      for (let attempt = 1; attempt <= GhostPilotViewProvider.maxProviderAttempts; attempt += 1) {
+        request.attempt = attempt
+        request.status = 'connecting'
+        request.lastActivityAt = Date.now()
+        this.postStreamEvent(requestId, request, {
+          type: 'thinking',
+          state: 'connecting',
+          detail: attempt === 1 ? 'Connecting to provider…' : `Reconnecting to provider (attempt ${attempt})…`
+        })
+        try {
+          await this.chatHandler(
+            {
+              prompt,
+              references: workspaceReferences,
+              ghostPilot: requestOptions
+            } as unknown as vscode.ChatRequest,
+            {} as vscode.ChatContext,
+            response,
+            cancellation.token
+          )
+          lastError = undefined
+          break
+        } catch (error) {
+          lastError = error
+          if (cancellation.token.isCancellationRequested || !isRecoverable(error) || attempt >= GhostPilotViewProvider.maxProviderAttempts) {
+            throw error
+          }
+          const delay = 500 * (2 ** (attempt - 1))
+          this.postStreamEvent(requestId, request, {
+            type: 'warning',
+            message: `Provider failed. Retrying in ${delay} ms.`
+          })
+          if (!await waitForBackoff(delay)) {
+            break
+          }
+        }
+      }
+      if (lastError && !cancellation.token.isCancellationRequested) {
+        throw lastError
+      }
       this.postStreamEvent(requestId, request, {
         type: 'request-completed',
-        status: cancellation.token.isCancellationRequested ? 'cancelled' : 'completed'
+        status: request.timedOut
+          ? 'failed'
+          : cancellation.token.isCancellationRequested
+            ? 'cancelled'
+            : 'completed'
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'GhostPilot request failed'
-      this.postStreamEvent(requestId, request, { type: 'error', message })
-      this.postStreamEvent(requestId, request, { type: 'request-completed', status: 'failed' })
+      if (!cancellation.token.isCancellationRequested || !request.timedOut) {
+        const message = error instanceof Error ? error.message : 'GhostPilot request failed'
+        this.postStreamEvent(requestId, request, { type: 'error', message })
+      }
+      this.postStreamEvent(requestId, request, {
+        type: 'request-completed',
+        status: request.timedOut || !cancellation.token.isCancellationRequested ? 'failed' : 'cancelled'
+      })
     } finally {
+      clearTimeout(timeout)
       this.requests.delete(requestId)
       this.completedRequests.add(requestId)
       if (this.completedRequests.size > 100) {
@@ -204,7 +289,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private cancel(requestId: string): void {
-    this.requests.get(requestId)?.cancellation.cancel()
+    const request = this.requests.get(requestId)
+    if (!request) {
+      return
+    }
+    request.status = 'cancelled'
+    request.cancellation.cancel()
   }
 
   private cancelRequests(): void {
@@ -218,6 +308,26 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     request: GhostPilotRequestState,
     event: { type: GhostPilotStreamEvent['type']; [key: string]: unknown }
   ): void {
+    request.lastActivityAt = Date.now()
+    if (event.state) {
+      request.status = event.state as GhostPilotRequestStatus
+    } else if (event.type === 'request-started') {
+      request.status = 'preparing'
+    } else if (event.type === 'thinking') {
+      request.status = 'thinking'
+    } else if (event.type === 'text-delta' || event.type === 'code-delta') {
+      request.status = 'streaming'
+    } else if (event.type === 'tool-requested') {
+      request.status = 'waiting-for-approval'
+    } else if (event.type === 'tool-result') {
+      request.status = 'thinking'
+    } else if (event.type === 'request-completed') {
+      request.status = event.status === 'completed'
+        ? 'completed'
+        : event.status === 'cancelled'
+          ? 'cancelled'
+          : 'failed'
+    }
     request.sequence += 1
     this.postMessage({
       source: 'ghostpilot-extension',
@@ -225,6 +335,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       requestId,
       conversationId: request.conversationId,
       sequence: request.sequence,
+      state: request.status,
       ...event
     } as GhostPilotStreamEvent)
   }
@@ -1093,6 +1204,29 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       .message-body {
         line-height: 1.5;
         overflow-wrap: anywhere;
+      }
+
+      .message-part-summary {
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      .message-progress {
+        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
+        border-left: 2px solid var(--ghostpilot-accent);
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        padding: 4px 7px;
+      }
+
+      .tool-progress {
+        border-left-color: var(--vscode-charts-yellow, #cca700);
+      }
+
+      .error-progress {
+        border-left-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
       }
 
       .message-body p,

@@ -247,14 +247,14 @@
 
 ### 9.5 Implement Conversation and Request State
 
-- [ ] Create typed models for conversations, messages, message parts, attachments, tool calls, request status, and model metadata.
-- [ ] Track request states: idle, preparing, connecting, thinking, streaming, waiting-for-approval, completed, cancelled, and failed.
-- [ ] Keep user text, assistant text, reasoning/progress, tool activity, and errors as separate message parts.
-- [ ] Support multiple assistant messages and tool rounds in one user request.
-- [ ] Prevent duplicate submissions while a request is active unless the user explicitly chooses retry or regenerate.
-- [ ] Preserve unsent composer text when switching views or conversations.
-- [ ] Add request timeout, retry, and backoff behavior for recoverable provider failures.
-- [ ] Keep sensitive prompt and provider data out of logs by default.
+- [x] Create typed models for conversations, messages, message parts, attachments, tool calls, request status, and model metadata.
+- [x] Track request states: idle, preparing, connecting, thinking, streaming, waiting-for-approval, completed, cancelled, and failed.
+- [x] Keep user text, assistant text, reasoning/progress, tool activity, and errors as separate message parts.
+- [x] Support multiple assistant messages and tool rounds in one user request.
+- [x] Prevent duplicate submissions while a request is active unless the user explicitly chooses retry or regenerate.
+- [x] Preserve unsent composer text when switching views or conversations.
+- [x] Add request timeout, retry, and backoff behavior for recoverable provider failures.
+- [x] Keep sensitive prompt and provider data out of logs by default.
 
 ### 9.6 Show Thinking and Agent Progress
 

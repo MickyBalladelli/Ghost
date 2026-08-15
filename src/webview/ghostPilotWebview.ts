@@ -4,6 +4,7 @@ type MessageRole = 'user' | 'assistant'
 type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
 
 interface Attachment {
   name: string
@@ -44,16 +45,42 @@ interface ChatMessage {
   id: string
   role: MessageRole
   content: string
+  parts: MessagePart[]
   status?: 'streaming' | 'error'
+  requestStatus?: RequestStatus
+  requestId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+type MessagePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'reasoning' | 'progress'; text: string }
+  | { kind: 'tool'; toolCall: ToolCall }
+  | { kind: 'error'; message: string; recoverable?: boolean }
+
+interface ToolCall {
+  id: string
+  round: number
+  name: string
+  status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
+  result?: string
+  startedAt: number
+  completedAt?: number
 }
 
 interface Conversation {
   id: string
   title: string
   messages: ChatMessage[]
+  draft: string
+  activeRequestId?: string
+  createdAt: number
+  updatedAt: number
 }
 
 interface GhostPilotState {
+  schemaVersion: 1
   conversations: Conversation[]
   activeConversationId: string
   promptHistory?: string[]
@@ -96,6 +123,7 @@ type GhostPilotExtensionMessage =
       requestId: string
       conversationId: string
       sequence: number
+      state?: RequestStatus
       detail?: string
       delta?: string
       tool?: string
@@ -114,7 +142,17 @@ interface ActiveRequest {
   conversationId: string
   assistantMessageId: string
   lastSequence: number
-  status: 'active' | 'completed' | 'cancelled' | 'failed'
+  status: RequestStatus
+  attempt: number
+  startedAt: number
+}
+
+interface ModelMetadata {
+  id: string
+  label: string
+  provider: GhostPilotProvider
+  contextWindow?: number
+  capabilities: string[]
 }
 
 interface WebviewRequestOptions {
@@ -144,25 +182,96 @@ if (!app) {
 
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
-const createConversation = (): Conversation => ({
-  id: createId('conversation'),
-  title: 'New conversation',
-  messages: []
-})
+const createConversation = (): Conversation => {
+  const timestamp = Date.now()
+  return {
+    id: createId('conversation'),
+    title: 'New conversation',
+    messages: [],
+    draft: '',
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+}
+
+const textPart = (text: string): MessagePart => ({ kind: 'text', text })
+
+const createMessage = (role: MessageRole, content = '', requestId?: string): ChatMessage => {
+  const timestamp = Date.now()
+  return {
+    id: createId('message'),
+    role,
+    content,
+    parts: content ? [textPart(content)] : [],
+    ...(requestId ? { requestId } : {}),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+}
+
+const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
+  const parts = Array.isArray(value.parts) && value.parts.length > 0
+    ? value.parts
+    : typeof value.content === 'string' && value.content
+      ? [textPart(value.content)]
+      : []
+  const content = typeof value.content === 'string' && value.content
+    ? value.content
+    : parts
+      .filter((part): part is Extract<MessagePart, { kind: 'text' }> => part.kind === 'text')
+      .map(part => part.text)
+      .join('')
+  const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
+  return {
+    id: typeof value.id === 'string' ? value.id : createId('message'),
+    role: value.role === 'assistant' ? 'assistant' : 'user',
+    content,
+    parts,
+    ...(value.status ? { status: value.status } : {}),
+    ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
+    ...(value.requestId ? { requestId: value.requestId } : {}),
+    createdAt: timestamp,
+    updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
+  }
+}
+
+const normalizeConversation = (value: Partial<Conversation>): Conversation => {
+  const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
+  return {
+    id: typeof value.id === 'string' ? value.id : createId('conversation'),
+    title: typeof value.title === 'string' ? value.title : 'New conversation',
+    messages: Array.isArray(value.messages) ? value.messages.map(message => normalizeMessage(message)) : [],
+    draft: typeof value.draft === 'string' ? value.draft : '',
+    ...(value.activeRequestId ? { activeRequestId: value.activeRequestId } : {}),
+    createdAt: timestamp,
+    updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
+  }
+}
 
 const getInitialState = (): GhostPilotState => {
-  const stored = vscode.getState<GhostPilotState>()
+  const stored = vscode.getState<Partial<GhostPilotState>>()
   if (
     stored &&
     Array.isArray(stored.conversations) &&
     stored.conversations.length > 0 &&
     typeof stored.activeConversationId === 'string'
   ) {
-    return stored
+    const conversations = stored.conversations.map(conversation => normalizeConversation(conversation))
+    const activeConversationId = conversations.some(conversation => conversation.id === stored.activeConversationId)
+      ? stored.activeConversationId
+      : conversations[0].id
+    return {
+      schemaVersion: 1,
+      conversations,
+      activeConversationId,
+      ...(Array.isArray(stored.promptHistory) ? { promptHistory: stored.promptHistory.filter(item => typeof item === 'string').slice(0, 100) } : {}),
+      ...(Array.isArray(stored.presets) ? { presets: stored.presets } : {})
+    }
   }
 
   const conversation = createConversation()
   return {
+    schemaVersion: 1,
     conversations: [conversation],
     activeConversationId: conversation.id
   }
@@ -183,6 +292,12 @@ let controls: ControlSettings = {
   mode: 'ask'
 }
 let availableModels: string[] = [controls.chatModel]
+let availableModelMetadata: ModelMetadata[] = [{
+  id: controls.chatModel,
+  label: controls.chatModel,
+  provider: controls.provider,
+  capabilities: ['chat']
+}]
 let connection: 'online' | 'offline' | 'unknown' = 'unknown'
 let contextData: ContextData = {
   workspaceName: 'Untitled workspace',
@@ -560,11 +675,27 @@ const getActiveConversation = (): Conversation => {
 
   const conversation = createConversation()
   state = {
+    schemaVersion: 1,
     conversations: [...state.conversations, conversation],
     activeConversationId: conversation.id
   }
   saveState()
   return conversation
+}
+
+const saveDraft = (): void => {
+  const conversation = state.conversations.find(item => item.id === state.activeConversationId)
+  if (!conversation) {
+    return
+  }
+  conversation.draft = promptElement.value
+  conversation.updatedAt = Date.now()
+}
+
+const restoreDraft = (): void => {
+  promptElement.value = getActiveConversation().draft
+  historyIndex = -1
+  updateComposer()
 }
 
 const escapeHtml = (value: string): string => value
@@ -754,6 +885,39 @@ const findMessage = (conversation: Conversation, messageId: string): ChatMessage
   conversation.messages.find(message => message.id === messageId)
 )
 
+const messageText = (message: ChatMessage): string => (
+  message.parts
+    .filter((part): part is Extract<MessagePart, { kind: 'text' }> => part.kind === 'text')
+    .map(part => part.text)
+    .join('')
+)
+
+const appendTextPart = (message: ChatMessage, delta: string): void => {
+  const lastPart = message.parts[message.parts.length - 1]
+  if (lastPart?.kind === 'text') {
+    lastPart.text += delta
+  } else {
+    message.parts.push(textPart(delta))
+  }
+  message.content = messageText(message)
+  message.updatedAt = Date.now()
+}
+
+const appendProgressPart = (message: ChatMessage, text: string): void => {
+  const lastPart = message.parts[message.parts.length - 1]
+  if (lastPart?.kind === 'progress' || lastPart?.kind === 'reasoning') {
+    lastPart.text = text
+  } else {
+    message.parts.push({ kind: 'progress', text })
+  }
+  message.updatedAt = Date.now()
+}
+
+const appendErrorPart = (message: ChatMessage, error: string, recoverable = false): void => {
+  message.parts.push({ kind: 'error', message: error, recoverable })
+  message.updatedAt = Date.now()
+}
+
 const findMessageElement = (messageId: string): HTMLElement | undefined => (
   Array.from(messagesElement.querySelectorAll<HTMLElement>('[data-message-id]'))
     .find(element => element.dataset.messageId === messageId)
@@ -790,9 +954,11 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
   const article = document.createElement('article')
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
   article.dataset.messageId = message.id
+  const partSummary = renderMessagePartSummary(message)
   article.innerHTML = `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : 'GhostPilot'}</strong><span class="message-state">${message.status === 'streaming' ? 'Thinking...' : ''}</span></div>
     <div class="message-body">${renderMarkdown(message.content)}</div>
+    ${partSummary}
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
@@ -806,6 +972,24 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     addAction(actions, 'Edit', 'edit', message.id)
   }
   return article
+}
+
+const renderMessagePartSummary = (message: ChatMessage): string => {
+  const parts = message.parts.filter(part => part.kind !== 'text')
+  if (parts.length === 0) {
+    return ''
+  }
+  const rendered = parts.map(part => {
+    if (part.kind === 'tool') {
+      const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
+      return `<div class="message-progress tool-progress">${escapeHtml(part.toolCall.name)} · ${escapeHtml(part.toolCall.status)}${escapeHtml(result)}</div>`
+    }
+    if (part.kind === 'error') {
+      return `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`
+    }
+    return `<div class="message-progress">${escapeHtml(part.text)}</div>`
+  }).join('')
+  return `<div class="message-part-summary">${rendered}</div>`
 }
 
 const stateCard = (): string => {
@@ -833,7 +1017,18 @@ const updateMessageElement = (message: ChatMessage) => {
     body.innerHTML = renderMarkdown(message.content)
   }
   if (status) {
-    status.textContent = message.status === 'streaming' ? 'Thinking...' : ''
+    status.textContent = message.status === 'streaming'
+      ? 'Thinking...'
+      : message.requestStatus === 'waiting-for-approval'
+        ? 'Waiting for approval...'
+        : ''
+  }
+  const existingSummary = element.querySelector<HTMLElement>('.message-part-summary')
+  const summary = renderMessagePartSummary(message)
+  if (existingSummary) {
+    existingSummary.outerHTML = summary || '<div class="message-part-summary" hidden></div>'
+  } else if (summary) {
+    body?.insertAdjacentHTML('afterend', summary)
   }
   element.classList.toggle('error', message.status === 'error')
 }
@@ -888,7 +1083,7 @@ const updateComposer = () => {
   promptElement.style.height = 'auto'
   promptElement.style.height = `${Math.min(promptElement.scrollHeight, 180)}px`
   promptElement.style.overflowY = promptElement.scrollHeight > 180 ? 'auto' : 'hidden'
-  const busy = Boolean(activeRequest)
+  const busy = Boolean(activeRequest && !['completed', 'cancelled', 'failed'].includes(activeRequest.status))
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   stopElement.hidden = !busy
   promptElement.disabled = busy
@@ -918,8 +1113,19 @@ const renderMessages = (forceScroll: boolean) => {
 
 const updateStatus = () => {
   if (activeRequest) {
-    statusTextElement.textContent = 'GhostPilot is thinking…'
-    screenReaderStatusElement.textContent = 'GhostPilot is generating a response'
+    const statusLabels: Record<RequestStatus, string> = {
+      idle: 'Ready',
+      preparing: 'Preparing context…',
+      connecting: 'Connecting to provider…',
+      thinking: 'GhostPilot is thinking…',
+      streaming: 'GhostPilot is writing…',
+      'waiting-for-approval': 'Waiting for approval…',
+      completed: 'Complete',
+      cancelled: 'Cancelled',
+      failed: 'Request failed'
+    }
+    statusTextElement.textContent = statusLabels[activeRequest.status]
+    screenReaderStatusElement.textContent = statusLabels[activeRequest.status]
   } else if (viewStatus === 'offline') {
     statusTextElement.textContent = 'Offline'
   } else if (notice) {
@@ -944,13 +1150,16 @@ const setNotice = (kind: NoticeKind, message: string) => {
 }
 
 const startNewConversation = () => {
+  saveDraft()
   const conversation = createConversation()
   state = {
+    schemaVersion: 1,
     conversations: [conversation, ...state.conversations],
     activeConversationId: conversation.id
   }
   notice = undefined
   render(true)
+  restoreDraft()
   promptElement.focus()
 }
 
@@ -995,24 +1204,26 @@ const submitPrompt = (rawPrompt: string) => {
   }
 
   const conversation = getActiveConversation()
-  const userMessage: ChatMessage = { id: createId('message'), role: 'user', content: prompt }
-  const assistantMessage: ChatMessage = {
-    id: createId('message'),
-    role: 'assistant',
-    content: '',
-    status: 'streaming'
-  }
+  const userMessage = createMessage('user', prompt)
+  const requestId = createId('request')
+  const assistantMessage = createMessage('assistant', '', requestId)
+  assistantMessage.status = 'streaming'
+  assistantMessage.requestStatus = 'preparing'
   if (conversation.messages.length === 0) {
     conversation.title = prompt.length > 32 ? `${prompt.slice(0, 32)}…` : prompt
   }
   conversation.messages.push(userMessage, assistantMessage)
-  const requestId = createId('request')
+  conversation.draft = ''
+  conversation.updatedAt = Date.now()
+  conversation.activeRequestId = requestId
   activeRequest = {
     requestId,
     conversationId: conversation.id,
     assistantMessageId: assistantMessage.id,
     lastSequence: 0,
-    status: 'active'
+    status: 'preparing',
+    attempt: 0,
+    startedAt: Date.now()
   }
   requests.set(requestId, activeRequest)
   notice = undefined
@@ -1037,6 +1248,7 @@ const editMessage = (messageId: string) => {
     return
   }
   promptElement.value = message.content
+  saveDraft()
   updateComposer()
   promptElement.focus()
   promptElement.setSelectionRange(promptElement.value.length, promptElement.value.length)
@@ -1115,6 +1327,7 @@ const handleConversationAction = (action: string, conversationId: string) => {
     }
     if (state.activeConversationId === conversationId) {
       state.activeConversationId = state.conversations[0].id
+      restoreDraft()
     }
     notice = undefined
     render(true)
@@ -1130,6 +1343,12 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (message.type === 'controls-state') {
     controls = message.settings
     availableModels = message.models
+    availableModelMetadata = message.models.map(model => ({
+      id: model,
+      label: model,
+      provider: controls.provider,
+      capabilities: ['chat']
+    }))
     connection = message.connection
     viewStatus = connection === 'offline' ? 'offline' : 'ready'
     contextData = { ...message.context, tools: message.tools }
@@ -1144,6 +1363,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
   if (message.type === 'reset') {
     state = {
+      schemaVersion: 1,
       conversations: [createConversation()],
       activeConversationId: ''
     }
@@ -1152,11 +1372,13 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     requests.clear()
     notice = undefined
     render(true)
+    restoreDraft()
     return
   }
   if (message.type === 'clear') {
     const conversation = getActiveConversation()
     conversation.messages = []
+    conversation.updatedAt = Date.now()
     activeRequest = undefined
     requests.clear()
     notice = undefined
@@ -1172,53 +1394,111 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (!request || request.conversationId !== message.conversationId) {
     return
   }
-  if (!('sequence' in message) || typeof message.sequence !== 'number' || message.sequence <= request.lastSequence || request.status !== 'active') {
+  if (!('sequence' in message) || typeof message.sequence !== 'number' || message.sequence <= request.lastSequence || ['completed', 'cancelled', 'failed'].includes(request.status)) {
     return
   }
   request.lastSequence = message.sequence
   const conversation = state.conversations.find(item => item.id === request.conversationId)
-  const assistantMessage = conversation ? findMessage(conversation, request.assistantMessageId) : undefined
+  let assistantMessage = conversation ? findMessage(conversation, request.assistantMessageId) : undefined
   if (!conversation || !assistantMessage) {
     return
   }
 
+  if (message.state) {
+    request.status = message.state
+    assistantMessage.requestStatus = message.state
+  }
   if (message.type === 'request-started') {
     updateStatus()
     return
   }
-  if (message.type === 'thinking' || message.type === 'tool-requested' || message.type === 'tool-result') {
-    screenReaderStatusElement.textContent = message.detail ?? message.tool ?? 'GhostPilot is working'
+  if (message.type === 'thinking') {
+    request.status = 'thinking'
+    appendProgressPart(assistantMessage, message.detail ?? 'GhostPilot is working')
+    screenReaderStatusElement.textContent = message.detail ?? 'GhostPilot is working'
+    updateMessageElement(assistantMessage)
+    updateStatus()
+    return
+  }
+  if (message.type === 'tool-requested') {
+    request.status = 'waiting-for-approval'
+    const toolCall: ToolCall = {
+      id: createId('tool'),
+      round: assistantMessage.parts.filter(part => part.kind === 'tool').length + 1,
+      name: message.tool ?? 'Unknown tool',
+      status: 'requested',
+      startedAt: Date.now()
+    }
+    assistantMessage.parts.push({ kind: 'tool', toolCall })
+    assistantMessage.requestStatus = request.status
+    screenReaderStatusElement.textContent = message.detail ?? toolCall.name
+    updateMessageElement(assistantMessage)
+    updateStatus()
+    return
+  }
+  if (message.type === 'tool-result') {
+    const toolPart = [...assistantMessage.parts]
+      .reverse()
+      .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && part.toolCall.status !== 'completed')
+    if (toolPart) {
+      toolPart.toolCall.status = 'completed'
+      toolPart.toolCall.result = message.detail
+      toolPart.toolCall.completedAt = Date.now()
+    }
+    request.status = 'thinking'
+    assistantMessage.requestStatus = request.status
+    if (assistantMessage.content) {
+      const nextAssistant = createMessage('assistant', '', message.requestId)
+      nextAssistant.status = 'streaming'
+      nextAssistant.requestStatus = request.status
+      conversation.messages.push(nextAssistant)
+      request.assistantMessageId = nextAssistant.id
+      assistantMessage = nextAssistant
+    }
+    screenReaderStatusElement.textContent = message.detail ?? message.tool ?? 'Tool completed'
+    updateMessageElement(assistantMessage)
+    renderMessages(false)
+    updateStatus()
     return
   }
   if (message.type === 'text-delta' || message.type === 'code-delta') {
-    assistantMessage.content += message.delta ?? ''
+    request.status = 'streaming'
+    assistantMessage.status = 'streaming'
+    assistantMessage.requestStatus = request.status
+    appendTextPart(assistantMessage, message.delta ?? '')
     updateMessageElement(assistantMessage)
     scrollMessages(false)
     return
   }
   if (message.type === 'warning') {
     const warning = message.message ?? 'GhostPilot returned a warning'
+    appendProgressPart(assistantMessage, `Warning: ${warning}`)
     notice = { kind: 'info', message: warning }
     screenReaderStatusElement.textContent = warning
+    updateMessageElement(assistantMessage)
     updateStatus()
     return
   }
   if (message.type === 'error') {
+    request.status = 'failed'
     assistantMessage.status = 'error'
-    assistantMessage.content = message.message ?? 'GhostPilot request failed'
-    notice = { kind: 'error', message: assistantMessage.content }
+    assistantMessage.requestStatus = request.status
+    const error = message.message ?? 'GhostPilot request failed'
+    appendErrorPart(assistantMessage, error, true)
+    notice = { kind: 'error', message: error }
     updateMessageElement(assistantMessage)
     return
   }
   if (message.type === 'request-completed') {
     const status = message.status ?? 'failed'
     request.status = status
+    assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
     if (status === 'cancelled' && assistantMessage.content.length === 0) {
-      assistantMessage.content = 'Request cancelled.'
+      appendErrorPart(assistantMessage, 'Request cancelled.')
     }
     if (status === 'failed' && assistantMessage.content.length === 0) {
-      assistantMessage.content = 'GhostPilot request failed.'
+      appendErrorPart(assistantMessage, 'GhostPilot request failed.')
     }
     if (/model.*(not found|missing)|ollama pull/i.test(assistantMessage.content)) {
       notice = { kind: 'no-model', message: assistantMessage.content }
@@ -1226,6 +1506,8 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     if (activeRequest?.requestId === message.requestId) {
       activeRequest = undefined
     }
+    conversation.activeRequestId = undefined
+    conversation.updatedAt = Date.now()
     requests.delete(message.requestId)
     updateMessageElement(assistantMessage)
     render(false)
@@ -1266,7 +1548,8 @@ const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage
     'sequence' in message &&
     typeof message.requestId === 'string' &&
     typeof message.conversationId === 'string' &&
-    typeof message.sequence === 'number'
+    typeof message.sequence === 'number' &&
+    (message.state === undefined || ['idle', 'preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval', 'completed', 'cancelled', 'failed'].includes(message.state as string))
   )
 }
 
@@ -1363,6 +1646,7 @@ mentionMenuElement.addEventListener('click', event => {
   const after = promptElement.value.slice(cursor)
   const replaced = before.replace(/@([a-zA-Z0-9._/-]*)$/, mention)
   promptElement.value = `${replaced} ${after}`
+  saveDraft()
   promptElement.focus()
   promptElement.setSelectionRange(replaced.length + 1, replaced.length + 1)
   mentionMenuElement.hidden = true
@@ -1379,9 +1663,11 @@ conversationListElement.addEventListener('click', event => {
   }
   const select = target.closest<HTMLButtonElement>('[data-conversation-id]')
   if (select?.dataset.conversationId) {
+    saveDraft()
     state.activeConversationId = select.dataset.conversationId
     notice = undefined
     render(true)
+    restoreDraft()
   }
 })
 
@@ -1447,6 +1733,7 @@ historyListElement.addEventListener('click', event => {
     return
   }
   promptElement.value = item.dataset.historyPrompt
+  saveDraft()
   setModalVisibility(historyModalElement, false)
   promptElement.focus()
   updateComposer()
@@ -1532,6 +1819,7 @@ promptElement.addEventListener('keydown', event => {
     if (entries.length > 0) {
       historyIndex = Math.min(historyIndex + 1, entries.length - 1)
       promptElement.value = entries[historyIndex]
+      saveDraft()
       updateComposer()
       event.preventDefault()
     }
@@ -1539,6 +1827,7 @@ promptElement.addEventListener('keydown', event => {
     const entries = promptHistory()
     historyIndex -= 1
     promptElement.value = historyIndex >= 0 ? entries[historyIndex] : ''
+    saveDraft()
     updateComposer()
     event.preventDefault()
   }
@@ -1549,10 +1838,16 @@ document.getElementById('export')?.addEventListener('click', () => post('export'
 document.getElementById('reset')?.addEventListener('click', () => post('reset'))
 stopElement.addEventListener('click', () => {
   if (activeRequest) {
-    post('cancel', { requestId: activeRequest.requestId })
+    post('cancel', {
+      requestId: activeRequest.requestId,
+      conversationId: activeRequest.conversationId
+    })
   }
 })
-promptElement.addEventListener('input', updateComposer)
+promptElement.addEventListener('input', () => {
+  saveDraft()
+  updateComposer()
+})
 promptElement.addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
@@ -1570,4 +1865,5 @@ window.addEventListener('message', event => {
 })
 
 render(false)
+restoreDraft()
 post('ready')
