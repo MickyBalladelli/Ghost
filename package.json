@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -173,6 +173,39 @@
           ],
           "default": "ask",
           "description": "Default workflow mode for the GhostPilot interface."
+        },
+        "ghostpilot.toolAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ghostpilot_read_file",
+              "ghostpilot_write_file",
+              "ghostpilot_run_terminal_command",
+              "ghostpilot_list_directory"
+            ]
+          },
+          "default": [
+            "ghostpilot_read_file",
+            "ghostpilot_write_file",
+            "ghostpilot_run_terminal_command",
+            "ghostpilot_list_directory"
+          ],
+          "description": "Tools GhostPilot may use. Workspace settings can restrict this list."
+        },
+        "ghostpilot.toolDenylist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ghostpilot_read_file",
+              "ghostpilot_write_file",
+              "ghostpilot_run_terminal_command",
+              "ghostpilot_list_directory"
+            ]
+          },
+          "default": [],
+          "description": "Tools GhostPilot must never use in this workspace."
         }
       }
     },

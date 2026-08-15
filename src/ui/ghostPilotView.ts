@@ -1,16 +1,20 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
-import { createChatParticipantHandler, GhostPilotRequestOptions } from '../agent/chatParticipant'
-import { ghostPilotConfig, getGhostPilotSettings } from '../config'
+import { createChatParticipantHandler, GhostPilotRequestOptions, GhostPilotToolApproval } from '../agent/chatParticipant'
+import type { LocalToolCall } from '../agent/toolCallParser'
+import { GHOSTPILOT_TOOL_NAMES, ghostPilotConfig, getGhostPilotSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
+import { resolveWorkspacePath } from '../tools/workspacePath'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
   GhostPilotAttachment,
   GhostPilotExtensionMessage,
   GhostPilotSettingsUpdate,
   GhostPilotStreamEvent,
+  GhostPilotToolArguments,
+  GhostPilotToolDiffPreview,
   GhostPilotViewStatus,
   GhostPilotWebviewRequestOptions,
   isGhostPilotWebviewMessage
@@ -29,6 +33,15 @@ interface GhostPilotRequestState {
   timedOut: boolean
   model: string
   outputTokens: number
+  pendingTool?: { toolCallId: string; name: string }
+}
+
+interface PendingToolApproval {
+  requestId: string
+  conversationId: string
+  toolCallId: string
+  call: LocalToolCall
+  resolve: (approval: GhostPilotToolApproval) => void
 }
 
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -40,6 +53,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   private readonly disposables: vscode.Disposable[] = []
   private readonly requests = new Map<string, GhostPilotRequestState>()
   private readonly completedRequests = new Set<string>()
+  private readonly pendingApprovals = new Map<string, PendingToolApproval>()
+  private readonly sessionApprovedTools = new Set<string>()
   private pendingMessages: GhostPilotExtensionMessage[] = []
   private status: GhostPilotViewStatus = 'ready'
   private disposed = false
@@ -130,17 +145,19 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       type: 'request-started'
     })
 
-    let pendingTool: string | undefined
+    let pendingTool: { toolCallId: string; name: string } | undefined
     const response = {
       markdown: (delta: string) => {
         if (pendingTool) {
           this.postStreamEvent(requestId, request, {
             type: 'tool-result',
-            tool: pendingTool,
-            detail: `${pendingTool} completed`,
+            tool: pendingTool.name,
+            detail: `${pendingTool.name} completed`,
+            toolCallId: pendingTool.toolCallId,
             phase: 'tool'
           })
           pendingTool = undefined
+          request.pendingTool = undefined
         }
         const markerCount = (delta.match(/```/g) ?? []).length
         const type = request.codeMode || markerCount > 0 ? 'code-delta' : 'text-delta'
@@ -156,13 +173,29 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       },
       progress: (progress: string) => {
         if (progress.startsWith('Running ')) {
-          pendingTool = progress.slice('Running '.length)
-          this.postStreamEvent(requestId, request, {
-            type: 'tool-requested',
-            tool: pendingTool,
-            detail: progress,
-            phase: 'tool'
-          })
+          pendingTool = {
+            toolCallId: this.createToolCallId(),
+            name: progress.slice('Running '.length)
+          }
+          request.pendingTool = pendingTool
+          return
+        }
+        if (progress.startsWith('Tool result:')) {
+          const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
+          if (pendingTool && result) {
+            this.postStreamEvent(requestId, request, {
+              type: 'tool-result',
+              tool: pendingTool.name,
+              toolCallId: pendingTool.toolCallId,
+              detail: result[2],
+              phase: 'tool'
+            })
+            pendingTool = undefined
+            request.pendingTool = undefined
+            return
+          }
+        }
+        if (progress.startsWith('Tool result')) {
           return
         }
         const normalizedProgress = progress.toLowerCase()
@@ -193,7 +226,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       .join('\n\n')
     const requestOptions: GhostPilotRequestOptions = {
       ...options,
-      additionalContext: droppedContext || undefined
+      additionalContext: droppedContext || undefined,
+      approveTool: call => this.requestToolApproval(requestId, request, call)
     }
 
     const timeout = setTimeout(() => {
@@ -290,6 +324,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       })
     } finally {
       clearTimeout(timeout)
+      this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requests.delete(requestId)
       this.completedRequests.add(requestId)
       if (this.completedRequests.size > 100) {
@@ -307,14 +342,151 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     if (!request) {
       return
     }
+    this.resolvePendingApprovals(requestId, { decision: 'reject' })
     request.status = 'cancelled'
     request.cancellation.cancel()
   }
 
   private cancelRequests(): void {
-    for (const request of this.requests.values()) {
-      request.cancellation.cancel()
+    for (const requestId of this.requests.keys()) {
+      this.cancel(requestId)
     }
+  }
+
+  private createToolCallId(): string {
+    return `tool-${Date.now()}-${randomBytes(6).toString('hex')}`
+  }
+
+  private requiresToolApproval(toolName: string): boolean {
+    return toolName === 'ghostpilot_write_file' || toolName === 'ghostpilot_run_terminal_command'
+  }
+
+  private async getDiffPreview(call: LocalToolCall): Promise<GhostPilotToolDiffPreview | undefined> {
+    if (call.name !== 'ghostpilot_write_file' || typeof call.arguments.path !== 'string' || typeof call.arguments.content !== 'string') {
+      return undefined
+    }
+    try {
+      const uri = resolveWorkspacePath(call.arguments.path)
+      let before = ''
+      try {
+        const bytes = await vscode.workspace.fs.readFile(uri)
+        before = Buffer.from(bytes).toString('utf8')
+      } catch {
+        before = '[new file]'
+      }
+      const after = call.arguments.content
+      const limit = 20000
+      return {
+        path: uri.fsPath,
+        before: before.slice(0, limit),
+        after: after.slice(0, limit),
+        truncated: before.length > limit || after.length > limit
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  private async requestToolApproval(
+    requestId: string,
+    request: GhostPilotRequestState,
+    call: LocalToolCall
+  ): Promise<GhostPilotToolApproval> {
+    const pending = request.pendingTool?.name === call.name
+      ? request.pendingTool
+      : { toolCallId: this.createToolCallId(), name: call.name }
+    request.pendingTool = pending
+    const settings = getGhostPilotSettings()
+    const allowedTools = settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES]
+    const deniedTools = settings.toolDenylist ?? []
+    const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
+    const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy
+    const argumentsPayload = call.arguments as GhostPilotToolArguments
+    const diffPreview = requiresApproval ? await this.getDiffPreview(call) : undefined
+    this.postStreamEvent(requestId, request, {
+      type: 'tool-requested',
+      tool: call.name,
+      toolCallId: pending.toolCallId,
+      arguments: argumentsPayload,
+      requiresApproval,
+      ...(diffPreview ? { diffPreview } : {}),
+      detail: blockedByPolicy
+        ? 'Blocked by workspace tool policy'
+        : requiresApproval ? 'Waiting for approval' : 'Running safe workspace tool',
+      phase: 'tool'
+    })
+
+    if (blockedByPolicy) {
+      return { decision: 'reject' }
+    }
+    if (!requiresApproval || this.sessionApprovedTools.has(call.name)) {
+      return { decision: 'once' }
+    }
+
+    return new Promise(resolve => {
+      this.pendingApprovals.set(pending.toolCallId, {
+        requestId,
+        conversationId: request.conversationId,
+        toolCallId: pending.toolCallId,
+        call,
+        resolve
+      })
+    })
+  }
+
+  private resolvePendingApprovals(requestId: string, approval: GhostPilotToolApproval): void {
+    for (const [toolCallId, pending] of this.pendingApprovals) {
+      if (pending.requestId !== requestId) {
+        continue
+      }
+      this.pendingApprovals.delete(toolCallId)
+      pending.resolve(approval)
+    }
+  }
+
+  private decideToolApproval(
+    requestId: string,
+    conversationId: string,
+    toolCallId: string,
+    approval: GhostPilotToolApproval
+  ): void {
+    const pending = this.pendingApprovals.get(toolCallId)
+    if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
+      return
+    }
+    if (approval.decision === 'session') {
+      this.sessionApprovedTools.add(pending.call.name)
+    }
+    this.pendingApprovals.delete(toolCallId)
+    pending.resolve(approval)
+  }
+
+  private async editToolArguments(
+    requestId: string,
+    conversationId: string,
+    toolCallId: string,
+    argumentsPayload: GhostPilotToolArguments
+  ): Promise<void> {
+    const pending = this.pendingApprovals.get(toolCallId)
+    if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
+      return
+    }
+    pending.call.arguments = argumentsPayload
+    const request = this.requests.get(requestId)
+    if (!request) {
+      return
+    }
+    const diffPreview = await this.getDiffPreview(pending.call)
+    this.postStreamEvent(requestId, request, {
+      type: 'tool-requested',
+      tool: pending.call.name,
+      toolCallId,
+      arguments: argumentsPayload,
+      requiresApproval: true,
+      ...(diffPreview ? { diffPreview } : {}),
+      detail: 'Arguments updated. Waiting for approval',
+      phase: 'tool'
+    })
   }
 
   private postStreamEvent(
@@ -407,6 +579,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       : undefined
     const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
     const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
+    const allowedTools = (settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES]).filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
     this.postMessage({
       source: 'ghostpilot-extension',
@@ -429,12 +602,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         ...(activeFile ? { activeFile } : {}),
         openFiles
       },
-      tools: [
-        'ghostpilot_read_file',
-        'ghostpilot_write_file',
-        'ghostpilot_run_terminal_command',
-        'ghostpilot_list_directory'
-      ]
+      tools: allowedTools
     })
   }
 
@@ -514,6 +682,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       request.cancellation.dispose()
     }
     this.requests.clear()
+    this.pendingApprovals.clear()
+    this.sessionApprovedTools.clear()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
     this.view = undefined
@@ -546,6 +716,18 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         return
       case 'cancel':
         this.cancel(value.requestId)
+        return
+      case 'approve-tool':
+        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, { decision: value.decision })
+        return
+      case 'reject-tool':
+        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, { decision: 'reject' })
+        return
+      case 'cancel-tool':
+        this.cancel(value.requestId)
+        return
+      case 'edit-tool':
+        await this.editToolArguments(value.requestId, value.conversationId, value.toolCallId, value.arguments)
         return
       case 'load-controls':
       case 'refresh-models':
@@ -1285,6 +1467,34 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .tool-progress {
         border-left-color: var(--vscode-charts-yellow, #cca700);
+      }
+
+      .tool-details {
+        margin-top: 5px;
+      }
+
+      .tool-details summary {
+        cursor: pointer;
+      }
+
+      .tool-details pre {
+        max-height: 180px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+
+      .tool-approval-actions,
+      .tool-result-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+
+      .tool-approval-actions button,
+      .tool-result-actions button {
+        font-size: 0.85em;
+        padding: 3px 6px;
       }
 
       .warning-progress {

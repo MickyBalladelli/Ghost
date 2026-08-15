@@ -46,7 +46,7 @@ export class LocalToolExecutor {
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
 
-  async execute(call: LocalToolCall, token: vscode.CancellationToken): Promise<string> {
+  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
     }
@@ -68,7 +68,7 @@ export class LocalToolExecutor {
           path: requiredString(call.arguments, 'path'),
           content: typeof call.arguments.content === 'string' ? call.arguments.content : ''
         }
-        const allowed = await confirmAction(
+        const allowed = options.approved ?? await confirmAction(
           'Allow GhostPilot to write a file?',
           `Replace the complete contents of ${input.path}?`
         )
@@ -84,7 +84,7 @@ export class LocalToolExecutor {
           command: requiredString(call.arguments, 'command'),
           cwd: typeof call.arguments.cwd === 'string' ? call.arguments.cwd : undefined
         }
-        const allowed = await confirmAction(
+        const allowed = options.approved ?? await confirmAction(
           'Allow GhostPilot to run a terminal command?',
           input.cwd ? `${input.command}\n\nWorking directory: ${input.cwd}` : input.command
         )

@@ -10,6 +10,19 @@ export type GhostPilotContextKey = 'workspace' | 'folders' | 'activeFile' | 'sel
 export type { GhostPilotRequestStatus }
 export type { GhostPilotProgressPhase }
 
+export type GhostPilotToolApprovalDecision = 'once' | 'session' | 'reject'
+
+export interface GhostPilotToolArguments {
+  [key: string]: unknown
+}
+
+export interface GhostPilotToolDiffPreview {
+  path: string
+  before: string
+  after: string
+  truncated?: boolean
+}
+
 export interface GhostPilotAttachment {
   name: string
   path?: string
@@ -57,6 +70,9 @@ export type GhostPilotWebviewMessage =
       attachments?: GhostPilotAttachment[]
     })
   | (GhostPilotRequestEnvelope & { type: 'cancel' })
+  | (GhostPilotRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostPilotToolApprovalDecision, 'reject'> })
+  | (GhostPilotRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
+  | (GhostPilotRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostPilotToolArguments })
   | (GhostPilotRequestEnvelope & { type: 'retry' | 'regenerate'; messageId: string })
   | (GhostPilotRequestEnvelope & { type: 'edit'; messageId: string; prompt: string })
   | (GhostPilotRequestEnvelope & { type: 'attach'; attachments: GhostPilotAttachment[] })
@@ -74,8 +90,8 @@ export type GhostPilotStreamEvent =
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-started'; sequence: number })
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; detail?: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; detail: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostPilotToolArguments; requiresApproval: boolean; diffPreview?: GhostPilotToolDiffPreview; detail?: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string })
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'error'; sequence: number; message: string })
   | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed' })
@@ -197,6 +213,15 @@ export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotW
   }
   if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate') {
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
+  }
+  if (value.type === 'approve-tool') {
+    return isNonEmptyString(value.toolCallId) && (value.decision === 'once' || value.decision === 'session')
+  }
+  if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
+    return isNonEmptyString(value.toolCallId)
+  }
+  if (value.type === 'edit-tool') {
+    return isNonEmptyString(value.toolCallId) && isRecord(value.arguments)
   }
   if (value.type === 'edit') {
     return isNonEmptyString(value.messageId) && typeof value.prompt === 'string'

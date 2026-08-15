@@ -271,16 +271,16 @@
 
 ### 9.7 Integrate Tools with Approval and Results
 
-- [ ] Move tool execution into a request-scoped agent controller that the webview can observe.
-- [ ] Render each tool call with tool name, arguments, status, duration, and result summary.
-- [ ] Show a clear approval card before file writes, terminal commands, or other destructive actions.
-- [ ] Provide Approve once, Always approve for this session, Reject, and Edit arguments actions where safe.
-- [ ] Allow the user to cancel a tool call and the complete request.
-- [ ] Add diff preview for proposed file changes before applying them.
-- [ ] Add terminal output expansion, truncation, copy, and rerun controls.
-- [ ] Add tool allowlist/denylist settings and per-workspace approval policy.
-- [ ] Record tool errors as structured message parts and let the model continue when recovery is possible.
-- [ ] Prevent the model from bypassing approval through malformed JSON, streamed text, or alternate tool names.
+- [x] Move tool execution into a request-scoped agent controller that the webview can observe.
+- [x] Render each tool call with tool name, arguments, status, duration, and result summary.
+- [x] Show a clear approval card before file writes, terminal commands, or other destructive actions.
+- [x] Provide Approve once, Always approve for this session, Reject, and Edit arguments actions where safe.
+- [x] Allow the user to cancel a tool call and the complete request.
+- [x] Add diff preview for proposed file changes before applying them.
+- [x] Add terminal output expansion, truncation, copy, and rerun controls.
+- [x] Add tool allowlist/denylist settings and per-workspace approval policy.
+- [x] Record tool errors as structured message parts and let the model continue when recovery is possible.
+- [x] Prevent the model from bypassing approval through malformed JSON, streamed text, or alternate tool names.
 
 ### 9.8 Add File Editing and Diff Workflow
 

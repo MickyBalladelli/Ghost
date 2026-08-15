@@ -33,6 +33,9 @@ export interface GhostPilotToolCall {
   round: number
   name: string
   arguments?: string
+  requiresApproval?: boolean
+  approval?: 'pending' | 'approved' | 'rejected'
+  diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number

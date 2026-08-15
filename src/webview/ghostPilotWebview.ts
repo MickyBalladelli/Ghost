@@ -65,6 +65,10 @@ interface ToolCall {
   id: string
   round: number
   name: string
+  arguments?: string
+  requiresApproval?: boolean
+  approval?: 'pending' | 'approved' | 'rejected'
+  diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number
@@ -136,6 +140,10 @@ type GhostPilotExtensionMessage =
       detail?: string
       delta?: string
       tool?: string
+      toolCallId?: string
+      arguments?: Record<string, unknown>
+      requiresApproval?: boolean
+      diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
       message?: string
       status?: 'completed' | 'cancelled' | 'failed'
     }
@@ -1050,7 +1058,24 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     : ''
   const renderedTools = toolParts.map(part => {
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
-    return `<div class="message-progress tool-progress">${escapeHtml(part.toolCall.name)} · ${escapeHtml(part.toolCall.status)}${escapeHtml(result)}</div>`
+    const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
+    const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''
+    const argumentsBlock = part.toolCall.arguments
+      ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`
+      : ''
+    const diffBlock = part.toolCall.diffPreview
+      ? `<details class="tool-details"><summary>Diff preview · ${escapeHtml(part.toolCall.diffPreview.path)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary><pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
+      : ''
+    const resultBlock = part.toolCall.result
+      ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
+      : ''
+    const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
+      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve once</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Always this session</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+      : ''
+    const resultActions = part.toolCall.result
+      ? `<div class="tool-result-actions"><button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button></div>`
+      : ''
+    return `<div class="message-progress tool-progress"><strong>${escapeHtml(part.toolCall.name)}</strong> · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
@@ -1361,6 +1386,76 @@ const editAndResendMessage = (messageId: string) => {
   submitPrompt(editedPrompt)
 }
 
+const findToolCall = (toolCallId: string): { message: ChatMessage; toolCall: ToolCall } | undefined => {
+  for (const message of getActiveConversation().messages) {
+    const part = message.parts.find((item): item is Extract<MessagePart, { kind: 'tool' }> => item.kind === 'tool' && item.toolCall.id === toolCallId)
+    if (part) {
+      return { message, toolCall: part.toolCall }
+    }
+  }
+  return undefined
+}
+
+const handleToolAction = (action: string, toolCallId: string): void => {
+  const found = findToolCall(toolCallId)
+  if (!found) {
+    return
+  }
+  if (action === 'rerun') {
+    retryMessage(found.message.id)
+    return
+  }
+  const requestId = found.message.requestId ?? activeRequest?.requestId
+  if (!requestId) {
+    return
+  }
+  const conversationId = getActiveConversation().id
+  if (action === 'copy-result' && found.toolCall.result) {
+    void copyText(found.toolCall.result)
+    return
+  }
+  if (action === 'cancel') {
+    found.toolCall.approval = 'rejected'
+    found.toolCall.status = 'rejected'
+    post('cancel-tool', { requestId, conversationId, toolCallId })
+    renderMessages(false)
+    return
+  }
+  if (action === 'edit') {
+    const edited = window.prompt('Edit tool arguments as JSON', found.toolCall.arguments ?? '{}')
+    if (edited === null) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(edited) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Arguments must be a JSON object')
+      }
+      found.toolCall.arguments = JSON.stringify(parsed, null, 2)
+      post('edit-tool', { requestId, conversationId, toolCallId, arguments: parsed })
+      renderMessages(false)
+    } catch {
+      setNotice('error', 'Tool arguments must be a JSON object.')
+    }
+    return
+  }
+  if (action === 'approve' || action === 'approve-session') {
+    found.toolCall.approval = 'approved'
+    found.toolCall.status = 'running'
+    post('approve-tool', {
+      requestId,
+      conversationId,
+      toolCallId,
+      decision: action === 'approve-session' ? 'session' : 'once'
+    })
+  } else if (action === 'reject') {
+    found.toolCall.approval = 'rejected'
+    found.toolCall.status = 'rejected'
+    post('reject-tool', { requestId, conversationId, toolCallId })
+  }
+  renderMessages(false)
+}
+
 const handleMessageAction = (action: string, messageId: string) => {
   const conversation = getActiveConversation()
   const message = findMessage(conversation, messageId)
@@ -1535,14 +1630,30 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
   if (message.type === 'tool-requested') {
     request.status = 'waiting-for-approval'
-    const toolCall: ToolCall = {
-      id: createId('tool'),
+    const toolCallId = message.toolCallId ?? createId('tool')
+    const existingTool = assistantMessage.parts
+      .map(part => part.kind === 'tool' ? part.toolCall : undefined)
+      .find(toolCall => toolCall?.id === toolCallId)
+    const toolCall = existingTool ?? {
+      id: toolCallId,
       round: assistantMessage.parts.filter(part => part.kind === 'tool').length + 1,
       name: message.tool ?? 'Unknown tool',
-      status: 'requested',
+      arguments: message.arguments ? JSON.stringify(message.arguments, null, 2) : undefined,
+      requiresApproval: message.requiresApproval !== false,
+      diffPreview: message.diffPreview,
+      approval: message.requiresApproval === false ? 'approved' as const : 'pending' as const,
+      status: 'requested' as const,
       startedAt: Date.now()
     }
-    assistantMessage.parts.push({ kind: 'tool', toolCall })
+    if (existingTool) {
+      existingTool.name = message.tool ?? existingTool.name
+      existingTool.arguments = message.arguments ? JSON.stringify(message.arguments, null, 2) : existingTool.arguments
+      existingTool.requiresApproval = message.requiresApproval !== false
+      existingTool.diffPreview = message.diffPreview ?? existingTool.diffPreview
+      existingTool.status = existingTool.approval === 'approved' ? 'running' : 'requested'
+    } else {
+      assistantMessage.parts.push({ kind: 'tool', toolCall })
+    }
     assistantMessage.requestStatus = request.status
     screenReaderStatusElement.textContent = message.detail ?? toolCall.name
     updateMessageElement(assistantMessage)
@@ -1552,10 +1663,15 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (message.type === 'tool-result') {
     const toolPart = [...assistantMessage.parts]
       .reverse()
-      .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && part.toolCall.status !== 'completed')
+      .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && (message.toolCallId ? part.toolCall.id === message.toolCallId : part.toolCall.status !== 'completed'))
     if (toolPart) {
-      toolPart.toolCall.status = 'completed'
-      toolPart.toolCall.result = message.detail
+      const detail = message.detail ?? 'Tool completed'
+      const failed = /rejected|denied|cancelled|error|failed/i.test(detail)
+      toolPart.toolCall.status = failed
+        ? /rejected|denied/i.test(detail) ? 'rejected' : 'failed'
+        : 'completed'
+      toolPart.toolCall.approval = toolPart.toolCall.approval === 'rejected' ? 'rejected' : 'approved'
+      toolPart.toolCall.result = detail
       toolPart.toolCall.completedAt = Date.now()
     }
     request.status = 'thinking'
@@ -1682,6 +1798,11 @@ messagesElement.addEventListener('click', event => {
   const codeCopy = target.closest<HTMLButtonElement>('.code-copy')
   if (codeCopy) {
     void copyText(decodeURIComponent(codeCopy.dataset.code ?? ''))
+    return
+  }
+  const toolAction = target.closest<HTMLButtonElement>('[data-tool-action]')
+  if (toolAction?.dataset.toolAction && toolAction.dataset.toolCallId) {
+    handleToolAction(toolAction.dataset.toolAction, toolAction.dataset.toolCallId)
     return
   }
   const stateAction = target.closest<HTMLButtonElement>('[data-state-action]')

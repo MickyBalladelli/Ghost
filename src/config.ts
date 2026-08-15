@@ -6,6 +6,13 @@ export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 
+export const GHOSTPILOT_TOOL_NAMES = [
+  'ghostpilot_read_file',
+  'ghostpilot_write_file',
+  'ghostpilot_run_terminal_command',
+  'ghostpilot_list_directory'
+] as const
+
 export interface GhostPilotSettings {
   ollamaUrl: string
   chatModel: string
@@ -17,6 +24,8 @@ export interface GhostPilotSettings {
   temperature: number
   responseLength: GhostPilotResponseLength
   mode: GhostPilotMode
+  toolAllowlist?: string[]
+  toolDenylist?: string[]
 }
 
 export type GhostPilotSetting = keyof GhostPilotSettings
@@ -31,7 +40,9 @@ export const DEFAULT_GHOSTPILOT_SETTINGS: Readonly<GhostPilotSettings> = {
   mlxUrl: 'http://localhost:8000',
   temperature: 0.2,
   responseLength: 'balanced',
-  mode: 'ask'
+  mode: 'ask',
+  toolAllowlist: [...GHOSTPILOT_TOOL_NAMES],
+  toolDenylist: []
 }
 
 export type GhostPilotSettingsChangeListener = (
@@ -56,7 +67,9 @@ export class GhostPilotConfig {
       mlxUrl: configuration.get('mlxUrl', DEFAULT_GHOSTPILOT_SETTINGS.mlxUrl),
       temperature: configuration.get('temperature', DEFAULT_GHOSTPILOT_SETTINGS.temperature),
       responseLength: configuration.get('responseLength', DEFAULT_GHOSTPILOT_SETTINGS.responseLength),
-      mode: configuration.get('mode', DEFAULT_GHOSTPILOT_SETTINGS.mode)
+      mode: configuration.get('mode', DEFAULT_GHOSTPILOT_SETTINGS.mode),
+      toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOSTPILOT_SETTINGS.toolAllowlist),
+      toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOSTPILOT_SETTINGS.toolDenylist)
     }
   }
 

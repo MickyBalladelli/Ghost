@@ -7,7 +7,7 @@ import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostPilotStatusBar } from '../ui/statusBar'
-import { parseLocalToolCall } from './toolCallParser'
+import { LocalToolCall, parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'ghostpilot.agent'
 const DEFAULT_TEMPERATURE = 0.2
@@ -24,6 +24,11 @@ const SYSTEM_PROMPT = [
 
 const MAX_TOOL_ROUNDS = 8
 const MAX_TOOL_RESULT_CHARACTERS = 16000
+
+function summarizeToolResult(value: string): string {
+  const compact = value.replace(/\s+/g, ' ').trim()
+  return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
+}
 
 export interface ChatParticipantOptions {
   configuration?: GhostPilotConfig
@@ -50,6 +55,12 @@ export interface GhostPilotRequestOptions {
   context?: GhostPilotContextSelection
   additionalContext?: string
   showReasoning?: boolean
+  approveTool?: (call: LocalToolCall) => Promise<GhostPilotToolApproval>
+}
+
+export interface GhostPilotToolApproval {
+  decision: 'once' | 'session' | 'reject'
+  arguments?: Record<string, unknown>
 }
 
 interface EditorContext {
@@ -517,10 +528,28 @@ export function createChatParticipantHandler(
         }
 
         response.progress(`Running ${toolCall.name}`)
+        const approval = requestOptions.approveTool
+          ? await requestOptions.approveTool(toolCall)
+          : { decision: 'once' as const }
+        if (token.isCancellationRequested) {
+          return
+        }
+        if (approval.arguments) {
+          toolCall.arguments = approval.arguments
+        }
+        if (approval.decision === 'reject') {
+          const rejection = 'User rejected this tool call.'
+          response.progress(`Tool result: ${toolCall.name}: ${rejection}`)
+          messages.push(
+            { role: 'assistant', content: generated },
+            { role: 'user', content: `Tool result for ${toolCall.name}:\n${rejection}` }
+          )
+          continue
+        }
         let toolResult: string
 
         try {
-          toolResult = await toolExecutor.execute(toolCall, token)
+          toolResult = await toolExecutor.execute(toolCall, token, { approved: Boolean(requestOptions.approveTool) })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown tool error'
           toolResult = `Tool error: ${message}`
@@ -529,6 +558,8 @@ export function createChatParticipantHandler(
         if (toolResult.length > MAX_TOOL_RESULT_CHARACTERS) {
           toolResult = `${toolResult.slice(0, MAX_TOOL_RESULT_CHARACTERS)}\n[Tool result truncated]`
         }
+
+        response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult)}`)
 
         messages.push(
           { role: 'assistant', content: generated },
