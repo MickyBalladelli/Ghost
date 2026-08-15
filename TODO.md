@@ -144,14 +144,14 @@
 
 ## 🎨 Phase 6: UI & Status Bar Integration
 
-- [ ] **6.1 Status Bar Indicator**
-  - [ ] Create `src/ui/statusBar.ts`.
-  - [ ] Show status: `$(chip) LocalPilot: Ready` / `$(sync~spin) LocalPilot: Generating...` / `$(error) LocalPilot: Ollama Offline`.
-  - [ ] Clicking status bar item runs `localpilot.checkOllamaStatus` command.
+- [x] **6.1 Status Bar Indicator**
+  - [x] Create `src/ui/statusBar.ts`.
+  - [x] Show status: `$(chip) LocalPilot: Ready` / `$(sync~spin) LocalPilot: Generating...` / `$(error) LocalPilot: Ollama Offline`.
+  - [x] Clicking status bar item runs `localpilot.checkOllamaStatus` command.
 
-- [ ] **6.2 Welcome & Model Downloader Helper**
-  - [ ] Add diagnostic command to verify if required Ollama models are pulled (`qwen2.5-coder:7b`, `qwen2.5-coder:1.5b`).
-  - [ ] Provide notification toast with command suggestion: `ollama pull qwen2.5-coder:7b`.
+- [x] **6.2 Welcome & Model Downloader Helper**
+  - [x] Add diagnostic command to verify if required Ollama models are pulled (`qwen2.5-coder:7b`, `qwen2.5-coder:1.5b`).
+  - [x] Provide notification toast with command suggestion: `ollama pull qwen2.5-coder:7b`.
 
 ---
 
