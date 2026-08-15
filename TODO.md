@@ -8,14 +8,16 @@
 ## 📋 Phase 1: Project Setup & Environment
 
 - [x] **1.1 Scaffold Extension Project**
-  - [ ] Install `yo` and `generator-code` globally (`npm i -g yo generator-code`).
+  - [x] Install `yo` and `generator-code` globally (`npm i -g yo generator-code`).
   - [x] Run `yo code` and configure:
     - Type: **New Extension (TypeScript)**
     - Name: `GhostPilot AI`
     - Identifier: `ghostpilot-ai`
     - Description: `Local, offline Copilot & Codex alternative powered by Ollama/vLLM`
     - Package manager: `npm` or `pnpm`
-
+    - do not commit to git
+    - for every feature and every time you build a vsix file, update the version in package.json.
+  
 - [x] **1.2 Install Project Dependencies**
   - [x] Core dependencies:
     ```bash
@@ -177,14 +179,14 @@
   - [x] Add extension icon (`icon.png`).
   - [x] Create `CHANGELOG.md` and `LICENSE` (MIT).
 
-- [ ] **8.2 Packaging**
+- [x] **8.2 Packaging**
   - [x] Install `@vscode/vsce` globally or as dev dependency.
   - [x] Run `npm run vscode:prepublish` to verify TypeScript compilation.
   - [x] Package extension into `.vsix` file:
     ```bash
     npx vsce package --out ghostpilot-ai-1.0.0.vsix
     ```
-- [ ] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).
+- [x] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).
 
 ---
 
