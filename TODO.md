@@ -134,11 +134,11 @@
   - [x] Create `src/tools/terminalTools.ts` for running shell commands safely.
   - [x] Register tools using `vscode.lm.registerTool(...)`.
 
-- [ ] **5.3 Implement Tool Calling Loop for Local Models**
-  - [ ] In `src/agent/chatParticipant.ts`, construct system prompt defining JSON function signatures.
-  - [ ] Parse JSON tool call requests emitted by local model (e.g., `qwen2.5-coder` tool call output).
-  - [ ] Execute requested tool with user confirmation modal for destructive operations (e.g., running shell commands or modifying files).
-  - [ ] Feed tool results back into local model and request next stream step.
+- [x] **5.3 Implement Tool Calling Loop for Local Models**
+  - [x] In `src/agent/chatParticipant.ts`, construct system prompt defining JSON function signatures.
+  - [x] Parse JSON tool call requests emitted by local model (e.g., `qwen2.5-coder` tool call output).
+  - [x] Execute requested tool with user confirmation modal for destructive operations (e.g., running shell commands or modifying files).
+  - [x] Feed tool results back into local model and request next stream step.
 
 ---
 
