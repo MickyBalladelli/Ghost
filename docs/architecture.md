@@ -1,19 +1,19 @@
-# GhostPilot interface architecture
+# Ghost interface architecture
 
 ## Runtime shape
 
-GhostPilot has two parts:
+Ghost has two parts:
 
 1. The VS Code extension host owns provider requests, workspace context, persistence, tools, approvals, and file operations.
 2. The webview owns the chat screen, conversation selection, composer controls, rendering, and short-lived UI state.
 
-The webview and extension host communicate with versioned messages from `src/ui/ghostPilotProtocol.ts`. Every request carries a request ID and conversation ID. Stream events carry increasing sequence numbers so stale or duplicate events can be ignored.
+The webview and extension host communicate with versioned messages from `src/ui/ghostProtocol.ts`. Every request carries a request ID and conversation ID. Stream events carry increasing sequence numbers so stale or duplicate events can be ignored.
 
 ```text
 Webview composer
     │ submit / settings / approval
     ▼
-GhostPilotViewProvider
+GhostViewProvider
     ├── context collection
     ├── request lifecycle and cancellation
     ├── persistence and redaction

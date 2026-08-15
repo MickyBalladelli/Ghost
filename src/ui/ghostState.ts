@@ -1,4 +1,4 @@
-export type GhostPilotRequestStatus =
+export type GhostRequestStatus =
   | 'idle'
   | 'preparing'
   | 'connecting'
@@ -9,26 +9,26 @@ export type GhostPilotRequestStatus =
   | 'cancelled'
   | 'failed'
 
-export type GhostPilotProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
+export type GhostProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
 
-export type GhostPilotMessageRole = 'user' | 'assistant' | 'system' | 'tool'
+export type GhostMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
-export interface GhostPilotTextPart {
+export interface GhostTextPart {
   kind: 'text'
   text: string
 }
 
-export interface GhostPilotProgressPart {
+export interface GhostProgressPart {
   kind: 'reasoning' | 'progress'
   text: string
-  phase?: GhostPilotProgressPhase
+  phase?: GhostProgressPhase
   elapsedMs?: number
   tokenCount?: number
   tokensPerSecond?: number
   model?: string
 }
 
-export interface GhostPilotToolCall {
+export interface GhostToolCall {
   id: string
   round: number
   name: string
@@ -42,30 +42,30 @@ export interface GhostPilotToolCall {
   completedAt?: number
 }
 
-export interface GhostPilotToolPart {
+export interface GhostToolPart {
   kind: 'tool'
-  toolCall: GhostPilotToolCall
+  toolCall: GhostToolCall
 }
 
-export interface GhostPilotErrorPart {
+export interface GhostErrorPart {
   kind: 'error'
   message: string
   recoverable?: boolean
 }
 
-export interface GhostPilotWarningPart {
+export interface GhostWarningPart {
   kind: 'warning'
   message: string
 }
 
-export type GhostPilotMessagePart =
-  | GhostPilotTextPart
-  | GhostPilotProgressPart
-  | GhostPilotToolPart
-  | GhostPilotErrorPart
-  | GhostPilotWarningPart
+export type GhostMessagePart =
+  | GhostTextPart
+  | GhostProgressPart
+  | GhostToolPart
+  | GhostErrorPart
+  | GhostWarningPart
 
-export interface GhostPilotAttachmentState {
+export interface GhostAttachmentState {
   id: string
   name: string
   path?: string
@@ -73,27 +73,27 @@ export interface GhostPilotAttachmentState {
   size?: number
 }
 
-export interface GhostPilotMessage {
+export interface GhostMessage {
   id: string
-  role: GhostPilotMessageRole
-  parts: GhostPilotMessagePart[]
+  role: GhostMessageRole
+  parts: GhostMessagePart[]
   requestId?: string
-  status?: GhostPilotRequestStatus
+  status?: GhostRequestStatus
   createdAt: number
   updatedAt: number
 }
 
-export interface GhostPilotConversation {
+export interface GhostConversation {
   id: string
   title: string
-  messages: GhostPilotMessage[]
+  messages: GhostMessage[]
   draft: string
   activeRequestId?: string
   createdAt: number
   updatedAt: number
 }
 
-export interface GhostPilotModelMetadata {
+export interface GhostModelMetadata {
   id: string
   label: string
   provider: string
@@ -101,9 +101,9 @@ export interface GhostPilotModelMetadata {
   capabilities?: string[]
 }
 
-export interface GhostPilotConversationState {
+export interface GhostConversationState {
   schemaVersion: number
-  conversations: GhostPilotConversation[]
+  conversations: GhostConversation[]
   activeConversationId: string
   promptHistory?: string[]
   presets?: unknown[]

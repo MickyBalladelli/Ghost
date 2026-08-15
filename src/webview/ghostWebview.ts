@@ -1,8 +1,8 @@
-type GhostPilotViewStatus = 'ready' | 'offline'
+type GhostViewStatus = 'ready' | 'offline'
 type NoticeKind = 'error' | 'no-model' | 'info'
 type MessageRole = 'user' | 'assistant'
-type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
-type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
 type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
@@ -18,14 +18,14 @@ interface PromptPreset {
   id: string
   name: string
   prompt: string
-  mode: GhostPilotMode
+  mode: GhostMode
   temperature: number
   maxContextTokens: number
   responseLength: ResponseLength
 }
 
 interface ControlSettings {
-  provider: GhostPilotProvider
+  provider: GhostProvider
   ollamaUrl: string
   mlxUrl: string
   openaiUrl: string
@@ -38,7 +38,7 @@ interface ControlSettings {
   maxContextTokens: number
   temperature: number
   responseLength: ResponseLength
-  mode: GhostPilotMode
+  mode: GhostMode
   enableConversationPersistence: boolean
 }
 
@@ -107,7 +107,7 @@ interface Conversation {
   updatedAt: number
 }
 
-interface GhostPilotState {
+interface GhostState {
   schemaVersion: number
   conversations: Conversation[]
   activeConversationId: string
@@ -117,21 +117,21 @@ interface GhostPilotState {
   preferences?: Partial<ControlSettings> & Partial<UiPreferences>
 }
 
-type GhostPilotExtensionMessage =
+type GhostExtensionMessage =
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'state'
-      status: GhostPilotViewStatus
+      status: GhostViewStatus
       detail: string
     }
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'reset' | 'clear'
     }
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'controls-state'
       settings: ControlSettings
@@ -141,7 +141,7 @@ type GhostPilotExtensionMessage =
       tools: string[]
     }
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'persisted-state'
       state: {
@@ -155,13 +155,13 @@ type GhostPilotExtensionMessage =
       }
     }
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'file-picked'
       attachments: Attachment[]
     }
   | {
-      source: 'ghostpilot-extension'
+      source: 'ghost-extension'
       version: 1
       type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'warning' | 'error' | 'request-completed'
       requestId: string
@@ -185,7 +185,7 @@ type GhostPilotExtensionMessage =
       status?: 'completed' | 'cancelled' | 'failed'
     }
 
-interface GhostPilotWebviewApi {
+interface GhostWebviewApi {
   postMessage(message: unknown): void
   getState<T>(): T | undefined
   setState<T>(state: T): void
@@ -209,7 +209,7 @@ interface ActiveRequest {
 interface ModelMetadata {
   id: string
   label: string
-  provider: GhostPilotProvider
+  provider: GhostProvider
   contextWindow?: number
   capabilities: string[]
 }
@@ -219,7 +219,7 @@ interface WebviewRequestOptions {
   temperature: number
   maxContextTokens: number
   maxTokens?: number
-  mode: GhostPilotMode
+  mode: GhostMode
   showReasoning: boolean
   customSystemInstructions: string
   context: {
@@ -232,13 +232,13 @@ interface WebviewRequestOptions {
   }
 }
 
-declare function acquireVsCodeApi(): GhostPilotWebviewApi
+declare function acquireVsCodeApi(): GhostWebviewApi
 
 const vscode = acquireVsCodeApi()
 const app = document.getElementById('app')
 
 if (!app) {
-  throw new Error('GhostPilot webview root is missing')
+  throw new Error('Ghost webview root is missing')
 }
 
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -336,7 +336,7 @@ const recoverInterruptedConversation = (conversation: Conversation): Conversatio
     if (message.status === 'streaming' || message.requestStatus === 'streaming' || message.requestStatus === 'waiting-for-approval') {
       message.status = 'error'
       message.requestStatus = 'failed'
-      message.parts.push({ kind: 'error', message: 'Request interrupted while GhostPilot was reloading.', recoverable: true })
+      message.parts.push({ kind: 'error', message: 'Request interrupted while Ghost was reloading.', recoverable: true })
       message.updatedAt = Date.now()
     }
   }
@@ -344,8 +344,8 @@ const recoverInterruptedConversation = (conversation: Conversation): Conversatio
   return conversation
 }
 
-const getInitialState = (): GhostPilotState => {
-  const stored = vscode.getState<Partial<GhostPilotState>>()
+const getInitialState = (): GhostState => {
+  const stored = vscode.getState<Partial<GhostState>>()
   if (
     stored &&
     Array.isArray(stored.conversations) &&
@@ -377,7 +377,7 @@ const getInitialState = (): GhostPilotState => {
 
 let state = getInitialState()
 let showReasoning = state.showReasoning === true
-let viewStatus: GhostPilotViewStatus = 'ready'
+let viewStatus: GhostViewStatus = 'ready'
 let activeRequest: ActiveRequest | undefined
 let notice: { kind: NoticeKind; message: string } | undefined
 let userIsAtBottom = true
@@ -423,7 +423,7 @@ let contextEnabled = {
 let attachments: Attachment[] = []
 let composerHeight = 180
 let uiPreferences: UiPreferences = {
-  assistantName: 'GhostPilot',
+  assistantName: 'Ghost',
   assistantAvatar: '✦',
   accentColor: '',
   compactLayout: false,
@@ -475,7 +475,7 @@ app.innerHTML = `
       <div class="brand">
         <span class="brand-mark" aria-hidden="true">✦</span>
         <div>
-          <div class="title">GhostPilot</div>
+          <div class="title">Ghost</div>
           <div class="subtitle">Local-first coding assistant</div>
         </div>
       </div>
@@ -509,7 +509,7 @@ app.innerHTML = `
         <section class="messages" id="messages" role="log" aria-label="Conversation messages" aria-live="polite"></section>
         <div class="screen-reader-status" id="screen-reader-status" role="status" aria-live="polite"></div>
         <form class="composer" id="composer">
-          <label class="screen-reader-only" for="prompt">Message GhostPilot</label>
+          <label class="screen-reader-only" for="prompt">Message Ghost</label>
           <div class="context-row">
             <div class="context-chips" id="context-chips" aria-label="Prompt context"></div>
             <button type="button" class="context-button" id="context-preview">Context</button>
@@ -518,7 +518,7 @@ app.innerHTML = `
           </div>
           <div class="attachment-list" id="attachment-list" aria-label="Attachments"></div>
           <div class="prompt-wrap">
-            <textarea id="prompt" rows="1" placeholder="Ask GhostPilot anything..." aria-describedby="composer-hint composer-count"></textarea>
+            <textarea id="prompt" rows="1" placeholder="Ask Ghost anything..." aria-describedby="composer-hint composer-count"></textarea>
             <div class="mention-menu" id="mention-menu" role="listbox" hidden></div>
           </div>
           <div class="composer-footer">
@@ -554,11 +554,11 @@ app.innerHTML = `
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
           <button type="button" id="test-provider">Test provider connection</button>
           <label for="tool-allowlist">Allowed tools</label>
-          <input id="tool-allowlist" type="text" placeholder="ghostpilot_read_file, ghostpilot_apply_edit">
+          <input id="tool-allowlist" type="text" placeholder="ghost_read_file, ghost_apply_edit">
           <label for="tool-denylist">Denied tools</label>
-          <input id="tool-denylist" type="text" placeholder="ghostpilot_run_terminal_command">
+          <input id="tool-denylist" type="text" placeholder="ghost_run_terminal_command">
           <label for="assistant-name">Assistant name</label>
-          <input id="assistant-name" type="text" maxlength="40" value="GhostPilot">
+          <input id="assistant-name" type="text" maxlength="40" value="Ghost">
           <label for="assistant-avatar">Assistant avatar</label>
           <input id="assistant-avatar" type="text" maxlength="4" value="✦">
           <label for="accent-color">Accent color</label>
@@ -573,7 +573,7 @@ app.innerHTML = `
           <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
           <label class="settings-checkbox" for="workspace-settings"><input id="workspace-settings" type="checkbox"> Use workspace-specific settings</label>
           <label for="system-instructions">Custom system instructions</label>
-          <textarea id="system-instructions" rows="4" maxlength="8000" placeholder="Optional instructions for GhostPilot"></textarea>
+          <textarea id="system-instructions" rows="4" maxlength="8000" placeholder="Optional instructions for Ghost"></textarea>
           <button type="button" class="secondary" id="reset-system-instructions">Reset system instructions</button>
           <p class="settings-help">These instructions are sent to the selected model. Do not put secrets here.</p>
         </div>
@@ -590,7 +590,7 @@ app.innerHTML = `
     <div class="modal-backdrop" id="context-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="context-title">
         <div class="modal-header"><h2 id="context-title">Prompt context</h2><button type="button" class="icon-button" data-close-modal="context-modal" aria-label="Close context">×</button></div>
-        <p class="modal-description">Choose what GhostPilot may include when you submit this prompt.</p>
+        <p class="modal-description">Choose what Ghost may include when you submit this prompt.</p>
         <div class="context-preview" id="context-preview-list"></div>
         <div class="modal-footer"><button type="button" class="secondary" data-close-modal="context-modal">Done</button></div>
       </section>
@@ -660,7 +660,7 @@ const presetPromptElement = document.getElementById('preset-prompt') as HTMLText
 
 const post = (type: string, details: Record<string, unknown> = {}) => {
   vscode.postMessage({
-    source: 'ghostpilot-webview',
+    source: 'ghost-webview',
     version: 1,
     type,
     ...details
@@ -705,7 +705,7 @@ const createPersistedState = () => ({
 
 const saveState = () => {
   if (controls.enableConversationPersistence) {
-    vscode.setState(redactPersistedValue(state) as GhostPilotState)
+    vscode.setState(redactPersistedValue(state) as GhostState)
   } else {
     vscode.setState({
       schemaVersion: persistenceSchemaVersion,
@@ -795,9 +795,9 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
 
 const applyUiPreferences = () => {
   const accent = /^#[0-9a-f]{6}$/i.test(uiPreferences.accentColor) ? uiPreferences.accentColor : ''
-  document.documentElement.style.setProperty('--ghostpilot-accent', accent || 'var(--vscode-textLink-foreground, #3794ff)')
+  document.documentElement.style.setProperty('--ghost-accent', accent || 'var(--vscode-textLink-foreground, #3794ff)')
   document.body.classList.toggle('compact-layout', uiPreferences.compactLayout)
-  document.title = uiPreferences.assistantName || 'GhostPilot'
+  document.title = uiPreferences.assistantName || 'Ghost'
 }
 
 const renderControls = () => {
@@ -1302,7 +1302,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
       ? 'Waiting for approval...'
       : ''
   article.innerHTML = `
-    <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'GhostPilot')}`}</strong><span class="message-state">${messageState}</span></div>
+    <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     <div class="message-body">${renderMarkdown(message.content)}</div>
     ${partSummary}
     <div class="message-actions" aria-label="Message actions"></div>
@@ -1354,7 +1354,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const fileAction = part.toolCall.diffPreview
       ? `<button type="button" class="secondary" data-tool-action="open-file" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open file</button>`
       : ''
-    const restoreAction = part.toolCall.status === 'completed' && (part.toolCall.name === 'ghostpilot_write_file' || part.toolCall.name === 'ghostpilot_apply_edit')
+    const restoreAction = part.toolCall.status === 'completed' && (part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit')
       ? `<button type="button" class="secondary" data-tool-action="restore" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Restore</button>`
       : ''
     const resultActions = part.toolCall.result || fileAction || restoreAction
@@ -1369,7 +1369,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
 
 const stateCard = (): string => {
   if (viewStatus === 'offline') {
-    return '<div class="state-card"><div class="state-icon">!</div><h1>Provider offline</h1><p>GhostPilot cannot reach the configured local model. Check the connection, then try again.</p><button type="button" data-state-action="check">Check connection</button></div>'
+    return '<div class="state-card"><div class="state-icon">!</div><h1>Provider offline</h1><p>Ghost cannot reach the configured local model. Check the connection, then try again.</p><button type="button" data-state-action="check">Check connection</button></div>'
   }
   if (notice?.kind === 'no-model') {
     return `<div class="state-card"><div class="state-icon">↓</div><h1>No model installed</h1><p>${escapeHtml(notice.message)}</p><p class="state-help">Pull the configured model, then retry your prompt.</p></div>`
@@ -1377,7 +1377,7 @@ const stateCard = (): string => {
   if (notice?.kind === 'error') {
     return `<div class="state-card"><div class="state-icon">!</div><h1>Something went wrong</h1><p>${escapeHtml(notice.message)}</p></div>`
   }
-  return '<div class="state-card"><div class="state-icon">✦</div><h1>Start a conversation</h1><p>Ask about your code, explain an error, or let GhostPilot help with a task.</p></div>'
+  return '<div class="state-card"><div class="state-icon">✦</div><h1>Start a conversation</h1><p>Ask about your code, explain an error, or let Ghost help with a task.</p></div>'
 }
 
 const updateMessageElement = (message: ChatMessage) => {
@@ -1501,8 +1501,8 @@ const updateStatus = () => {
       idle: 'Ready',
       preparing: 'Preparing context…',
       connecting: 'Connecting to provider…',
-      thinking: 'GhostPilot is thinking…',
-      streaming: 'GhostPilot is writing…',
+      thinking: 'Ghost is thinking…',
+      streaming: 'Ghost is writing…',
       'waiting-for-approval': 'Waiting for approval…',
       completed: 'Complete',
       cancelled: 'Cancelled',
@@ -1821,7 +1821,7 @@ const handleConversationAction = (action: string, conversationId: string) => {
   }
 }
 
-const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
+const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'persisted-state') {
     if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
       const conversations = message.state.conversations.map(value => recoverInterruptedConversation(normalizeConversation(value as Partial<Conversation>)))
@@ -2041,7 +2041,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
   if (message.type === 'thinking') {
     request.status = message.state ?? (message.phase === 'context' ? 'preparing' : message.phase === 'provider' ? 'connecting' : 'thinking')
-    const detail = message.detail ?? 'GhostPilot is working'
+    const detail = message.detail ?? 'Ghost is working'
     appendProgressPart(assistantMessage, detail, {
       phase: message.phase,
       elapsedMs: message.elapsedMs,
@@ -2049,7 +2049,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
       tokensPerSecond: message.tokensPerSecond,
       model: message.model
     })
-    screenReaderStatusElement.textContent = message.detail ?? 'GhostPilot is working'
+    screenReaderStatusElement.textContent = message.detail ?? 'Ghost is working'
     updateMessageElement(assistantMessage)
     updateStatus()
     return
@@ -2126,7 +2126,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     return
   }
   if (message.type === 'warning') {
-    const warning = message.message ?? 'GhostPilot returned a warning'
+    const warning = message.message ?? 'Ghost returned a warning'
     appendWarningPart(assistantMessage, warning)
     notice = { kind: 'info', message: warning }
     screenReaderStatusElement.textContent = warning
@@ -2138,7 +2138,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     request.status = 'failed'
     assistantMessage.status = 'error'
     assistantMessage.requestStatus = request.status
-    const error = message.message ?? 'GhostPilot request failed'
+    const error = message.message ?? 'Ghost request failed'
     appendErrorPart(assistantMessage, error, true)
     notice = { kind: 'error', message: error }
     updateMessageElement(assistantMessage)
@@ -2153,7 +2153,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
       appendErrorPart(assistantMessage, 'Request cancelled.')
     }
     if (status === 'failed' && assistantMessage.content.length === 0) {
-      appendErrorPart(assistantMessage, 'GhostPilot request failed.')
+      appendErrorPart(assistantMessage, 'Ghost request failed.')
     }
     if (/model.*(not found|missing)|ollama pull/i.test(assistantMessage.content)) {
       notice = { kind: 'no-model', message: assistantMessage.content }
@@ -2170,12 +2170,12 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
 }
 
-const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage => {
+const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
   if (!value || typeof value !== 'object') {
     return false
   }
   const message = value as Record<string, unknown>
-  if (message.source !== 'ghostpilot-extension' || message.version !== 1 || typeof message.type !== 'string') {
+  if (message.source !== 'ghost-extension' || message.version !== 1 || typeof message.type !== 'string') {
     return false
   }
   if (message.type === 'state') {
@@ -2350,7 +2350,7 @@ conversationListElement.addEventListener('click', event => {
 })
 
 providerElement.addEventListener('change', () => {
-  controls.provider = providerElement.value as GhostPilotProvider
+  controls.provider = providerElement.value as GhostProvider
   availableModels = []
   renderControls()
   sendSettingsUpdate()
@@ -2404,7 +2404,7 @@ responseLengthElement.addEventListener('change', () => {
   sendSettingsUpdate()
 })
 modeElement.addEventListener('change', () => {
-  controls.mode = modeElement.value as GhostPilotMode
+  controls.mode = modeElement.value as GhostMode
   sendSettingsUpdate()
 })
 composerHeightElement.addEventListener('input', () => {

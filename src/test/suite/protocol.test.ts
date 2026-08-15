@@ -1,16 +1,16 @@
 import { strict as assert } from 'node:assert'
 
 import {
-  GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
-  GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-  isGhostPilotWebviewMessage
-} from '../../ui/ghostPilotProtocol'
+  GHOST_PERSISTENCE_SCHEMA_VERSION,
+  GHOST_WEBVIEW_PROTOCOL_VERSION,
+  isGhostWebviewMessage
+} from '../../ui/ghostProtocol'
 
-const envelope = { source: 'ghostpilot-webview', version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION }
+const envelope = { source: 'ghost-webview', version: GHOST_WEBVIEW_PROTOCOL_VERSION }
 
 suite('Webview message contract', () => {
   test('accepts a multiline prompt with attachments and context options', () => {
-    assert.equal(isGhostPilotWebviewMessage({
+    assert.equal(isGhostWebviewMessage({
       ...envelope,
       type: 'submit',
       requestId: 'request-1',
@@ -32,8 +32,8 @@ suite('Webview message contract', () => {
       conversationId: 'conversation-1'
     }
 
-    assert.equal(isGhostPilotWebviewMessage({ ...base, prompt: 'x'.repeat(20001) }), false)
-    assert.equal(isGhostPilotWebviewMessage({
+    assert.equal(isGhostWebviewMessage({ ...base, prompt: 'x'.repeat(20001) }), false)
+    assert.equal(isGhostWebviewMessage({
       ...base,
       prompt: 'valid',
       attachments: [{ name: 'large.txt', content: 'x'.repeat(1024 * 1024 + 1) }]
@@ -41,7 +41,7 @@ suite('Webview message contract', () => {
   })
 
   test('validates tool approval, settings, and persistence messages', () => {
-    assert.equal(isGhostPilotWebviewMessage({
+    assert.equal(isGhostWebviewMessage({
       ...envelope,
       type: 'approve-tool',
       requestId: 'request-1',
@@ -50,21 +50,21 @@ suite('Webview message contract', () => {
       decision: 'once',
       selectedHunkIndexes: [0, 2]
     }), true)
-    assert.equal(isGhostPilotWebviewMessage({
+    assert.equal(isGhostWebviewMessage({
       ...envelope,
       type: 'update-settings',
       settings: {
         provider: 'ollama',
         enableConversationPersistence: false,
         enableDebugLogging: true,
-        toolAllowlist: ['ghostpilot_read_file']
+        toolAllowlist: ['ghost_read_file']
       }
     }), true)
-    assert.equal(isGhostPilotWebviewMessage({
+    assert.equal(isGhostWebviewMessage({
       ...envelope,
       type: 'persist-state',
       state: {
-        schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+        schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
         conversations: [],
         promptHistory: ['hello']
       }
@@ -72,9 +72,9 @@ suite('Webview message contract', () => {
   })
 
   test('rejects malformed, duplicated, or stale envelopes', () => {
-    assert.equal(isGhostPilotWebviewMessage({ ...envelope, type: 'unknown' }), false)
-    assert.equal(isGhostPilotWebviewMessage({ ...envelope, type: 'cancel', requestId: '', conversationId: 'conversation-1' }), false)
-    assert.equal(isGhostPilotWebviewMessage({ ...envelope, type: 'approve-tool', requestId: 'request-1', conversationId: 'conversation-1', toolCallId: 'tool-1', decision: 'reject' }), false)
-    assert.equal(isGhostPilotWebviewMessage({ ...envelope, version: 999, type: 'ready' }), false)
+    assert.equal(isGhostWebviewMessage({ ...envelope, type: 'unknown' }), false)
+    assert.equal(isGhostWebviewMessage({ ...envelope, type: 'cancel', requestId: '', conversationId: 'conversation-1' }), false)
+    assert.equal(isGhostWebviewMessage({ ...envelope, type: 'approve-tool', requestId: 'request-1', conversationId: 'conversation-1', toolCallId: 'tool-1', decision: 'reject' }), false)
+    assert.equal(isGhostWebviewMessage({ ...envelope, version: 999, type: 'ready' }), false)
   })
 })

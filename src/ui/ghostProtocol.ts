@@ -1,23 +1,23 @@
-import type { GhostPilotProgressPhase, GhostPilotRequestStatus } from './ghostPilotState'
+import type { GhostProgressPhase, GhostRequestStatus } from './ghostState'
 
-export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1 as const
-export const GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION = 2 as const
+export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
+export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
 
-export type GhostPilotViewStatus = 'ready' | 'offline'
-export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
-export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
-export type GhostPilotContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
-export type { GhostPilotRequestStatus }
-export type { GhostPilotProgressPhase }
+export type GhostViewStatus = 'ready' | 'offline'
+export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+export type GhostContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
+export type { GhostRequestStatus }
+export type { GhostProgressPhase }
 
-export type GhostPilotToolApprovalDecision = 'once' | 'session' | 'reject'
+export type GhostToolApprovalDecision = 'once' | 'session' | 'reject'
 
-export interface GhostPilotToolArguments {
+export interface GhostToolArguments {
   [key: string]: unknown
 }
 
-export interface GhostPilotToolDiffPreview {
+export interface GhostToolDiffPreview {
   path: string
   before: string
   after: string
@@ -25,32 +25,32 @@ export interface GhostPilotToolDiffPreview {
   hunks?: Array<{ startLine: number; endLine: number; replacement: string }>
 }
 
-export interface GhostPilotAttachment {
+export interface GhostAttachment {
   name: string
   path?: string
   content?: string
   mimeType?: string
 }
 
-export interface GhostPilotWebviewRequestOptions {
+export interface GhostWebviewRequestOptions {
   model?: string
   temperature?: number
   maxContextTokens?: number
   maxTokens?: number
-  mode?: GhostPilotMode
-  context?: Partial<Record<GhostPilotContextKey, boolean>>
+  mode?: GhostMode
+  context?: Partial<Record<GhostContextKey, boolean>>
   showReasoning?: boolean
   customSystemInstructions?: string
 }
 
-export interface GhostPilotSettingsUpdate {
-  provider?: GhostPilotProvider
+export interface GhostSettingsUpdate {
+  provider?: GhostProvider
   chatModel?: string
   autocompleteModel?: string
   maxContextTokens?: number
   temperature?: number
-  responseLength?: GhostPilotResponseLength
-  mode?: GhostPilotMode
+  responseLength?: GhostResponseLength
+  mode?: GhostMode
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
   ollamaUrl?: string
@@ -61,7 +61,7 @@ export interface GhostPilotSettingsUpdate {
   toolDenylist?: string[]
 }
 
-export interface GhostPilotPersistedState {
+export interface GhostPersistedState {
   schemaVersion: number
   conversations?: unknown[]
   activeConversationId?: string
@@ -71,61 +71,61 @@ export interface GhostPilotPersistedState {
   preferences?: Record<string, unknown>
 }
 
-interface GhostPilotWebviewEnvelope {
-  source: 'ghostpilot-webview'
-  version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+interface GhostWebviewEnvelope {
+  source: 'ghost-webview'
+  version: typeof GHOST_WEBVIEW_PROTOCOL_VERSION
 }
 
-interface GhostPilotRequestEnvelope extends GhostPilotWebviewEnvelope {
+interface GhostRequestEnvelope extends GhostWebviewEnvelope {
   requestId: string
   conversationId: string
 }
 
-export type GhostPilotWebviewMessage =
-  | (GhostPilotWebviewEnvelope & { type: 'ready' })
-  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' })
-  | (GhostPilotWebviewEnvelope & { type: 'export'; state?: GhostPilotPersistedState })
-  | (GhostPilotWebviewEnvelope & { type: 'persist-state'; state: GhostPilotPersistedState })
-  | (GhostPilotRequestEnvelope & {
+export type GhostWebviewMessage =
+  | (GhostWebviewEnvelope & { type: 'ready' })
+  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' })
+  | (GhostWebviewEnvelope & { type: 'export'; state?: GhostPersistedState })
+  | (GhostWebviewEnvelope & { type: 'persist-state'; state: GhostPersistedState })
+  | (GhostRequestEnvelope & {
       type: 'submit'
       prompt: string
-      options?: GhostPilotWebviewRequestOptions
-      attachments?: GhostPilotAttachment[]
+      options?: GhostWebviewRequestOptions
+      attachments?: GhostAttachment[]
     })
-  | (GhostPilotRequestEnvelope & { type: 'cancel' })
-  | (GhostPilotRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostPilotToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
-  | (GhostPilotRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
-  | (GhostPilotRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostPilotToolArguments })
-  | (GhostPilotRequestEnvelope & { type: 'restore-tool'; toolCallId: string })
-  | (GhostPilotRequestEnvelope & { type: 'open-file'; path: string; line?: number })
-  | (GhostPilotRequestEnvelope & { type: 'retry' | 'regenerate'; messageId: string })
-  | (GhostPilotRequestEnvelope & { type: 'edit'; messageId: string; prompt: string })
-  | (GhostPilotRequestEnvelope & { type: 'attach'; attachments: GhostPilotAttachment[] })
-  | (GhostPilotRequestEnvelope & { type: 'remove-context'; contextKey: GhostPilotContextKey })
-  | (GhostPilotRequestEnvelope & { type: 'select-model'; model: string })
-  | (GhostPilotWebviewEnvelope & { type: 'load-controls' | 'refresh-models' | 'pick-file' })
-  | (GhostPilotRequestEnvelope & { type: 'update-settings'; settings: GhostPilotSettingsUpdate })
+  | (GhostRequestEnvelope & { type: 'cancel' })
+  | (GhostRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
+  | (GhostRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
+  | (GhostRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostToolArguments })
+  | (GhostRequestEnvelope & { type: 'restore-tool'; toolCallId: string })
+  | (GhostRequestEnvelope & { type: 'open-file'; path: string; line?: number })
+  | (GhostRequestEnvelope & { type: 'retry' | 'regenerate'; messageId: string })
+  | (GhostRequestEnvelope & { type: 'edit'; messageId: string; prompt: string })
+  | (GhostRequestEnvelope & { type: 'attach'; attachments: GhostAttachment[] })
+  | (GhostRequestEnvelope & { type: 'remove-context'; contextKey: GhostContextKey })
+  | (GhostRequestEnvelope & { type: 'select-model'; model: string })
+  | (GhostWebviewEnvelope & { type: 'load-controls' | 'refresh-models' | 'pick-file' })
+  | (GhostRequestEnvelope & { type: 'update-settings'; settings: GhostSettingsUpdate })
 
-interface GhostPilotExtensionEnvelope {
-  source: 'ghostpilot-extension'
-  version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+interface GhostExtensionEnvelope {
+  source: 'ghost-extension'
+  version: typeof GHOST_WEBVIEW_PROTOCOL_VERSION
 }
 
-export type GhostPilotStreamEvent =
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-started'; sequence: number })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostPilotToolArguments; requiresApproval: boolean; diffPreview?: GhostPilotToolDiffPreview; detail?: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'error'; sequence: number; message: string })
-  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed' })
+export type GhostStreamEvent =
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-started'; sequence: number })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; diffPreview?: GhostToolDiffPreview; detail?: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed' })
 
-interface GhostPilotRequestEnvelopeBase {
+interface GhostRequestEnvelopeBase {
   requestId: string
   conversationId: string
-  state?: GhostPilotRequestStatus
-  phase?: GhostPilotProgressPhase
+  state?: GhostRequestStatus
+  phase?: GhostProgressPhase
   elapsedMs?: number
   model?: string
   tokenCount?: number
@@ -133,20 +133,20 @@ interface GhostPilotRequestEnvelopeBase {
   startedAt?: number
 }
 
-export type GhostPilotExtensionMessage =
-  | (GhostPilotExtensionEnvelope & { type: 'state'; status: GhostPilotViewStatus; detail: string })
-  | (GhostPilotExtensionEnvelope & { type: 'reset' | 'clear' })
-  | (GhostPilotExtensionEnvelope & { type: 'persisted-state'; state: GhostPilotPersistedState })
-  | (GhostPilotExtensionEnvelope & {
+export type GhostExtensionMessage =
+  | (GhostExtensionEnvelope & { type: 'state'; status: GhostViewStatus; detail: string })
+  | (GhostExtensionEnvelope & { type: 'reset' | 'clear' })
+  | (GhostExtensionEnvelope & { type: 'persisted-state'; state: GhostPersistedState })
+  | (GhostExtensionEnvelope & {
       type: 'controls-state'
       settings: {
-        provider: GhostPilotProvider
+        provider: GhostProvider
         chatModel: string
         autocompleteModel: string
         maxContextTokens: number
         temperature: number
-        responseLength: GhostPilotResponseLength
-        mode: GhostPilotMode
+        responseLength: GhostResponseLength
+        mode: GhostMode
         enableConversationPersistence: boolean
         ollamaUrl: string
         mlxUrl: string
@@ -166,8 +166,8 @@ export type GhostPilotExtensionMessage =
       }
       tools: string[]
     })
-  | (GhostPilotExtensionEnvelope & { type: 'file-picked'; attachments: GhostPilotAttachment[] })
-  | GhostPilotStreamEvent
+  | (GhostExtensionEnvelope & { type: 'file-picked'; attachments: GhostAttachment[] })
+  | GhostStreamEvent
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -177,9 +177,9 @@ const isNonEmptyString = (value: unknown): value is string => (
   typeof value === 'string' && value.trim().length > 0
 )
 
-const isPersistedState = (value: unknown): value is GhostPilotPersistedState => (
+const isPersistedState = (value: unknown): value is GhostPersistedState => (
   isRecord(value) &&
-  (value.schemaVersion === 1 || value.schemaVersion === GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION) &&
+  (value.schemaVersion === 1 || value.schemaVersion === GHOST_PERSISTENCE_SCHEMA_VERSION) &&
   (value.conversations === undefined || Array.isArray(value.conversations)) &&
   (value.activeConversationId === undefined || typeof value.activeConversationId === 'string') &&
   (value.promptHistory === undefined || (Array.isArray(value.promptHistory) && value.promptHistory.every(item => typeof item === 'string'))) &&
@@ -192,7 +192,7 @@ const isRequestEnvelope = (message: Record<string, unknown>): boolean => (
   isNonEmptyString(message.requestId) && isNonEmptyString(message.conversationId)
 )
 
-const isAttachment = (value: unknown): value is GhostPilotAttachment => {
+const isAttachment = (value: unknown): value is GhostAttachment => {
   if (!isRecord(value) || !isNonEmptyString(value.name)) {
     return false
   }
@@ -203,7 +203,7 @@ const isAttachment = (value: unknown): value is GhostPilotAttachment => {
   )
 }
 
-const isOptions = (value: unknown): value is GhostPilotWebviewRequestOptions => {
+const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
   if (value === undefined) {
     return true
   }
@@ -224,7 +224,7 @@ const isOptions = (value: unknown): value is GhostPilotWebviewRequestOptions => 
   return value.context === undefined || isRecord(value.context)
 }
 
-const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => {
+const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
   if (!isRecord(value)) {
     return false
   }
@@ -247,8 +247,8 @@ const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => 
   )
 }
 
-export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotWebviewMessage {
-  if (!isRecord(value) || value.source !== 'ghostpilot-webview' || value.version !== GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
+export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMessage {
+  if (!isRecord(value) || value.source !== 'ghost-webview' || value.version !== GHOST_WEBVIEW_PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
     return false
   }
 

@@ -2,15 +2,15 @@ import * as path from 'node:path'
 
 import { resolveWorkspacePath } from './workspacePath'
 
-export interface GhostPilotEditHunk {
+export interface GhostEditHunk {
   startLine: number
   endLine: number
   replacement: string
 }
 
-export interface GhostPilotFileEdit {
+export interface GhostFileEdit {
   path: string
-  hunks: GhostPilotEditHunk[]
+  hunks: GhostEditHunk[]
   expectedContent?: string
   description?: string
 }
@@ -22,7 +22,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 )
 
-export function parseGhostPilotEdit(value: Record<string, unknown>): GhostPilotFileEdit {
+export function parseGhostEdit(value: Record<string, unknown>): GhostFileEdit {
   if (typeof value.path !== 'string' || !path.isAbsolute(value.path)) {
     throw new Error('Edit path must be an absolute path inside the workspace')
   }
@@ -65,7 +65,7 @@ export function parseGhostPilotEdit(value: Record<string, unknown>): GhostPilotF
   }
 }
 
-export function applyGhostPilotEdit(content: string, edit: GhostPilotFileEdit, selectedHunkIndexes?: Set<number>): string {
+export function applyGhostEdit(content: string, edit: GhostFileEdit, selectedHunkIndexes?: Set<number>): string {
   const lines = content.split('\n')
   const selected = selectedHunkIndexes
     ? edit.hunks.filter((_hunk, index) => selectedHunkIndexes.has(index))
@@ -79,7 +79,7 @@ export function applyGhostPilotEdit(content: string, edit: GhostPilotFileEdit, s
   return lines.join('\n')
 }
 
-export function summarizeGhostPilotEdit(edit: GhostPilotFileEdit): string {
+export function summarizeGhostEdit(edit: GhostFileEdit): string {
   const lineCount = edit.hunks.reduce((total, hunk) => total + hunk.endLine - hunk.startLine + 1, 0)
   return `${edit.path}: ${edit.hunks.length} hunk${edit.hunks.length === 1 ? '' : 's'}, ${lineCount} line${lineCount === 1 ? '' : 's'} changed`
 }

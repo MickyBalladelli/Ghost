@@ -1,6 +1,6 @@
-# GhostPilot AI
+# Ghost
 
-GhostPilot AI (`ghostpilot-ai`) is a privacy-first VS Code coding assistant. It runs prompts against local Ollama or MLX/VLM-compatible servers, so source code can stay on your machine.
+Ghost (`ghost`) is a privacy-first VS Code coding assistant. It runs prompts against local Ollama or MLX/VLM-compatible servers, so source code can stay on your machine.
 
 ## Prerequisites
 
@@ -40,17 +40,17 @@ Open this folder in VS Code and press `F5` to launch the Extension Development H
 
 Open the Command Palette and run:
 
-- `GhostPilot: Check Ollama Connection` checks the configured provider.
-- `GhostPilot: Check Required Models` checks the two recommended Ollama models.
-- `GhostPilot: Toggle Autocomplete` enables or disables inline completion.
+- `Ghost: Check Ollama Connection` checks the configured provider.
+- `Ghost: Check Required Models` checks the two recommended Ollama models.
+- `Ghost: Toggle Autocomplete` enables or disables inline completion.
 
-There are no default keyboard shortcuts. Add your own in VS Code Keyboard Shortcuts if desired. Click the GhostPilot status bar item to check the provider connection.
+There are no default keyboard shortcuts. Add your own in VS Code Keyboard Shortcuts if desired. Click the Ghost status bar item to check the provider connection.
 
 In the Chat view, use `@local` to ask the local agent a question. Use `@workspace` plus a keyword to search workspace files and include matching code in the prompt. Attach files through the chat reference picker when more specific context is needed.
 
 ## Interface guide
 
-The GhostPilot view has a provider and model strip, conversation sidebar, message log, and composer.
+The Ghost view has a provider and model strip, conversation sidebar, message log, and composer.
 
 - Press `Enter` to send. Press `Shift+Enter` for a new line.
 - Use **Context** to toggle workspace, folders, active file, selection, open files, and tools.
@@ -71,7 +71,7 @@ Persistence is off by default. When enabled, chat state is stored in VS Code sto
 ## Troubleshooting
 
 - **Offline**: open **Controls**, confirm the provider URL, then use **Test provider connection**. For Ollama, check that the service is running and that the selected model is installed.
-- **No model**: refresh models, then select a discovered model. Check `GhostPilot: Check Required Models` for the recommended Ollama models.
+- **No model**: refresh models, then select a discovered model. Check `Ghost: Check Required Models` for the recommended Ollama models.
 - **Empty or failed response**: verify the provider API mode and endpoint suffix. OpenAI-compatible servers normally use `/v1`; Ollama normally uses its base URL.
 - **Slow interface**: lower the context limit, disable automatic context, hide progress details, or use compact layout. Long histories are paginated.
 - **Tool blocked**: check the workspace tool allowlist and denylist. File edits and terminal commands still require approval.
@@ -81,7 +81,7 @@ Persistence is off by default. When enabled, chat state is stored in VS Code sto
 ```bash
 npm run compile
 npm test
-npx vsce package --out ghostpilot-ai-1.0.12.vsix
+npx vsce package --out ghost-1.0.12.vsix
 ```
 
 Before release, open the VSIX in a clean Extension Development Host and manually verify light, dark, and high-contrast themes; Ask, Edit, Agent, and Explain; file attachments; workspace search; tool approval; diff review; cancellation; retry; multiline composer input; conversation switching; settings changes; and external endpoint status.
@@ -90,20 +90,20 @@ See [the architecture guide](docs/architecture.md) for the host, webview, provid
 
 ## Configuration
 
-Settings are under `ghostpilot` in VS Code settings.
+Settings are under `ghost` in VS Code settings.
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghostpilot.provider` | `ollama` | Provider: `ollama`, `mlx-vlm`, or `openai-compatible`. |
-| `ghostpilot.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
-| `ghostpilot.mlxUrl` | `http://localhost:8000` | MLX VLM or compatible server URL. |
-| `ghostpilot.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
-| `ghostpilot.chatModel` | `qwen2.5-coder:7b` | Model used for chat. |
-| `ghostpilot.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
-| `ghostpilot.maxContextTokens` | `8192` | Maximum context budget sent to the model. |
-| `ghostpilot.enableInlineCompletions` | `true` | Master switch for inline completion. |
-| `ghostpilot.enableConversationPersistence` | `false` | Save conversations and preferences in VS Code storage. Enable only when wanted. |
-| `ghostpilot.toolAllowlist` / `ghostpilot.toolDenylist` | — | Control which agent tools can run in the workspace. |
+| `ghost.provider` | `ollama` | Provider: `ollama`, `mlx-vlm`, or `openai-compatible`. |
+| `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
+| `ghost.mlxUrl` | `http://localhost:8000` | MLX VLM or compatible server URL. |
+| `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
+| `ghost.chatModel` | `qwen2.5-coder:7b` | Model used for chat. |
+| `ghost.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
+| `ghost.maxContextTokens` | `8192` | Maximum context budget sent to the model. |
+| `ghost.enableInlineCompletions` | `true` | Master switch for inline completion. |
+| `ghost.enableConversationPersistence` | `false` | Save conversations and preferences in VS Code storage. Enable only when wanted. |
+| `ghost.toolAllowlist` / `ghost.toolDenylist` | — | Control which agent tools can run in the workspace. |
 
 The **Controls** panel also changes context collection, response length, temperature, workflow mode, provider endpoint, assistant appearance, thinking/tool progress visibility, custom system instructions, and composer size. Enable workspace-specific settings when a project needs different provider or model defaults.
 
@@ -112,20 +112,23 @@ Privacy notes:
 - Persistence is off by default. When enabled, conversations stay in VS Code global/workspace storage.
 - Attachments are used for the current request and are not saved in conversation state.
 - Custom system instructions are sent to the selected provider with each request.
-- GhostPilot has no telemetry service. Provider requests go only to the configured endpoint.
+- Ghost has no telemetry service. Provider requests go only to the configured endpoint.
 - Larger context limits and tool progress use more memory; tool allow/deny settings control agent permissions.
 
-If an MLX server is detected at port 8000 while Ollama is unavailable, GhostPilot reports that `mlx-vlm` may be a better provider choice.
+If an MLX server is detected at port 8000 while Ollama is unavailable, Ghost reports that `mlx-vlm` may be a better provider choice.
 
 ## Package the extension
 
 ```bash
 npm run vscode:prepublish
-npx vsce package --out ghostpilot-ai-1.0.12.vsix
+npx vsce package --out ghost-1.0.12.vsix
 ```
 
-Install the generated VSIX from the VS Code Extensions view using **Install from VSIX...**.
+Install the generated VSIX from the VS Code Extensions view using **Install from VSIX.
 
+```bash
+code --install-extension ./ghost-1.0.12.vsix
+```
 ## License
 
 MIT. See [LICENSE](LICENSE).

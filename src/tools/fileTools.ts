@@ -4,7 +4,7 @@ import { TextDecoder } from 'node:util'
 import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
-import { applyGhostPilotEdit, parseGhostPilotEdit, summarizeGhostPilotEdit } from './editWorkflow'
+import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 
 export interface ReadFileInput {
   path: string
@@ -85,7 +85,7 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
     return {
       invocationMessage: `Writing ${options.input.path}`,
       confirmationMessages: {
-        title: 'Allow GhostPilot to write this file?',
+        title: 'Allow Ghost to write this file?',
         message: new vscode.MarkdownString(`Write the complete contents of **${options.input.path}**?`)
       }
     }
@@ -98,24 +98,24 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
-    const edit = parseGhostPilotEdit(options.input as unknown as Record<string, unknown>)
+    const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
     const uri = resolveWorkspacePath(edit.path)
     const current = decodeText(await vscode.workspace.fs.readFile(uri))
     if (edit.expectedContent !== undefined && current !== edit.expectedContent) {
       throw new Error('Edit expected different file content')
     }
-    const updated = applyGhostPilotEdit(current, edit)
+    const updated = applyGhostEdit(current, edit)
     await vscode.workspace.fs.writeFile(uri, Buffer.from(updated, 'utf8'))
-    return textResult(`${summarizeGhostPilotEdit(edit)}\nApplied successfully.`)
+    return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ApplyEditInput>): vscode.PreparedToolInvocation {
-    const edit = parseGhostPilotEdit(options.input as unknown as Record<string, unknown>)
+    const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
     return {
       invocationMessage: `Applying ${edit.path}`,
       confirmationMessages: {
-        title: 'Allow GhostPilot to apply this edit?',
-        message: new vscode.MarkdownString(summarizeGhostPilotEdit(edit))
+        title: 'Allow Ghost to apply this edit?',
+        message: new vscode.MarkdownString(summarizeGhostEdit(edit))
       }
     }
   }
@@ -190,10 +190,10 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
 
 export function registerFileTools(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.lm.registerTool('ghostpilot_read_file', new ReadFileTool()),
-    vscode.lm.registerTool('ghostpilot_write_file', new WriteFileTool()),
-    vscode.lm.registerTool('ghostpilot_apply_edit', new ApplyEditTool()),
-    vscode.lm.registerTool('ghostpilot_list_directory', new ListDirectoryTool())
+    vscode.lm.registerTool('ghost_read_file', new ReadFileTool()),
+    vscode.lm.registerTool('ghost_write_file', new WriteFileTool()),
+    vscode.lm.registerTool('ghost_apply_edit', new ApplyEditTool()),
+    vscode.lm.registerTool('ghost_list_directory', new ListDirectoryTool())
   )
 }
 

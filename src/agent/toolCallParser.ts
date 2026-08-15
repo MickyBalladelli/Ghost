@@ -1,9 +1,9 @@
 export const LOCAL_TOOL_NAMES = [
-  'ghostpilot_read_file',
-  'ghostpilot_write_file',
-  'ghostpilot_apply_edit',
-  'ghostpilot_run_terminal_command',
-  'ghostpilot_list_directory'
+  'ghost_read_file',
+  'ghost_write_file',
+  'ghost_apply_edit',
+  'ghost_run_terminal_command',
+  'ghost_list_directory'
 ] as const
 
 export type LocalToolName = typeof LOCAL_TOOL_NAMES[number]

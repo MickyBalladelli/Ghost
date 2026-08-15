@@ -1,38 +1,38 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
-import { createChatParticipantHandler, GhostPilotRequestOptions, GhostPilotToolApproval } from '../agent/chatParticipant'
+import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
 import type { LocalToolCall } from '../agent/toolCallParser'
-import { GHOSTPILOT_TOOL_NAMES, ghostPilotConfig, getGhostPilotSettings } from '../config'
+import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
-import { applyGhostPilotEdit, parseGhostPilotEdit } from '../tools/editWorkflow'
+import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
 import { isExternalEndpoint, redactSensitiveText } from '../privacy/redact'
 import {
-  GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-  GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
-  GhostPilotAttachment,
-  GhostPilotExtensionMessage,
-  GhostPilotPersistedState,
-  GhostPilotSettingsUpdate,
-  GhostPilotStreamEvent,
-  GhostPilotToolArguments,
-  GhostPilotToolDiffPreview,
-  GhostPilotViewStatus,
-  GhostPilotWebviewRequestOptions,
-  isGhostPilotWebviewMessage
-} from './ghostPilotProtocol'
-import type { GhostPilotRequestStatus } from './ghostPilotState'
+  GHOST_WEBVIEW_PROTOCOL_VERSION,
+  GHOST_PERSISTENCE_SCHEMA_VERSION,
+  GhostAttachment,
+  GhostExtensionMessage,
+  GhostPersistedState,
+  GhostSettingsUpdate,
+  GhostStreamEvent,
+  GhostToolArguments,
+  GhostToolDiffPreview,
+  GhostViewStatus,
+  GhostWebviewRequestOptions,
+  isGhostWebviewMessage
+} from './ghostProtocol'
+import type { GhostRequestStatus } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 
-interface GhostPilotRequestState {
+interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
   conversationId: string
   sequence: number
   codeMode: boolean
-  status: GhostPilotRequestStatus
+  status: GhostRequestStatus
   attempt: number
   startedAt: number
   lastActivityAt: number
@@ -48,7 +48,7 @@ interface PendingToolApproval {
   toolCallId: string
   call: LocalToolCall
   expectedContent?: string
-  resolve: (approval: GhostPilotToolApproval) => void
+  resolve: (approval: GhostToolApproval) => void
 }
 
 interface RecoveryRecord {
@@ -79,33 +79,33 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 )
 
-export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
-  static readonly viewType = 'ghostpilot.chat'
+export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+  static readonly viewType = 'ghost.chat'
   private static readonly requestTimeoutMs = 120_000
   private static readonly maxProviderAttempts = 3
 
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
-  private readonly requests = new Map<string, GhostPilotRequestState>()
+  private readonly requests = new Map<string, GhostRequestState>()
   private readonly completedRequests = new Set<string>()
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
   private readonly recoveryRecords = new Map<string, RecoveryRecord>()
   private readonly sessionApprovedTools = new Set<string>()
   private readonly globalState?: vscode.Memento
   private readonly workspaceState?: vscode.Memento
-  private static readonly globalStateKey = 'ghostpilot.global.v2'
-  private static readonly workspaceStateKey = 'ghostpilot.workspace.v2'
-  private pendingMessages: GhostPilotExtensionMessage[] = []
-  private status: GhostPilotViewStatus = 'ready'
+  private static readonly globalStateKey = 'ghost.global.v2'
+  private static readonly workspaceStateKey = 'ghost.workspace.v2'
+  private pendingMessages: GhostExtensionMessage[] = []
+  private status: GhostViewStatus = 'ready'
   private disposed = false
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
   private debugLog(message: string, details?: unknown): void {
-    if (!getGhostPilotSettings().enableDebugLogging) {
+    if (!getGhostSettings().enableDebugLogging) {
       return
     }
-    console.debug(JSON.stringify({ scope: 'GhostPilot', message, details: details === undefined ? undefined : redactSensitiveText(JSON.stringify(details)) }))
+    console.debug(JSON.stringify({ scope: 'Ghost', message, details: details === undefined ? undefined : redactSensitiveText(JSON.stringify(details)) }))
   }
 
   constructor(
@@ -116,7 +116,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     this.workspaceState = options.workspaceState
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
-    this.disposables.push(ghostPilotConfig.onDidChange(() => {
+    this.disposables.push(ghostConfig.onDidChange(() => {
       void this.sendControlsState()
     }))
   }
@@ -147,7 +147,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     void this.sendControlsState()
   }
 
-  setStatus(status: GhostPilotViewStatus): void {
+  setStatus(status: GhostViewStatus): void {
     this.status = status
     this.postState()
     void this.sendControlsState()
@@ -155,7 +155,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   async reset(): Promise<void> {
     const confirmation = await vscode.window.showWarningMessage(
-      'Delete all GhostPilot conversation history and preferences?',
+      'Delete all Ghost conversation history and preferences?',
       { modal: true, detail: 'This removes saved global and workspace chat data.' },
       'Delete all history'
     )
@@ -178,8 +178,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     requestId: string,
     conversationId: string,
     prompt: string,
-    options: GhostPilotWebviewRequestOptions = {},
-    attachments: GhostPilotAttachment[] = []
+    options: GhostWebviewRequestOptions = {},
+    attachments: GhostAttachment[] = []
   ): Promise<void> {
     if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
       return
@@ -187,7 +187,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     this.debugLog('request started', { requestId, conversationId, promptLength: prompt.length })
 
     const cancellation = new vscode.CancellationTokenSource()
-    const request: GhostPilotRequestState = {
+    const request: GhostRequestState = {
       cancellation,
       conversationId,
       sequence: 0,
@@ -197,7 +197,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       timedOut: false,
-      model: options.model?.trim() || getGhostPilotSettings().chatModel,
+      model: options.model?.trim() || getGhostSettings().chatModel,
       outputTokens: 0
     }
     this.requests.set(requestId, request)
@@ -286,7 +286,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       .filter(attachment => attachment.content)
       .map(attachment => `Dropped attachment: ${attachment.name}\n\n${attachment.content}`)
       .join('\n\n')
-    const requestOptions: GhostPilotRequestOptions = {
+    const requestOptions: GhostRequestOptions = {
       ...options,
       additionalContext: droppedContext || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call)
@@ -301,13 +301,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       request.cancellation.cancel()
       this.postStreamEvent(requestId, request, {
         type: 'warning',
-        message: 'GhostPilot timed out. You can retry this request.'
+        message: 'Ghost timed out. You can retry this request.'
       })
       this.postStreamEvent(requestId, request, {
         type: 'error',
         message: 'The provider did not respond before the request timeout.'
       })
-    }, GhostPilotViewProvider.requestTimeoutMs)
+    }, GhostViewProvider.requestTimeoutMs)
 
     const waitForBackoff = (milliseconds: number): Promise<boolean> => new Promise(resolve => {
       const timer = setTimeout(() => resolve(true), milliseconds)
@@ -325,7 +325,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
     try {
       let lastError: unknown
-      for (let attempt = 1; attempt <= GhostPilotViewProvider.maxProviderAttempts; attempt += 1) {
+      for (let attempt = 1; attempt <= GhostViewProvider.maxProviderAttempts; attempt += 1) {
         request.attempt = attempt
         request.status = 'connecting'
         request.lastActivityAt = Date.now()
@@ -340,7 +340,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
             {
               prompt,
               references: workspaceReferences,
-              ghostPilot: requestOptions
+              ghost: requestOptions
             } as unknown as vscode.ChatRequest,
             {} as vscode.ChatContext,
             response,
@@ -350,7 +350,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
           break
         } catch (error) {
           lastError = error
-          if (cancellation.token.isCancellationRequested || !isRecoverable(error) || attempt >= GhostPilotViewProvider.maxProviderAttempts) {
+          if (cancellation.token.isCancellationRequested || !isRecoverable(error) || attempt >= GhostViewProvider.maxProviderAttempts) {
             throw error
           }
           const delay = 500 * (2 ** (attempt - 1))
@@ -377,7 +377,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       })
     } catch (error) {
       if (!cancellation.token.isCancellationRequested || !request.timedOut) {
-        const message = redactSensitiveText(error instanceof Error ? error.message : 'GhostPilot request failed')
+        const message = redactSensitiveText(error instanceof Error ? error.message : 'Ghost request failed')
         this.debugLog('request failed', message)
         this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message })
       }
@@ -421,11 +421,11 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private requiresToolApproval(toolName: string): boolean {
-    return toolName === 'ghostpilot_write_file' || toolName === 'ghostpilot_apply_edit' || toolName === 'ghostpilot_run_terminal_command'
+    return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_run_terminal_command'
   }
 
-  private async getDiffPreview(call: LocalToolCall): Promise<GhostPilotToolDiffPreview | undefined> {
-    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
+  private async getDiffPreview(call: LocalToolCall): Promise<GhostToolDiffPreview | undefined> {
+    if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
     }
     try {
@@ -437,10 +437,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       } catch {
         before = ''
       }
-      const parsedEdit = call.name === 'ghostpilot_apply_edit' ? parseGhostPilotEdit(call.arguments) : undefined
-      const after = call.name === 'ghostpilot_write_file'
+      const parsedEdit = call.name === 'ghost_apply_edit' ? parseGhostEdit(call.arguments) : undefined
+      const after = call.name === 'ghost_write_file'
         ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
-        : applyGhostPilotEdit(before, parsedEdit as NonNullable<typeof parsedEdit>)
+        : applyGhostEdit(before, parsedEdit as NonNullable<typeof parsedEdit>)
       if (after === undefined) {
         return undefined
       }
@@ -460,7 +460,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
           beforeDocument = await vscode.workspace.openTextDocument({ content: before })
         }
         const afterDocument = await vscode.workspace.openTextDocument({ language: beforeDocument.languageId, content: after })
-        await vscode.commands.executeCommand('vscode.diff', beforeDocument.uri, afterDocument.uri, `GhostPilot edit: ${uri.fsPath}`)
+        await vscode.commands.executeCommand('vscode.diff', beforeDocument.uri, afterDocument.uri, `Ghost edit: ${uri.fsPath}`)
       } catch {
         // The inline preview remains available when the diff editor cannot open.
       }
@@ -471,7 +471,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private async getExpectedFileContent(call: LocalToolCall): Promise<string | undefined> {
-    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
+    if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
     }
     try {
@@ -494,7 +494,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     expectedContent: string | undefined,
     selectedHunkIndexes?: number[]
   ): Promise<void> {
-    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
+    if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return
     }
     try {
@@ -507,9 +507,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
           before = ''
         }
       }
-      const after = call.name === 'ghostpilot_write_file'
+      const after = call.name === 'ghost_write_file'
         ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
-        : applyGhostPilotEdit(before, parseGhostPilotEdit(call.arguments), selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined)
+        : applyGhostEdit(before, parseGhostEdit(call.arguments), selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined)
       if (after === undefined) {
         return
       }
@@ -542,7 +542,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   private async restoreTool(requestId: string, conversationId: string, toolCallId: string): Promise<void> {
     const record = this.recoveryRecords.get(toolCallId)
     if (!record || record.requestId !== requestId || record.conversationId !== conversationId || !record.applied) {
-      await vscode.window.showWarningMessage('GhostPilot has no applied change to restore.')
+      await vscode.window.showWarningMessage('Ghost has no applied change to restore.')
       return
     }
     try {
@@ -554,14 +554,14 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         current = ''
       }
       if (current !== record.after) {
-        await vscode.window.showErrorMessage('GhostPilot cannot restore this file because it changed after the edit.')
+        await vscode.window.showErrorMessage('Ghost cannot restore this file because it changed after the edit.')
         return
       }
       await vscode.workspace.fs.writeFile(uri, Buffer.from(record.before, 'utf8'))
       record.applied = false
       await vscode.window.showInformationMessage(`Restored ${uri.fsPath}.`)
     } catch (error) {
-      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not restore the file.')
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not restore the file.')
     }
   }
 
@@ -577,25 +577,25 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter)
       }
     } catch (error) {
-      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not open the file.')
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not open the file.')
     }
   }
 
   private async requestToolApproval(
     requestId: string,
-    request: GhostPilotRequestState,
+    request: GhostRequestState,
     call: LocalToolCall
-  ): Promise<GhostPilotToolApproval> {
+  ): Promise<GhostToolApproval> {
     const pending = request.pendingTool?.name === call.name
       ? request.pendingTool
       : { toolCallId: this.createToolCallId(), name: call.name }
     request.pendingTool = pending
-    const settings = getGhostPilotSettings()
-    const allowedTools = settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES]
+    const settings = getGhostSettings()
+    const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const deniedTools = settings.toolDenylist ?? []
     const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
     const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy
-    const argumentsPayload = call.arguments as GhostPilotToolArguments
+    const argumentsPayload = call.arguments as GhostToolArguments
     const diffPreview = requiresApproval ? await this.getDiffPreview(call) : undefined
     const expectedContent = requiresApproval ? await this.getExpectedFileContent(call) : undefined
     this.postStreamEvent(requestId, request, {
@@ -631,7 +631,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     })
   }
 
-  private resolvePendingApprovals(requestId: string, approval: GhostPilotToolApproval): void {
+  private resolvePendingApprovals(requestId: string, approval: GhostToolApproval): void {
     for (const [toolCallId, pending] of this.pendingApprovals) {
       if (pending.requestId !== requestId) {
         continue
@@ -645,7 +645,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     requestId: string,
     conversationId: string,
     toolCallId: string,
-    approval: GhostPilotToolApproval
+    approval: GhostToolApproval
   ): void {
     const pending = this.pendingApprovals.get(toolCallId)
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
@@ -654,7 +654,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     if (approval.decision === 'session') {
       this.sessionApprovedTools.add(pending.call.name)
     }
-    if (pending.call.name === 'ghostpilot_write_file' || pending.call.name === 'ghostpilot_apply_edit') {
+    if (pending.call.name === 'ghost_write_file' || pending.call.name === 'ghost_apply_edit') {
       void this.verifyExternalEdit(pending, approval)
       return
     }
@@ -662,7 +662,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     pending.resolve(approval)
   }
 
-  private async verifyExternalEdit(pending: PendingToolApproval, approval: GhostPilotToolApproval): Promise<void> {
+  private async verifyExternalEdit(pending: PendingToolApproval, approval: GhostToolApproval): Promise<void> {
     const expected = pending.expectedContent
     if (expected === undefined || typeof pending.call.arguments.path !== 'string') {
       this.pendingApprovals.delete(pending.toolCallId)
@@ -701,7 +701,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     requestId: string,
     conversationId: string,
     toolCallId: string,
-    argumentsPayload: GhostPilotToolArguments
+    argumentsPayload: GhostToolArguments
   ): Promise<void> {
     const pending = this.pendingApprovals.get(toolCallId)
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
@@ -728,20 +728,20 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   private postStreamEvent(
     requestId: string,
-    request: GhostPilotRequestState,
-    event: { type: GhostPilotStreamEvent['type']; [key: string]: unknown }
+    request: GhostRequestState,
+    event: { type: GhostStreamEvent['type']; [key: string]: unknown }
   ): void {
     request.lastActivityAt = Date.now()
     request.status = getRequestStatusForEvent(event, request.status)
     request.sequence += 1
     this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       requestId,
       conversationId: request.conversationId,
       sequence: request.sequence,
       state: request.status,
-      phase: event.phase as GhostPilotStreamEvent['phase'],
+      phase: event.phase as GhostStreamEvent['phase'],
       elapsedMs: Date.now() - request.startedAt,
       model: request.model,
       tokenCount: request.outputTokens,
@@ -750,20 +750,20 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
         : {}),
       ...Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))
-    } as GhostPilotStreamEvent)
+    } as GhostStreamEvent)
   }
 
   private persistenceEnabled(): boolean {
-    return getGhostPilotSettings().enableConversationPersistence
+    return getGhostSettings().enableConversationPersistence
   }
 
-  private async readPersistedState(): Promise<GhostPilotPersistedState> {
-    const global = this.globalState?.get<StoredGlobalState>(GhostPilotViewProvider.globalStateKey)
-    const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostPilotViewProvider.workspaceStateKey)
+  private async readPersistedState(): Promise<GhostPersistedState> {
+    const global = this.globalState?.get<StoredGlobalState>(GhostViewProvider.globalStateKey)
+    const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostViewProvider.workspaceStateKey)
     const globalRecord: Record<string, unknown> = isStoredRecord(global) ? global : {}
     const workspaceRecord: Record<string, unknown> = isStoredRecord(workspace) ? workspace : {}
     const state = migratePersistedState({
-      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       conversations: Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
       activeConversationId: typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
       promptHistory: globalRecord.promptHistory,
@@ -771,40 +771,40 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
     })
-    return JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
+    return JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState
   }
 
   private async sendPersistedState(): Promise<void> {
     const state = this.persistenceEnabled()
       ? await this.readPersistedState()
-      : { schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION, conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
+      : { schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION, conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
     this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'persisted-state',
       state
     })
   }
 
-  private async persistState(state: GhostPilotPersistedState): Promise<void> {
+  private async persistState(state: GhostPersistedState): Promise<void> {
     if (!this.globalState || !this.workspaceState) {
       return
     }
     if (!this.persistenceEnabled()) {
-      await this.globalState.update(GhostPilotViewProvider.globalStateKey, undefined)
-      await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, undefined)
+      await this.globalState.update(GhostViewProvider.globalStateKey, undefined)
+      await this.workspaceState.update(GhostViewProvider.workspaceStateKey, undefined)
       return
     }
-    const safeState = JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
-    await this.globalState.update(GhostPilotViewProvider.globalStateKey, {
-      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+    const safeState = JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState
+    await this.globalState.update(GhostViewProvider.globalStateKey, {
+      schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       promptHistory: normalizePromptHistory(safeState.promptHistory),
       presets: safeState.presets ?? [],
       showReasoning: safeState.showReasoning === true,
       preferences: safeState.preferences ?? {}
     } satisfies StoredGlobalState)
-    await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, {
-      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+    await this.workspaceState.update(GhostViewProvider.workspaceStateKey, {
+      schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       conversations: safeState.conversations ?? [],
       activeConversationId: safeState.activeConversationId
     } satisfies StoredWorkspaceState)
@@ -812,8 +812,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   private async clearPersistedState(): Promise<void> {
     await Promise.all([
-      this.globalState?.update(GhostPilotViewProvider.globalStateKey, undefined),
-      this.workspaceState?.update(GhostPilotViewProvider.workspaceStateKey, undefined)
+      this.globalState?.update(GhostViewProvider.globalStateKey, undefined),
+      this.workspaceState?.update(GhostViewProvider.workspaceStateKey, undefined)
     ])
   }
 
@@ -822,7 +822,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       canSelectMany: false,
       canSelectFolders: false,
       canSelectFiles: true,
-      openLabel: 'Import GhostPilot conversations',
+      openLabel: 'Import Ghost conversations',
       filters: { JSON: ['json'] }
     })
     if (!files?.[0]) {
@@ -832,10 +832,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       const parsed = JSON.parse(new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(files[0]))) as unknown
       const candidate = isStoredRecord(parsed) && isStoredRecord(parsed.state) ? parsed.state : parsed
       if (!isStoredRecord(candidate) || !Array.isArray(candidate.conversations)) {
-        throw new Error('The file does not contain GhostPilot conversations.')
+        throw new Error('The file does not contain Ghost conversations.')
       }
-      const state: GhostPilotPersistedState = {
-        schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      const state: GhostPersistedState = {
+        schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
         conversations: candidate.conversations,
         activeConversationId: typeof candidate.activeConversationId === 'string' ? candidate.activeConversationId : undefined,
         promptHistory: Array.isArray(candidate.promptHistory) ? candidate.promptHistory.filter(item => typeof item === 'string') : [],
@@ -845,19 +845,19 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
       await this.persistState(state)
       this.postMessage({
-        source: 'ghostpilot-extension',
-        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+        source: 'ghost-extension',
+        version: GHOST_WEBVIEW_PROTOCOL_VERSION,
         type: 'persisted-state',
         state
       })
-      await vscode.window.showInformationMessage('GhostPilot conversations imported.')
+      await vscode.window.showInformationMessage('Ghost conversations imported.')
     } catch (error) {
-      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not import that file.')
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not import that file.')
     }
   }
 
   private async sendControlsState(): Promise<void> {
-    const settings = getGhostPilotSettings()
+    const settings = getGhostSettings()
     let models: string[] = []
     let connection: 'online' | 'offline' | 'unknown' = 'unknown'
 
@@ -892,11 +892,11 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       : undefined
     const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
     const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-    const allowedTools = (settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES]).filter(tool => !(settings.toolDenylist ?? []).includes(tool))
+    const allowedTools = (settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]).filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
     this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'controls-state',
       settings: {
         provider: settings.provider,
@@ -910,7 +910,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
         openaiUrl: settings.openaiUrl,
-        toolAllowlist: settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES],
+        toolAllowlist: settings.toolAllowlist ?? [...GHOST_TOOL_NAMES],
         toolDenylist: settings.toolDenylist ?? [],
         enableDebugLogging: settings.enableDebugLogging,
         networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl) ? 'external' : 'local'
@@ -928,7 +928,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private async testProvider(): Promise<void> {
-    const settings = getGhostPilotSettings()
+    const settings = getGhostSettings()
     const client = settings.provider === 'mlx-vlm'
       ? new MlxClient(settings.mlxUrl)
       : new OllamaClient(
@@ -944,52 +944,52 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     await this.sendControlsState()
   }
 
-  private async updateSettings(update: GhostPilotSettingsUpdate): Promise<void> {
+  private async updateSettings(update: GhostSettingsUpdate): Promise<void> {
     const target = update.workspaceOnly ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global
     if (typeof update.ollamaUrl === 'string' && update.ollamaUrl.trim()) {
-      await ghostPilotConfig.update('ollamaUrl', update.ollamaUrl.trim(), target)
+      await ghostConfig.update('ollamaUrl', update.ollamaUrl.trim(), target)
     }
     if (typeof update.mlxUrl === 'string' && update.mlxUrl.trim()) {
-      await ghostPilotConfig.update('mlxUrl', update.mlxUrl.trim(), target)
+      await ghostConfig.update('mlxUrl', update.mlxUrl.trim(), target)
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
-      await ghostPilotConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+      await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)
     }
     if (Array.isArray(update.toolAllowlist)) {
-      await ghostPilotConfig.update('toolAllowlist', update.toolAllowlist, target)
+      await ghostConfig.update('toolAllowlist', update.toolAllowlist, target)
     }
     if (Array.isArray(update.toolDenylist)) {
-      await ghostPilotConfig.update('toolDenylist', update.toolDenylist, target)
+      await ghostConfig.update('toolDenylist', update.toolDenylist, target)
     }
     if (update.provider) {
-      await ghostPilotConfig.update('provider', update.provider, target)
+      await ghostConfig.update('provider', update.provider, target)
     }
     if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
-      await ghostPilotConfig.update('chatModel', update.chatModel.trim(), target)
+      await ghostConfig.update('chatModel', update.chatModel.trim(), target)
     }
     if (typeof update.autocompleteModel === 'string' && update.autocompleteModel.trim()) {
-      await ghostPilotConfig.update('autocompleteModel', update.autocompleteModel.trim(), target)
+      await ghostConfig.update('autocompleteModel', update.autocompleteModel.trim(), target)
     }
     if (typeof update.maxContextTokens === 'number' && Number.isFinite(update.maxContextTokens)) {
-      await ghostPilotConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)), target)
+      await ghostConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)), target)
     }
     if (typeof update.temperature === 'number' && Number.isFinite(update.temperature)) {
-      await ghostPilotConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)), target)
+      await ghostConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)), target)
     }
     if (update.responseLength) {
-      await ghostPilotConfig.update('responseLength', update.responseLength, target)
+      await ghostConfig.update('responseLength', update.responseLength, target)
     }
     if (update.mode) {
-      await ghostPilotConfig.update('mode', update.mode, target)
+      await ghostConfig.update('mode', update.mode, target)
     }
     if (typeof update.enableConversationPersistence === 'boolean') {
-      await ghostPilotConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)
+      await ghostConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)
       if (!update.enableConversationPersistence) {
         await this.clearPersistedState()
       }
     }
     if (typeof update.enableDebugLogging === 'boolean') {
-      await ghostPilotConfig.update('enableDebugLogging', update.enableDebugLogging, target)
+      await ghostConfig.update('enableDebugLogging', update.enableDebugLogging, target)
     }
     await this.sendControlsState()
   }
@@ -999,27 +999,27 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       canSelectMany: true,
       canSelectFolders: false,
       canSelectFiles: true,
-      openLabel: 'Attach to GhostPilot'
+      openLabel: 'Attach to Ghost'
     })
     if (!files) {
       return
     }
     this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'file-picked',
       attachments: files.map(file => ({ name: file.path.split(/[\\/]/).pop() ?? file.fsPath, path: file.fsPath }))
     })
   }
 
-  async export(state?: GhostPilotPersistedState): Promise<void> {
-    const settings = getGhostPilotSettings()
+  async export(state?: GhostPersistedState): Promise<void> {
+    const settings = getGhostSettings()
     const defaultUri = vscode.workspace.workspaceFolders?.[0]
-      ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ghostpilot-export.json')
+      ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ghost-export.json')
       : undefined
     const target = await vscode.window.showSaveDialog({
       defaultUri,
-      saveLabel: 'Export GhostPilot',
+      saveLabel: 'Export Ghost',
       filters: { JSON: ['json'] }
     })
 
@@ -1029,14 +1029,14 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
     const exportState = state ?? await this.readPersistedState()
     const exportData = {
-      version: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      version: GHOST_PERSISTENCE_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       provider: settings.provider,
       chatModel: settings.chatModel,
       state: exportState
     }
     await vscode.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'))
-    await vscode.window.showInformationMessage(`GhostPilot interface exported to ${target.fsPath}.`)
+    await vscode.window.showInformationMessage(`Ghost interface exported to ${target.fsPath}.`)
   }
 
   dispose(): void {
@@ -1056,7 +1056,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private async handleMessage(value: unknown): Promise<void> {
-    if (!isGhostPilotWebviewMessage(value)) {
+    if (!isGhostWebviewMessage(value)) {
       return
     }
 
@@ -1081,7 +1081,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         await this.persistState(value.state)
         return
       case 'check-status':
-        await vscode.commands.executeCommand('ghostpilot.checkOllamaStatus')
+        await vscode.commands.executeCommand('ghost.checkOllamaStatus')
         return
       case 'test-provider':
         await this.testProvider()
@@ -1140,15 +1140,15 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       ? 'Local interface ready'
       : 'Ollama is offline'
     this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'state',
       status: this.status,
       detail
     })
   }
 
-  private postMessage(message: GhostPilotExtensionMessage): void {
+  private postMessage(message: GhostExtensionMessage): void {
     if (this.disposed) {
       return
     }
@@ -1163,10 +1163,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     void this.view.webview.postMessage(message)
   }
 
-  private createMessage(type: 'reset' | 'clear'): GhostPilotExtensionMessage {
+  private createMessage(type: 'reset' | 'clear'): GhostExtensionMessage {
     return {
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type
     }
   }
@@ -1174,7 +1174,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   private getHtml(webview: vscode.Webview): string {
     const nonce = randomBytes(16).toString('base64')
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostPilotWebview.js')
+      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebview.js')
     )
     const csp = [
       "default-src 'none'",
@@ -1190,13 +1190,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="${csp}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GhostPilot</title>
+    <title>Ghost</title>
     <style nonce="${nonce}">
       :root {
         color-scheme: light dark;
-        --ghostpilot-accent: var(--vscode-textLink-foreground, #3794ff);
-        --ghostpilot-border: var(--vscode-panel-border, var(--vscode-widget-border, transparent));
-        --ghostpilot-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        --ghost-accent: var(--vscode-textLink-foreground, #3794ff);
+        --ghost-border: var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+        --ghost-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
       }
 
       * {
@@ -1239,7 +1239,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .header {
         align-items: flex-start;
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
         display: flex;
         gap: 10px;
         justify-content: space-between;
@@ -1253,7 +1253,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .brand-mark {
-        color: var(--ghostpilot-accent);
+        color: var(--ghost-accent);
         font-size: 18px;
       }
 
@@ -1297,8 +1297,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .empty-state {
-        background: var(--ghostpilot-surface);
-        border: 1px solid var(--ghostpilot-border);
+        background: var(--ghost-surface);
+        border: 1px solid var(--ghost-border);
         border-radius: 6px;
         padding: 18px;
         text-align: center;
@@ -1324,12 +1324,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .secondary {
         background: transparent;
-        border-color: var(--ghostpilot-border);
+        border-color: var(--ghost-border);
         color: var(--vscode-foreground);
       }
 
       .footer {
-        border-top: 1px solid var(--ghostpilot-border);
+        border-top: 1px solid var(--ghost-border);
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         padding: 8px 12px;
@@ -1337,7 +1337,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .control-strip {
         align-items: center;
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
@@ -1355,7 +1355,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       input[type='number'],
       textarea {
         background: var(--vscode-input-background);
-        border: 1px solid var(--vscode-input-border, var(--ghostpilot-border));
+        border: 1px solid var(--vscode-input-border, var(--ghost-border));
         border-radius: 2px;
         color: var(--vscode-input-foreground);
         font: inherit;
@@ -1396,7 +1396,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       .control-button,
       .context-button {
         background: transparent;
-        border: 1px solid var(--ghostpilot-border);
+        border: 1px solid var(--ghost-border);
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         padding: 3px 7px;
@@ -1439,7 +1439,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .context-chip.removed {
         background: transparent;
-        border: 1px dashed var(--ghostpilot-border);
+        border: 1px dashed var(--ghost-border);
         color: var(--vscode-descriptionForeground);
       }
 
@@ -1469,8 +1469,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .mention-menu {
-        background: var(--vscode-quickInput-background, var(--ghostpilot-surface));
-        border: 1px solid var(--ghostpilot-border);
+        background: var(--vscode-quickInput-background, var(--ghost-surface));
+        border: 1px solid var(--ghost-border);
         border-radius: 3px;
         bottom: calc(100% + 4px);
         box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
@@ -1513,8 +1513,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .modal {
-        background: var(--vscode-quickInput-background, var(--ghostpilot-surface));
-        border: 1px solid var(--ghostpilot-border);
+        background: var(--vscode-quickInput-background, var(--ghost-surface));
+        border: 1px solid var(--ghost-border);
         border-radius: 5px;
         box-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
         max-height: 90vh;
@@ -1592,7 +1592,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .preset-section {
-        border-top: 1px solid var(--ghostpilot-border);
+        border-top: 1px solid var(--ghost-border);
         padding-top: 12px;
       }
 
@@ -1617,7 +1617,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .context-preview-item {
         align-items: center;
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
         display: flex;
         gap: 8px;
         padding: 8px 0;
@@ -1639,7 +1639,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .history-item {
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
       }
 
       .composer.dragging {
@@ -1688,7 +1688,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .sidebar {
-        border-right: 1px solid var(--ghostpilot-border);
+        border-right: 1px solid var(--ghost-border);
         display: flex;
         flex: 0 0 166px;
         flex-direction: column;
@@ -1696,7 +1696,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .sidebar-header {
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
         justify-content: space-between;
         padding: 8px;
       }
@@ -1776,8 +1776,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .state-card {
-        background: var(--ghostpilot-surface);
-        border: 1px solid var(--ghostpilot-border);
+        background: var(--ghost-surface);
+        border: 1px solid var(--ghost-border);
         border-radius: 6px;
         margin: auto;
         max-width: 420px;
@@ -1786,7 +1786,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .state-icon {
-        color: var(--ghostpilot-accent);
+        color: var(--ghost-accent);
         font-size: 24px;
         font-weight: 700;
         margin-bottom: 8px;
@@ -1813,8 +1813,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .message.user {
-        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
-        border-left: 2px solid var(--ghostpilot-accent);
+        background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+        border-left: 2px solid var(--ghost-accent);
         border-radius: 3px;
         padding: 10px 12px;
       }
@@ -1846,8 +1846,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .progress-details {
-        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
-        border-left: 2px solid var(--ghostpilot-accent);
+        background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+        border-left: 2px solid var(--ghost-accent);
         color: var(--vscode-descriptionForeground);
         font-size: 0.85em;
         padding: 4px 7px;
@@ -1864,8 +1864,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .message-progress {
-        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
-        border-left: 2px solid var(--ghostpilot-accent);
+        background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+        border-left: 2px solid var(--ghost-accent);
         color: var(--vscode-descriptionForeground);
         font-size: 0.85em;
         padding: 4px 7px;
@@ -1947,7 +1947,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .code-block {
         background: var(--vscode-textCodeBlock-background);
-        border: 1px solid var(--ghostpilot-border);
+        border: 1px solid var(--ghost-border);
         border-radius: 4px;
         margin: 10px 0;
         overflow: hidden;
@@ -1955,7 +1955,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .code-header {
         background: var(--vscode-editorWidget-background);
-        border-bottom: 1px solid var(--ghostpilot-border);
+        border-bottom: 1px solid var(--ghost-border);
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         justify-content: space-between;
@@ -2026,7 +2026,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .composer {
-        border: 1px solid var(--ghostpilot-border);
+        border: 1px solid var(--ghost-border);
         border-radius: 4px;
         margin: 0 12px 8px;
         padding: 8px;
@@ -2078,7 +2078,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .status-footer {
-        border-top: 1px solid var(--ghostpilot-border);
+        border-top: 1px solid var(--ghost-border);
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         gap: 6px;
@@ -2087,7 +2087,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       .status-footer.busy .status-dot {
-        background: var(--ghostpilot-accent);
+        background: var(--ghost-accent);
       }
 
       .status-footer.offline .status-dot {
@@ -2105,7 +2105,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
 
       :focus-visible {
-        outline: 2px solid var(--vscode-focusBorder, var(--ghostpilot-accent));
+        outline: 2px solid var(--vscode-focusBorder, var(--ghost-accent));
         outline-offset: 2px;
       }
 

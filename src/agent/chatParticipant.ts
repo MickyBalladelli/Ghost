@@ -3,23 +3,23 @@ import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { redactSensitiveText } from '../privacy/redact'
-import { GhostPilotConfig, ghostPilotConfig } from '../config'
+import { GhostConfig, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
-import { GhostPilotStatusBar } from '../ui/statusBar'
+import { GhostStatusBar } from '../ui/statusBar'
 import { LocalToolCall, parseLocalToolCall } from './toolCallParser'
 
-const CHAT_PARTICIPANT_ID = 'ghostpilot.agent'
+const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.2
 
 const SYSTEM_PROMPT = [
-  'You are GhostPilot, a private local coding assistant.',
+  'You are Ghost, a private local coding assistant.',
   'Use the supplied editor and workspace context when it helps answer the user.',
   'Be concise. Put code in fenced Markdown blocks with the correct language when useful.',
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
-  'Available tools: ghostpilot_read_file({"path":"absolute workspace path"}), ghostpilot_write_file({"path":"absolute workspace path","content":"full text"}), ghostpilot_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghostpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghostpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'Available tools: ghost_read_file({"path":"absolute workspace path"}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After receiving a tool result, continue the task and provide the final answer.'
 ].join(' ')
 
@@ -32,13 +32,13 @@ function summarizeToolResult(value: string): string {
 }
 
 export interface ChatParticipantOptions {
-  configuration?: GhostPilotConfig
+  configuration?: GhostConfig
   llmFactory?: LlmFactory
   toolExecutor?: LocalToolExecutor
-  statusBar?: GhostPilotStatusBar
+  statusBar?: GhostStatusBar
 }
 
-export interface GhostPilotContextSelection {
+export interface GhostContextSelection {
   workspace?: boolean
   folders?: boolean
   activeFile?: boolean
@@ -47,20 +47,20 @@ export interface GhostPilotContextSelection {
   tools?: boolean
 }
 
-export interface GhostPilotRequestOptions {
+export interface GhostRequestOptions {
   model?: string
   temperature?: number
   maxContextTokens?: number
   maxTokens?: number
   mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-  context?: GhostPilotContextSelection
+  context?: GhostContextSelection
   additionalContext?: string
   showReasoning?: boolean
   customSystemInstructions?: string
-  approveTool?: (call: LocalToolCall) => Promise<GhostPilotToolApproval>
+  approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
 }
 
-export interface GhostPilotToolApproval {
+export interface GhostToolApproval {
   decision: 'once' | 'session' | 'reject'
   arguments?: Record<string, unknown>
   expectedContent?: string
@@ -98,7 +98,7 @@ export function truncateContext(text: string, maxTokens: number): string {
     return text
   }
 
-  return `${text.slice(0, maxCharacters)}\n\n[Context truncated by GhostPilot]`
+  return `${text.slice(0, maxCharacters)}\n\n[Context truncated by Ghost]`
 }
 
 function getActiveEditorContext(maxContextTokens: number, includeSelection: boolean): EditorContext | undefined {
@@ -300,9 +300,9 @@ async function getReferenceContext(
 
 async function buildContextPrompt(
   request: vscode.ChatRequest,
-  settings: ReturnType<GhostPilotConfig['getSettings']>,
+  settings: ReturnType<GhostConfig['getSettings']>,
   token: vscode.CancellationToken,
-  options: GhostPilotRequestOptions = {},
+  options: GhostRequestOptions = {},
   onProgress?: (detail: string) => void
 ): Promise<string> {
   const context = options.context ?? {}
@@ -355,12 +355,12 @@ async function buildContextPrompt(
   return sections.join('\n\n')
 }
 
-function getRequestOptions(request: vscode.ChatRequest): GhostPilotRequestOptions {
-  const value = (request as vscode.ChatRequest & { ghostPilot?: GhostPilotRequestOptions }).ghostPilot
+function getRequestOptions(request: vscode.ChatRequest): GhostRequestOptions {
+  const value = (request as vscode.ChatRequest & { ghost?: GhostRequestOptions }).ghost
   return value ?? {}
 }
 
-function createDefaultLlmFactory(configuration: GhostPilotConfig): LlmFactory {
+function createDefaultLlmFactory(configuration: GhostConfig): LlmFactory {
   const settings = configuration.getSettings()
 
   return new LlmFactory(
@@ -370,7 +370,7 @@ function createDefaultLlmFactory(configuration: GhostPilotConfig): LlmFactory {
       openaiCompatibleClient: new OllamaClient(settings.openaiUrl, 'openai-compatible')
     },
     {
-      configuration: vscode.workspace.getConfiguration('ghostpilot')
+      configuration: vscode.workspace.getConfiguration('ghost')
     }
   )
 }
@@ -454,7 +454,7 @@ async function streamModelTurn(
 export function createChatParticipantHandler(
   options: ChatParticipantOptions = {}
 ): vscode.ChatRequestHandler {
-  const configuration = options.configuration ?? ghostPilotConfig
+  const configuration = options.configuration ?? ghostConfig
   const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration)
   const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
   const statusBar = options.statusBar
@@ -482,7 +482,7 @@ export function createChatParticipantHandler(
     }
 
     const baseSystemPrompt = requestOptions.context?.tools === false
-      ? 'You are GhostPilot, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
+      ? 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
       : SYSTEM_PROMPT
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
@@ -535,7 +535,7 @@ export function createChatParticipantHandler(
         }
 
         if (round === MAX_TOOL_ROUNDS - 1) {
-          response.markdown('GhostPilot stopped after reaching the maximum tool-call limit.')
+          response.markdown('Ghost stopped after reaching the maximum tool-call limit.')
           return
         }
 
@@ -583,12 +583,12 @@ export function createChatParticipantHandler(
         )
       }
 
-      response.markdown('GhostPilot stopped after reaching the maximum tool-call limit.')
+      response.markdown('Ghost stopped after reaching the maximum tool-call limit.')
     } catch (error) {
       if (!token.isCancellationRequested) {
         finalStatus = 'offline'
         const message = redactSensitiveText(error instanceof Error ? error.message : 'Unknown local model error')
-        response.markdown(`GhostPilot could not reach the local model: ${message}`)
+        response.markdown(`Ghost could not reach the local model: ${message}`)
       }
     } finally {
       cancellation.dispose()

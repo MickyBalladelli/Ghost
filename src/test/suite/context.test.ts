@@ -8,7 +8,7 @@ suite('Context window limits', () => {
     const result = truncateContext(source, 256)
 
     assert.ok(result.length < source.length)
-    assert.match(result, /Context truncated by GhostPilot/)
+    assert.match(result, /Context truncated by Ghost/)
   })
 
   test('keeps context below the configured approximation', () => {

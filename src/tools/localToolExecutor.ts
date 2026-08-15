@@ -10,7 +10,7 @@ import {
   WriteFileTool
 } from './fileTools'
 import { RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
-import { applyGhostPilotEdit, parseGhostPilotEdit, summarizeGhostPilotEdit } from './editWorkflow'
+import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
 
 const ALLOW_ACTION = 'Allow'
@@ -62,24 +62,24 @@ export class LocalToolExecutor {
     }
 
     switch (call.name) {
-      case 'ghostpilot_read_file': {
+      case 'ghost_read_file': {
         const input: ReadFileInput = { path: requiredString(call.arguments, 'path') }
         return resultText(await this.readFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'ghostpilot_list_directory': {
+      case 'ghost_list_directory': {
         const input: ListDirectoryInput = {
           path: requiredString(call.arguments, 'path'),
           recursive: call.arguments.recursive === true
         }
         return resultText(await this.listDirectoryTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'ghostpilot_write_file': {
+      case 'ghost_write_file': {
         const input: WriteFileInput = {
           path: requiredString(call.arguments, 'path'),
           content: typeof call.arguments.content === 'string' ? call.arguments.content : ''
         }
         const allowed = options.approved ?? await confirmAction(
-          'Allow GhostPilot to write a file?',
+          'Allow Ghost to write a file?',
           `Replace the complete contents of ${input.path}?`
         )
 
@@ -96,11 +96,11 @@ export class LocalToolExecutor {
 
         return resultText(await this.writeFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
-      case 'ghostpilot_apply_edit': {
-        const edit = parseGhostPilotEdit(call.arguments)
+      case 'ghost_apply_edit': {
+        const edit = parseGhostEdit(call.arguments)
         const allowed = options.approved ?? await confirmAction(
-          'Allow GhostPilot to apply an edit?',
-          summarizeGhostPilotEdit(edit)
+          'Allow Ghost to apply an edit?',
+          summarizeGhostEdit(edit)
         )
         if (!allowed) {
           return 'User denied the file edit.'
@@ -113,17 +113,17 @@ export class LocalToolExecutor {
           throw new Error('Edit expected different file content')
         }
         const selectedHunks = options.selectedHunkIndexes ? new Set(options.selectedHunkIndexes) : undefined
-        const updated = applyGhostPilotEdit(current, edit, selectedHunks)
+        const updated = applyGhostEdit(current, edit, selectedHunks)
         await vscode.workspace.fs.writeFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'))
-        return `${summarizeGhostPilotEdit(edit)}\nApplied successfully.`
+        return `${summarizeGhostEdit(edit)}\nApplied successfully.`
       }
-      case 'ghostpilot_run_terminal_command': {
+      case 'ghost_run_terminal_command': {
         const input: RunTerminalCommandInput = {
           command: requiredString(call.arguments, 'command'),
           cwd: typeof call.arguments.cwd === 'string' ? call.arguments.cwd : undefined
         }
         const allowed = options.approved ?? await confirmAction(
-          'Allow GhostPilot to run a terminal command?',
+          'Allow Ghost to run a terminal command?',
           input.cwd ? `${input.command}\n\nWorking directory: ${input.cwd}` : input.command
         )
 

@@ -1,17 +1,17 @@
-import type { GhostPilotStreamEvent } from './ghostPilotProtocol'
-import type { GhostPilotProgressPhase, GhostPilotRequestStatus } from './ghostPilotState'
+import type { GhostStreamEvent } from './ghostProtocol'
+import type { GhostProgressPhase, GhostRequestStatus } from './ghostState'
 
-export interface GhostPilotRequestStatusEvent {
-  type: GhostPilotStreamEvent['type']
-  state?: GhostPilotRequestStatus
-  phase?: GhostPilotProgressPhase
+export interface GhostRequestStatusEvent {
+  type: GhostStreamEvent['type']
+  state?: GhostRequestStatus
+  phase?: GhostProgressPhase
   status?: 'completed' | 'cancelled' | 'failed'
 }
 
 export function getRequestStatusForEvent(
-  event: GhostPilotRequestStatusEvent,
-  current: GhostPilotRequestStatus
-): GhostPilotRequestStatus {
+  event: GhostRequestStatusEvent,
+  current: GhostRequestStatus
+): GhostRequestStatus {
   if (event.state) {
     return event.state
   }

@@ -3,10 +3,10 @@ import { strict as assert } from 'node:assert'
 import * as vscode from 'vscode'
 
 import {
-  GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-  GhostPilotExtensionMessage
-} from '../../ui/ghostPilotProtocol'
-import { GhostPilotViewProvider } from '../../ui/ghostPilotView'
+  GHOST_WEBVIEW_PROTOCOL_VERSION,
+  GhostExtensionMessage
+} from '../../ui/ghostProtocol'
+import { GhostViewProvider } from '../../ui/ghostView'
 
 interface FakeWebview {
   options?: vscode.WebviewOptions
@@ -38,7 +38,7 @@ function createFakeView(posted: unknown[], setListener: (listener: (message: unk
   } as unknown as vscode.WebviewView
 }
 
-function isLifecycleMessage(value: unknown): value is GhostPilotExtensionMessage {
+function isLifecycleMessage(value: unknown): value is GhostExtensionMessage {
   if (!value || typeof value !== 'object' || !('type' in value)) {
     return false
   }
@@ -50,14 +50,14 @@ function isLifecycleMessage(value: unknown): value is GhostPilotExtensionMessage
   ].includes((value as { type?: string }).type ?? '')
 }
 
-suite('GhostPilot webview integration', function () {
+suite('Ghost webview integration', function () {
   this.timeout(10_000)
 
   test('renders the accessible interface and routes a multiline request', async () => {
     const posted: unknown[] = []
     let receivedRequest: vscode.ChatRequest | undefined
     let receive: ((message: unknown) => unknown) | undefined
-    const provider = new GhostPilotViewProvider(vscode.Uri.file(process.cwd()), {
+    const provider = new GhostViewProvider(vscode.Uri.file(process.cwd()), {
       chatHandler: async (request, _context, response) => {
         receivedRequest = request
         response.progress('Preparing request')
@@ -75,8 +75,8 @@ suite('GhostPilot webview integration', function () {
     assert.match((view.webview as unknown as FakeWebview).html, /id="attach"/)
 
     await receive?.({
-      source: 'ghostpilot-webview',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-webview',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'submit',
       requestId: 'request-integration',
       conversationId: 'conversation-integration',
@@ -85,8 +85,8 @@ suite('GhostPilot webview integration', function () {
     })
 
     assert.equal(receivedRequest?.prompt, 'Explain this\nwith two lines')
-    const requestOptions = receivedRequest as unknown as { ghostPilot?: { additionalContext?: string } }
-    assert.match(requestOptions.ghostPilot?.additionalContext ?? '', /snippet\.ts/)
+    const requestOptions = receivedRequest as unknown as { ghost?: { additionalContext?: string } }
+    assert.match(requestOptions.ghost?.additionalContext ?? '', /snippet\.ts/)
     assert.equal(posted.filter(isLifecycleMessage).some(message => message.type === 'text-delta'), true)
     assert.equal(posted.filter(isLifecycleMessage).at(-1)?.type, 'request-completed')
 
@@ -97,7 +97,7 @@ suite('GhostPilot webview integration', function () {
     const posted: unknown[] = []
     let calls = 0
     let receive: ((message: unknown) => unknown) | undefined
-    const provider = new GhostPilotViewProvider(vscode.Uri.file(process.cwd()), {
+    const provider = new GhostViewProvider(vscode.Uri.file(process.cwd()), {
       chatHandler: async (_request, _context, response) => {
         calls += 1
         response.markdown('done')
@@ -109,8 +109,8 @@ suite('GhostPilot webview integration', function () {
     provider.resolveWebviewView(view)
 
     const message = {
-      source: 'ghostpilot-webview',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-webview',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'submit',
       requestId: 'duplicate-request',
       conversationId: 'conversation-integration',
@@ -130,13 +130,13 @@ suite('GhostPilot webview integration', function () {
     const approvalReady = new Promise<void>(resolve => {
       approvalStarted = resolve
     })
-    const provider = new GhostPilotViewProvider(vscode.Uri.file(process.cwd()), {
+    const provider = new GhostViewProvider(vscode.Uri.file(process.cwd()), {
       chatHandler: async (request, _context, response, token) => {
-        const options = request as unknown as { ghostPilot?: { approveTool?: (call: { name: string; arguments: Record<string, unknown> }) => Promise<{ decision: string }> } }
-        if (options.ghostPilot?.approveTool) {
+        const options = request as unknown as { ghost?: { approveTool?: (call: { name: string; arguments: Record<string, unknown> }) => Promise<{ decision: string }> } }
+        if (options.ghost?.approveTool) {
           approvalStarted?.()
-          const approval = await options.ghostPilot.approveTool({
-            name: 'ghostpilot_run_terminal_command',
+          const approval = await options.ghost.approveTool({
+            name: 'ghost_run_terminal_command',
             arguments: { command: 'echo safe' }
           })
           response.markdown(`Approval: ${approval.decision}`)
@@ -150,8 +150,8 @@ suite('GhostPilot webview integration', function () {
     provider.resolveWebviewView(view)
 
     const request = {
-      source: 'ghostpilot-webview',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-webview',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'submit',
       requestId: 'approval-request',
       conversationId: 'conversation-integration',
@@ -163,8 +163,8 @@ suite('GhostPilot webview integration', function () {
     assert.ok(toolRequested?.toolCallId)
 
     await receive?.({
-      source: 'ghostpilot-webview',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-webview',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'approve-tool',
       requestId: 'approval-request',
       conversationId: 'conversation-integration',
@@ -172,8 +172,8 @@ suite('GhostPilot webview integration', function () {
       decision: 'once'
     })
     await receive?.({
-      source: 'ghostpilot-webview',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      source: 'ghost-webview',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
       type: 'cancel',
       requestId: 'approval-request',
       conversationId: 'conversation-integration'

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { GhostPilotConfig, ghostPilotConfig } from '../config'
+import { GhostConfig, ghostConfig } from '../config'
 import { OllamaClient } from '../services/ollamaClient'
 
 export const REQUIRED_OLLAMA_MODELS = [
@@ -9,7 +9,7 @@ export const REQUIRED_OLLAMA_MODELS = [
 ]
 
 export async function checkRequiredOllamaModels(
-  configuration: GhostPilotConfig = ghostPilotConfig
+  configuration: GhostConfig = ghostConfig
 ): Promise<void> {
   const settings = configuration.getSettings()
   const client = new OllamaClient(settings.ollamaUrl)
@@ -32,7 +32,7 @@ export async function checkRequiredOllamaModels(
   const missingModels = REQUIRED_OLLAMA_MODELS.filter(model => !installedModels.includes(model))
 
   if (missingModels.length === 0) {
-    await vscode.window.showInformationMessage('GhostPilot: Required Ollama models are ready.')
+    await vscode.window.showInformationMessage('Ghost: Required Ollama models are ready.')
     return
   }
 

@@ -1,14 +1,14 @@
 {
-  "name": "ghostpilot-ai",
-  "displayName": "GhostPilot AI",
+  "name": "ghost",
+  "displayName": "Ghost",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
   "version": "1.0.12",
-  "publisher": "ghostpilot",
+  "publisher": "ghost",
   "license": "MIT",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ghostpilot-ai/ghostpilot-ai"
+    "url": "https://github.com/ghost/ghost"
   },
   "engines": {
     "vscode": "^1.125.0"
@@ -19,118 +19,118 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:ghostpilot-ai.helloWorld",
-    "onCommand:ghostpilot.checkOllamaStatus",
-    "onCommand:ghostpilot.toggleInline",
-    "onCommand:ghostpilot.checkModels",
-    "onCommand:ghostpilot.open",
-    "onCommand:ghostpilot.focus",
-    "onCommand:ghostpilot.reset",
-    "onCommand:ghostpilot.export",
-    "onCommand:ghostpilot.clear",
-    "onView:ghostpilot.chat",
-    "onChatParticipant:ghostpilot.agent",
-    "onLanguageModelTool:ghostpilot_read_file",
-    "onLanguageModelTool:ghostpilot_write_file",
-    "onLanguageModelTool:ghostpilot_apply_edit",
-    "onLanguageModelTool:ghostpilot_run_terminal_command",
-    "onLanguageModelTool:ghostpilot_list_directory"
+    "onCommand:ghost.helloWorld",
+    "onCommand:ghost.checkOllamaStatus",
+    "onCommand:ghost.toggleInline",
+    "onCommand:ghost.checkModels",
+    "onCommand:ghost.open",
+    "onCommand:ghost.focus",
+    "onCommand:ghost.reset",
+    "onCommand:ghost.export",
+    "onCommand:ghost.clear",
+    "onView:ghost.chat",
+    "onChatParticipant:ghost.agent",
+    "onLanguageModelTool:ghost_read_file",
+    "onLanguageModelTool:ghost_write_file",
+    "onLanguageModelTool:ghost_apply_edit",
+    "onLanguageModelTool:ghost_run_terminal_command",
+    "onLanguageModelTool:ghost_list_directory"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "ghostpilot-ai.helloWorld",
-        "title": "GhostPilot AI: Hello World"
+        "command": "ghost.helloWorld",
+        "title": "Ghost: Hello World"
       },
       {
-        "command": "ghostpilot.checkOllamaStatus",
-        "title": "GhostPilot: Check Ollama Connection"
+        "command": "ghost.checkOllamaStatus",
+        "title": "Ghost: Check Ollama Connection"
       },
       {
-        "command": "ghostpilot.toggleInline",
-        "title": "GhostPilot: Toggle Autocomplete"
+        "command": "ghost.toggleInline",
+        "title": "Ghost: Toggle Autocomplete"
       },
       {
-        "command": "ghostpilot.checkModels",
-        "title": "GhostPilot: Check Required Models"
+        "command": "ghost.checkModels",
+        "title": "Ghost: Check Required Models"
       },
       {
-        "command": "ghostpilot.open",
-        "title": "GhostPilot: Open Interface"
+        "command": "ghost.open",
+        "title": "Ghost: Open Interface"
       },
       {
-        "command": "ghostpilot.focus",
-        "title": "GhostPilot: Focus Interface"
+        "command": "ghost.focus",
+        "title": "Ghost: Focus Interface"
       },
       {
-        "command": "ghostpilot.reset",
-        "title": "GhostPilot: Reset Interface"
+        "command": "ghost.reset",
+        "title": "Ghost: Reset Interface"
       },
       {
-        "command": "ghostpilot.export",
-        "title": "GhostPilot: Export Interface"
+        "command": "ghost.export",
+        "title": "Ghost: Export Interface"
       },
       {
-        "command": "ghostpilot.clear",
-        "title": "GhostPilot: Clear Interface"
+        "command": "ghost.clear",
+        "title": "Ghost: Clear Interface"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "ghostpilot",
-          "title": "GhostPilot",
-          "icon": "./resources/ghostpilot.svg"
+          "id": "ghost",
+          "title": "Ghost",
+          "icon": "./resources/ghost.svg"
         }
       ]
     },
     "views": {
-      "ghostpilot": [
+      "ghost": [
         {
-          "id": "ghostpilot.chat",
-          "name": "GhostPilot",
+          "id": "ghost.chat",
+          "name": "Ghost",
           "type": "webview",
-          "icon": "./resources/ghostpilot.svg",
+          "icon": "./resources/ghost.svg",
           "when": "true"
         }
       ]
     },
     "configuration": {
-      "title": "GhostPilot AI",
+      "title": "Ghost",
       "properties": {
-        "ghostpilot.ollamaUrl": {
+        "ghost.ollamaUrl": {
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
         },
-        "ghostpilot.openaiUrl": {
+        "ghost.openaiUrl": {
           "type": "string",
           "default": "http://localhost:8001/v1",
           "description": "OpenAI-compatible model server URL."
         },
-        "ghostpilot.chatModel": {
+        "ghost.chatModel": {
           "type": "string",
           "default": "qwen2.5-coder:7b",
           "description": "Model used for chat requests."
         },
-        "ghostpilot.autocompleteModel": {
+        "ghost.autocompleteModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b",
           "description": "Model used for inline code completions."
         },
-        "ghostpilot.maxContextTokens": {
+        "ghost.maxContextTokens": {
           "type": "integer",
           "default": 8192,
           "minimum": 1,
           "description": "Maximum number of context tokens sent to the model."
         },
-        "ghostpilot.enableInlineCompletions": {
+        "ghost.enableInlineCompletions": {
           "type": "boolean",
           "default": true,
-          "description": "Enable GhostPilot inline code completions."
+          "description": "Enable Ghost inline code completions."
         },
-        "ghostpilot.provider": {
+        "ghost.provider": {
           "type": "string",
           "enum": [
             "ollama",
@@ -143,21 +143,21 @@
             "Use another OpenAI-compatible server."
           ],
           "default": "ollama",
-          "description": "GhostPilot model provider."
+          "description": "Ghost model provider."
         },
-        "ghostpilot.mlxUrl": {
+        "ghost.mlxUrl": {
           "type": "string",
           "default": "http://localhost:8000",
           "description": "MLX VLM server URL."
         },
-        "ghostpilot.temperature": {
+        "ghost.temperature": {
           "type": "number",
           "default": 0.2,
           "minimum": 0,
           "maximum": 2,
           "description": "Sampling temperature for chat responses."
         },
-        "ghostpilot.responseLength": {
+        "ghost.responseLength": {
           "type": "string",
           "enum": [
             "short",
@@ -166,9 +166,9 @@
             "unlimited"
           ],
           "default": "balanced",
-          "description": "Default response length for the GhostPilot interface."
+          "description": "Default response length for the Ghost interface."
         },
-        "ghostpilot.mode": {
+        "ghost.mode": {
           "type": "string",
           "enum": [
             "ask",
@@ -178,59 +178,59 @@
             "inline"
           ],
           "default": "ask",
-          "description": "Default workflow mode for the GhostPilot interface."
+          "description": "Default workflow mode for the Ghost interface."
         },
-        "ghostpilot.enableConversationPersistence": {
+        "ghost.enableConversationPersistence": {
           "type": "boolean",
           "default": false,
-          "description": "Persist GhostPilot conversations and preferences in VS Code storage. Disable to keep chat history in memory only."
+          "description": "Persist Ghost conversations and preferences in VS Code storage. Disable to keep chat history in memory only."
         },
-        "ghostpilot.enableDebugLogging": {
+        "ghost.enableDebugLogging": {
           "type": "boolean",
           "default": false,
-          "description": "Enable telemetry-free GhostPilot debug logging in the extension host."
+          "description": "Enable telemetry-free Ghost debug logging in the extension host."
         },
-        "ghostpilot.toolAllowlist": {
+        "ghost.toolAllowlist": {
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
-              "ghostpilot_read_file",
-              "ghostpilot_write_file",
-              "ghostpilot_apply_edit",
-              "ghostpilot_run_terminal_command",
-              "ghostpilot_list_directory"
+              "ghost_read_file",
+              "ghost_write_file",
+              "ghost_apply_edit",
+              "ghost_run_terminal_command",
+              "ghost_list_directory"
             ]
           },
           "default": [
-            "ghostpilot_read_file",
-            "ghostpilot_write_file",
-            "ghostpilot_apply_edit",
-            "ghostpilot_run_terminal_command",
-            "ghostpilot_list_directory"
+            "ghost_read_file",
+            "ghost_write_file",
+            "ghost_apply_edit",
+            "ghost_run_terminal_command",
+            "ghost_list_directory"
           ],
-          "description": "Tools GhostPilot may use. Workspace settings can restrict this list."
+          "description": "Tools Ghost may use. Workspace settings can restrict this list."
         },
-        "ghostpilot.toolDenylist": {
+        "ghost.toolDenylist": {
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
-              "ghostpilot_read_file",
-              "ghostpilot_write_file",
-              "ghostpilot_apply_edit",
-              "ghostpilot_run_terminal_command",
-              "ghostpilot_list_directory"
+              "ghost_read_file",
+              "ghost_write_file",
+              "ghost_apply_edit",
+              "ghost_run_terminal_command",
+              "ghost_list_directory"
             ]
           },
           "default": [],
-          "description": "Tools GhostPilot must never use in this workspace."
+          "description": "Tools Ghost must never use in this workspace."
         }
       }
     },
     "chatParticipants": [
       {
-        "id": "ghostpilot.agent",
+        "id": "ghost.agent",
         "name": "local",
         "description": "Local AI Agent (Ollama)",
         "isSticky": true
@@ -238,9 +238,9 @@
     ],
     "languageModelTools": [
       {
-        "name": "ghostpilot_read_file",
-        "displayName": "GhostPilot Read File",
-        "toolReferenceName": "ghostpilot_read_file",
+        "name": "ghost_read_file",
+        "displayName": "Ghost Read File",
+        "toolReferenceName": "ghost_read_file",
         "userDescription": "Read a text file from the current workspace.",
         "modelDescription": "Reads the complete content of a text file in the current workspace. Use this for inspecting code or configuration. The path must be absolute and inside the workspace. Do not use it for binary files.",
         "canBeReferencedInPrompt": true,
@@ -261,9 +261,9 @@
         }
       },
       {
-        "name": "ghostpilot_write_file",
-        "displayName": "GhostPilot Write File",
-        "toolReferenceName": "ghostpilot_write_file",
+        "name": "ghost_write_file",
+        "displayName": "Ghost Write File",
+        "toolReferenceName": "ghost_write_file",
         "userDescription": "Create or replace a text file in the current workspace.",
         "modelDescription": "Creates a new text file or replaces the complete content of an existing file in the current workspace. The path must be absolute and inside the workspace. This changes user files and requires confirmation.",
         "canBeReferencedInPrompt": true,
@@ -289,9 +289,9 @@
         }
       },
       {
-        "name": "ghostpilot_apply_edit",
-        "displayName": "GhostPilot Apply Edit",
-        "toolReferenceName": "ghostpilot_apply_edit",
+        "name": "ghost_apply_edit",
+        "displayName": "Ghost Apply Edit",
+        "toolReferenceName": "ghost_apply_edit",
         "userDescription": "Apply reviewed, structured edits inside the current workspace.",
         "modelDescription": "Proposes line-based edits to a workspace file. The user must approve the edit before it is applied. Paths must be absolute and inside the workspace.",
         "canBeReferencedInPrompt": true,
@@ -329,9 +329,9 @@
         }
       },
       {
-        "name": "ghostpilot_run_terminal_command",
-        "displayName": "GhostPilot Run Terminal Command",
-        "toolReferenceName": "ghostpilot_run_terminal_command",
+        "name": "ghost_run_terminal_command",
+        "displayName": "Ghost Run Terminal Command",
+        "toolReferenceName": "ghost_run_terminal_command",
         "userDescription": "Run a shell command in the current workspace.",
         "modelDescription": "Runs a bash or PowerShell command in the current workspace and returns its output. Use only when the user asks for command execution or when it is needed to verify a change. Commands can change the system and require confirmation.",
         "canBeReferencedInPrompt": true,
@@ -356,9 +356,9 @@
         }
       },
       {
-        "name": "ghostpilot_list_directory",
-        "displayName": "GhostPilot List Directory",
-        "toolReferenceName": "ghostpilot_list_directory",
+        "name": "ghost_list_directory",
+        "displayName": "Ghost List Directory",
+        "toolReferenceName": "ghost_list_directory",
         "userDescription": "List files and directories in the current workspace.",
         "modelDescription": "Lists the file and directory hierarchy under a workspace directory. The path must be absolute and inside the current workspace. Use this to discover project structure before reading or editing files.",
         "canBeReferencedInPrompt": true,
@@ -389,7 +389,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --out ghostpilot-ai-1.0.12.vsix",
+    "package": "vsce package --out ghost-1.0.12.vsix",
     "test": "npm run compile && node ./out/test/runTest.js"
   },
   "devDependencies": {

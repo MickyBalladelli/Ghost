@@ -1,6 +1,6 @@
-# TODO: Build "GhostPilot AI" VS Code Extension
+# TODO: Build "Ghost" VS Code Extension
 
-**Extension Name:** GhostPilot AI (`ghostpilot-ai`)
+**Extension Name:** Ghost (`ghost`)
 **Objective:** Create a privacy-first, fully local AI coding assistant for Visual Studio Code that provides inline code completions, a sidebar chat agent, workspace file context, and agentic tool execution (terminal commands & file editing) using Ollama / vLLM.
 
 ---
@@ -11,8 +11,8 @@
   - [x] Install `yo` and `generator-code` globally (`npm i -g yo generator-code`).
   - [x] Run `yo code` and configure:
     - Type: **New Extension (TypeScript)**
-    - Name: `GhostPilot AI`
-    - Identifier: `ghostpilot-ai`
+    - Name: `Ghost`
+    - Identifier: `ghost`
     - Description: `Local, offline Copilot & Codex alternative powered by Ollama/vLLM`
     - Package manager: `npm` or `pnpm`
     - do not commit to git
@@ -32,26 +32,26 @@
   - [x] Add extension categories: `["AI", "Programming Languages", "Other"]`.
   - [x] Set minimum VS Code engine target: `"vscode": "^1.125.0"` (required by the language-model tool APIs).
   - [x] Add configuration settings under `contributes.configuration`:
-    - [x] `ghostpilot.ollamaUrl` (default: `"http://localhost:11434"`)
-    - [x] `ghostpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
-    - [x] `ghostpilot.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
-    - [x] `ghostpilot.maxContextTokens` (default: `8192`)
-    - [x] `ghostpilot.enableInlineCompletions` (default: `true`)
+    - [x] `ghost.ollamaUrl` (default: `"http://localhost:11434"`)
+    - [x] `ghost.chatModel` (default: `"qwen2.5-coder:7b"`)
+    - [x] `ghost.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
+    - [x] `ghost.maxContextTokens` (default: `8192`)
+    - [x] `ghost.enableInlineCompletions` (default: `true`)
   - [x] Register Chat Participant under `contributes.chatParticipants`:
-    - [x] ID: `ghostpilot.agent`
+    - [x] ID: `ghost.agent`
     - [x] Name: `local`
     - [x] Description: `Local AI Agent (Ollama)`
     - [x] `isSticky`: `true` (stable Chat Participant API)
   - [x] Register commands under `contributes.commands`:
-    - [x] `ghostpilot.checkOllamaStatus` -> "GhostPilot: Check Ollama Connection"
-    - [x] `ghostpilot.toggleInline` -> "GhostPilot: Toggle Autocomplete"
+    - [x] `ghost.checkOllamaStatus` -> "Ghost: Check Ollama Connection"
+    - [x] `ghost.toggleInline` -> "Ghost: Toggle Autocomplete"
 
 
 ### Update to Phase 1.3 (`package.json` Manifest Configuration)
 
 - [x] **1.3.1 Add MLX Backend Settings**
-  - [x] Add `ghostpilot.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
-  - [x] Add `ghostpilot.mlxUrl` setting (default: `"http://localhost:8000"`).
+  - [x] Add `ghost.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
+  - [x] Add `ghost.mlxUrl` setting (default: `"http://localhost:8000"`).
 
 ---
 
@@ -64,7 +64,7 @@
   - [x] Implement response streaming transformer to convert MLX server Server-Sent Events (SSE) into standard token chunks.
 
 - [x] **2.4 Dynamic Provider Switching Logic**
-  - [x] Update `src/services/llmFactory.ts` to route requests based on `ghostpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).
+  - [x] Update `src/services/llmFactory.ts` to route requests based on `ghost.provider` (dispatching to either `ollamaClient` or `mlxClient`).
   - [x] Add auto-detection fallback: if MLX server is detected on port 8000, automatically suggest switching provider to `mlx-vlm`.
 ---
 
@@ -81,7 +81,7 @@
   - [x] Implement `fetchFimCompletion` (Fill-In-the-Middle) for inline code autocompletion.
 
 - [x] **2.2 Settings & Configuration Manager**
-  - [x] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('ghostpilot')`.
+  - [x] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('ghost')`.
   - [x] Implement event listener for configuration changes (`vscode.workspace.onDidChangeConfiguration`).
 
 ---
@@ -124,10 +124,10 @@
 
 - [x] **5.1 Define Language Model Tools in Manifest**
   - [x] Add `contributes.languageModelTools` in `package.json`:
-    - [x] `ghostpilot_read_file`: Reads full content of a file in workspace.
-    - [x] `ghostpilot_write_file`: Creates or replaces file content.
-    - [x] `ghostpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
-    - [x] `ghostpilot_list_directory`: Lists workspace file hierarchy.
+    - [x] `ghost_read_file`: Reads full content of a file in workspace.
+    - [x] `ghost_write_file`: Creates or replaces file content.
+    - [x] `ghost_run_terminal_command`: Executes bash/powershell command in workspace terminal.
+    - [x] `ghost_list_directory`: Lists workspace file hierarchy.
 
 - [x] **5.2 Implement Tool Execution Services**
   - [x] Create `src/tools/fileTools.ts` for file read/write operations using `vscode.workspace.fs`.
@@ -146,8 +146,8 @@
 
 - [x] **6.1 Status Bar Indicator**
   - [x] Create `src/ui/statusBar.ts`.
-  - [x] Show status: `$(chip) GhostPilot: Ready` / `$(sync~spin) GhostPilot: Generating...` / `$(error) GhostPilot: Ollama Offline`.
-  - [x] Clicking status bar item runs `ghostpilot.checkOllamaStatus` command.
+  - [x] Show status: `$(chip) Ghost: Ready` / `$(sync~spin) Ghost: Generating...` / `$(error) Ghost: Ollama Offline`.
+  - [x] Clicking status bar item runs `ghost.checkOllamaStatus` command.
 
 - [x] **6.2 Welcome & Model Downloader Helper**
   - [x] Add diagnostic command to verify if required Ollama models are pulled (`qwen2.5-coder:7b`, `qwen2.5-coder:1.5b`).
@@ -184,21 +184,21 @@
   - [x] Run `npm run vscode:prepublish` to verify TypeScript compilation.
   - [x] Package extension into `.vsix` file:
     ```bash
-    npx vsce package --out ghostpilot-ai-1.0.0.vsix
+    npx vsce package --out ghost-1.0.0.vsix
     ```
-- [x] Test local installation (`code --install-extension ghostpilot-ai-1.0.0.vsix`).
+- [x] Test local installation (`code --install-extension ghost-1.0.0.vsix`).
 
 ---
 
 ## 🖥️ Phase 9: Full Copilot / Codex-Style Interface
 
-**Goal:** Replace the native-only chat experience with a customizable GhostPilot interface inside VS Code. The interface must let the user enter prompts, watch live progress, review model output, approve tool actions, and continue the conversation.
+**Goal:** Replace the native-only chat experience with a customizable Ghost interface inside VS Code. The interface must let the user enter prompts, watch live progress, review model output, approve tool actions, and continue the conversation.
 
 ### 9.1 Choose and Register the Interface
 
-- [x] Decide on the primary surface: a persistent `WebviewView` in the GhostPilot Activity Bar, with an optional editor `WebviewPanel` for a larger workspace.
-- [x] Add an Activity Bar container and GhostPilot view contribution in `package.json`.
-- [x] Add commands to open, focus, reset, export, and clear the GhostPilot interface.
+- [x] Decide on the primary surface: a persistent `WebviewView` in the Ghost Activity Bar, with an optional editor `WebviewPanel` for a larger workspace.
+- [x] Add an Activity Bar container and Ghost view contribution in `package.json`.
+- [x] Add commands to open, focus, reset, export, and clear the Ghost interface.
 - [x] Add a view icon and product styling that works in light, dark, and high-contrast VS Code themes.
 - [x] Create a dedicated webview entry point and keep webview code separate from extension-host code.
 - [x] Configure the webview content security policy, nonce handling, local resource roots, and message origin checks.
@@ -259,7 +259,7 @@
 ### 9.6 Show Thinking and Agent Progress
 
 - [x] Define a local-model-compatible progress protocol for models that do not expose native reasoning tokens.
-- [x] Show a compact “GhostPilot is thinking…” state while context is collected and the provider connects.
+- [x] Show a compact “Ghost is thinking…” state while context is collected and the provider connects.
 - [x] Stream visible reasoning only when the provider explicitly returns it and the user enables it.
 - [x] Default to showing safe progress summaries instead of raw hidden reasoning.
 - [x] Show context collection steps such as reading the active file, searching the workspace, or preparing attachments.
@@ -306,7 +306,7 @@
 
 ### 9.10 Customize the Extension
 
-- [x] Add a GhostPilot settings page or webview panel for provider, model, context, permissions, appearance, and history settings.
+- [x] Add a Ghost settings page or webview panel for provider, model, context, permissions, appearance, and history settings.
 - [x] Allow custom system instructions with a visible reset-to-default action.
 - [x] Allow custom assistant name, avatar, accent color, and compact/full layout preference.
 - [x] Allow users to enable or disable thinking details, tool progress, telemetry-free diagnostics, and automatic context collection.
@@ -314,7 +314,7 @@
 - [x] Add provider-specific settings without showing irrelevant controls.
 - [x] Add model discovery, refresh, and validation actions.
 - [x] Add a connection test with readable failure guidance.
-- [x] Add import/export for GhostPilot configuration and prompt presets.
+- [x] Add import/export for Ghost configuration and prompt presets.
 - [x] Document which settings affect privacy, performance, context size, and tool permissions.
 
 ### 9.11 Reliability, Privacy, and Performance
