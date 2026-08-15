@@ -24,6 +24,8 @@ import {
   isGhostPilotWebviewMessage
 } from './ghostPilotProtocol'
 import type { GhostPilotRequestStatus } from './ghostPilotState'
+import { getRequestStatusForEvent } from './requestState'
+import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 
 interface GhostPilotRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -730,37 +732,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     event: { type: GhostPilotStreamEvent['type']; [key: string]: unknown }
   ): void {
     request.lastActivityAt = Date.now()
-    if (event.state) {
-      request.status = event.state as GhostPilotRequestStatus
-    } else if (event.phase === 'context') {
-      request.status = 'preparing'
-    } else if (event.phase === 'provider') {
-      request.status = 'connecting'
-    } else if (event.phase === 'streaming') {
-      request.status = 'streaming'
-    } else if (event.phase === 'tool') {
-      request.status = event.type === 'tool-requested' ? 'waiting-for-approval' : 'thinking'
-    } else if (event.phase === 'error') {
-      request.status = 'failed'
-    } else if (event.phase === 'complete') {
-      request.status = 'completed'
-    } else if (event.type === 'request-started') {
-      request.status = 'preparing'
-    } else if (event.type === 'thinking') {
-      request.status = 'thinking'
-    } else if (event.type === 'text-delta' || event.type === 'code-delta') {
-      request.status = 'streaming'
-    } else if (event.type === 'tool-requested') {
-      request.status = 'waiting-for-approval'
-    } else if (event.type === 'tool-result') {
-      request.status = 'thinking'
-    } else if (event.type === 'request-completed') {
-      request.status = event.status === 'completed'
-        ? 'completed'
-        : event.status === 'cancelled'
-          ? 'cancelled'
-          : 'failed'
-    }
+    request.status = getRequestStatusForEvent(event, request.status)
     request.sequence += 1
     this.postMessage({
       source: 'ghostpilot-extension',
@@ -790,15 +762,15 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostPilotViewProvider.workspaceStateKey)
     const globalRecord: Record<string, unknown> = isStoredRecord(global) ? global : {}
     const workspaceRecord: Record<string, unknown> = isStoredRecord(workspace) ? workspace : {}
-    const state = {
+    const state = migratePersistedState({
       schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
       conversations: Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
       activeConversationId: typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
-      promptHistory: Array.isArray(globalRecord.promptHistory) ? globalRecord.promptHistory.filter(item => typeof item === 'string') : [],
+      promptHistory: globalRecord.promptHistory,
       presets: Array.isArray(globalRecord.presets) ? globalRecord.presets : [],
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
-    }
+    })
     return JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
   }
 
@@ -826,7 +798,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     const safeState = JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPilotPersistedState
     await this.globalState.update(GhostPilotViewProvider.globalStateKey, {
       schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
-      promptHistory: safeState.promptHistory?.slice(0, 100) ?? [],
+      promptHistory: normalizePromptHistory(safeState.promptHistory),
       presets: safeState.presets ?? [],
       showReasoning: safeState.showReasoning === true,
       preferences: safeState.preferences ?? {}

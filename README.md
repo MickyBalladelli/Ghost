@@ -48,6 +48,46 @@ There are no default keyboard shortcuts. Add your own in VS Code Keyboard Shortc
 
 In the Chat view, use `@local` to ask the local agent a question. Use `@workspace` plus a keyword to search workspace files and include matching code in the prompt. Attach files through the chat reference picker when more specific context is needed.
 
+## Interface guide
+
+The GhostPilot view has a provider and model strip, conversation sidebar, message log, and composer.
+
+- Press `Enter` to send. Press `Shift+Enter` for a new line.
+- Use **Context** to toggle workspace, folders, active file, selection, open files, and tools.
+- Use **Attach** to add text files to the current request. Attachments are not saved in conversation history.
+- Choose Ask, Edit, Agent, Explain, or Inline mode from **Controls**.
+- Enable thinking details, tool progress, diagnostics, compact layout, custom instructions, or a custom assistant identity in **Controls**.
+- File edits show a diff and need approval. Approved edits can be restored when the restore action is available.
+- Use the conversation sidebar to create, switch, rename, or remove conversations. Long conversations load older messages on demand.
+
+Keyboard-only use is supported. Focused controls show a visible outline. The view responds to high-contrast themes, reduced-motion settings, and narrow sidebars.
+
+## Customization and privacy
+
+Provider URLs, model defaults, context limits, temperature, response length, workflow mode, tool allow/deny lists, persistence, debug logging, and inline completion are available in VS Code settings or the **Controls** panel. Workspace-specific settings can override global settings.
+
+Persistence is off by default. When enabled, chat state is stored in VS Code storage with schema migration and common credential redaction. Debug logging is opt-in, local, structured, and telemetry-free. An external provider URL is shown in the interface so network scope is visible.
+
+## Troubleshooting
+
+- **Offline**: open **Controls**, confirm the provider URL, then use **Test provider connection**. For Ollama, check that the service is running and that the selected model is installed.
+- **No model**: refresh models, then select a discovered model. Check `GhostPilot: Check Required Models` for the recommended Ollama models.
+- **Empty or failed response**: verify the provider API mode and endpoint suffix. OpenAI-compatible servers normally use `/v1`; Ollama normally uses its base URL.
+- **Slow interface**: lower the context limit, disable automatic context, hide progress details, or use compact layout. Long histories are paginated.
+- **Tool blocked**: check the workspace tool allowlist and denylist. File edits and terminal commands still require approval.
+
+## Testing and release verification
+
+```bash
+npm run compile
+npm test
+npx vsce package --out ghostpilot-ai-1.0.12.vsix
+```
+
+Before release, open the VSIX in a clean Extension Development Host and manually verify light, dark, and high-contrast themes; Ask, Edit, Agent, and Explain; file attachments; workspace search; tool approval; diff review; cancellation; retry; multiline composer input; conversation switching; settings changes; and external endpoint status.
+
+See [the architecture guide](docs/architecture.md) for the host, webview, provider, agent, persistence, and approval flow.
+
 ## Configuration
 
 Settings are under `ghostpilot` in VS Code settings.
@@ -81,7 +121,7 @@ If an MLX server is detected at port 8000 while Ollama is unavailable, GhostPilo
 
 ```bash
 npm run vscode:prepublish
-npx vsce package --out ghostpilot-ai-1.0.0.vsix
+npx vsce package --out ghostpilot-ai-1.0.12.vsix
 ```
 
 Install the generated VSIX from the VS Code Extensions view using **Install from VSIX...**.

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
+import { TextDecoder } from 'node:util'
 import fetch, { type RequestInit, type Response } from 'node-fetch'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
@@ -160,9 +161,14 @@ function extractChunkText(chunk: MlxStreamChunk): string {
 
 export async function* streamSseTokens(body: NodeJS.ReadableStream): AsyncGenerator<string> {
   let buffer = ''
+  const decoder = new TextDecoder('utf-8', { fatal: true })
 
   for await (const chunk of body as AsyncIterable<Buffer | string>) {
-    buffer += chunk.toString()
+    try {
+      buffer += decoder.decode(typeof chunk === 'string' ? Buffer.from(chunk) : chunk, { stream: true })
+    } catch {
+      return
+    }
     buffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
     const events = buffer.split('\n\n')
@@ -193,6 +199,12 @@ export async function* streamSseTokens(body: NodeJS.ReadableStream): AsyncGenera
         yield text
       }
     }
+  }
+
+  try {
+    buffer += decoder.decode()
+  } catch {
+    return
   }
 
   const data = buffer

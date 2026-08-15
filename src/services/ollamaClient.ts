@@ -1,4 +1,5 @@
 import fetch, { type RequestInit, type Response } from 'node-fetch'
+import { TextDecoder } from 'node:util'
 
 import {
   MlxChatOptions,
@@ -161,9 +162,14 @@ function extractOllamaText(payload: OllamaCompletionResponse): string {
 
 export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
   let buffer = ''
+  const decoder = new TextDecoder('utf-8', { fatal: true })
 
   for await (const chunk of body as AsyncIterable<Buffer | string>) {
-    buffer += chunk.toString()
+    try {
+      buffer += decoder.decode(typeof chunk === 'string' ? Buffer.from(chunk) : chunk, { stream: true })
+    } catch {
+      return
+    }
     const lines = buffer.split(/\r?\n/)
     buffer = lines.pop() ?? ''
 
@@ -190,6 +196,12 @@ export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGener
         return
       }
     }
+  }
+
+  try {
+    buffer += decoder.decode()
+  } catch {
+    return
   }
 
   if (buffer.trim()) {

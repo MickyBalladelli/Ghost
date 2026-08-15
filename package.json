@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -389,7 +389,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package --out ghostpilot-ai-1.0.0.vsix",
+    "package": "vsce package --out ghostpilot-ai-1.0.12.vsix",
     "test": "npm run compile && node ./out/test/runTest.js"
   },
   "devDependencies": {

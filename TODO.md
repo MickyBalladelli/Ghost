@@ -332,13 +332,13 @@
 
 ### 9.12 Testing and Documentation for the New Interface
 
-- [ ] Add unit tests for message models, state transitions, message validation, prompt history, storage migrations, and stream event parsing.
-- [ ] Add tests for cancellation, retries, duplicate events, malformed tool calls, approval decisions, and provider failures.
-- [ ] Add webview tests for prompt submission, multiline input, streaming output, scrolling, attachments, settings, and conversation switching.
-- [ ] Add extension-host integration tests for webview messaging and request lifecycle behavior.
+- [x] Add unit tests for message models, state transitions, message validation, prompt history, storage migrations, and stream event parsing.
+- [x] Add tests for cancellation, retries, duplicate events, malformed tool calls, approval decisions, and provider failures.
+- [x] Add webview tests for prompt submission, multiline input, streaming output, attachments, and settings. Scrolling and conversation switching remain on the manual checklist.
+- [x] Add extension-host integration tests for webview messaging and request lifecycle behavior.
 - [ ] Manually verify the interface in light, dark, and high-contrast VS Code themes.
 - [ ] Manually verify Ask, Edit, Agent, Explain, file attachment, workspace search, tool approval, diff review, cancellation, and retry flows.
-- [ ] Update `README.md` with screenshots, interface usage, commands, customization, privacy, and troubleshooting.
-- [ ] Add an architecture document describing the webview, extension host, provider clients, agent controller, and tool approval flow.
-- [ ] Update `CHANGELOG.md` when the full interface is released.
+- [x] Update `README.md` with interface usage, commands, customization, privacy, and troubleshooting. Add screenshots during manual VS Code verification.
+- [x] Add an architecture document describing the webview, extension host, provider clients, agent controller, and tool approval flow.
+- [x] Update `CHANGELOG.md` when the full interface is released.
 - [ ] Package and install the extension, then verify the UI in a clean Extension Development Host.
