@@ -67,6 +67,26 @@
           "type": "boolean",
           "default": true,
           "description": "Enable LocalPilot inline code completions."
+        },
+        "localpilot.provider": {
+          "type": "string",
+          "enum": [
+            "ollama",
+            "mlx-vlm",
+            "openai-compatible"
+          ],
+          "enumDescriptions": [
+            "Use the Ollama API.",
+            "Use an MLX VLM OpenAI-compatible server.",
+            "Use another OpenAI-compatible server."
+          ],
+          "default": "ollama",
+          "description": "LocalPilot model provider."
+        },
+        "localpilot.mlxUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "MLX VLM server URL."
         }
       }
     },
