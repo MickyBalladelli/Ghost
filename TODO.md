@@ -157,15 +157,15 @@
 
 ## 🧪 Phase 7: Testing & Polishing
 
-- [ ] **7.1 Unit & Integration Tests**
-  - [ ] Write unit tests for Ollama stream parsing (`src/test/suite/ollamaClient.test.ts`).
-  - [ ] Write tests for FIM prompt builder and debouncer.
-  - [ ] Test context window truncation logic to prevent model context overflow.
+- [x] **7.1 Unit & Integration Tests**
+  - [x] Write unit tests for Ollama stream parsing (`src/test/suite/ollamaClient.test.ts`).
+  - [x] Write tests for FIM prompt builder and debouncer.
+  - [x] Test context window truncation logic to prevent model context overflow.
 
-- [ ] **7.2 Error Handling & Edge Cases**
-  - [ ] Gracefully handle Ollama connection timeouts / model crashes.
-  - [ ] Ensure non-UTF8 binary files are ignored during context extraction.
-  - [ ] Implement response cancellation handling when user closes chat tab.
+- [x] **7.2 Error Handling & Edge Cases**
+  - [x] Gracefully handle Ollama connection timeouts / model crashes.
+  - [x] Ensure non-UTF8 binary files are ignored during context extraction.
+  - [x] Implement response cancellation handling when user closes chat tab.
 
 ---
 
