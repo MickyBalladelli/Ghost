@@ -70,15 +70,15 @@
 
 ## 🔌 Phase 2: Local LLM Infrastructure & API Client
 
-- [ ] **2.1 Implement Ollama / OpenAI-Compatible API Wrapper**
-  - [ ] Create `src/services/ollamaClient.ts`.
-  - [ ] Implement `checkHealth(baseUrl: string): Promise<boolean>` to test Ollama connectivity.
-  - [ ] Implement `listModels(baseUrl: string): Promise<string[]>` to fetch available local models.
-  - [ ] Implement `streamChatCompletion`:
-    - Support standard `/v1/chat/completions` or Ollama's native `/api/chat`.
-    - Accept system prompt, message history, temperature, and stream flags.
-    - Yield chunks as `AsyncGenerator<string>`.
-  - [ ] Implement `fetchFimCompletion` (Fill-In-the-Middle) for inline code autocompletion.
+- [x] **2.1 Implement Ollama / OpenAI-Compatible API Wrapper**
+  - [x] Create `src/services/ollamaClient.ts`.
+  - [x] Implement `checkHealth(baseUrl: string): Promise<boolean>` to test Ollama connectivity.
+  - [x] Implement `listModels(baseUrl: string): Promise<string[]>` to fetch available local models.
+  - [x] Implement `streamChatCompletion`:
+    - [x] Support standard `/v1/chat/completions` or Ollama's native `/api/chat`.
+    - [x] Accept system prompt, message history, temperature, and stream flags.
+    - [x] Yield chunks as `AsyncGenerator<string>`.
+  - [x] Implement `fetchFimCompletion` (Fill-In-the-Middle) for inline code autocompletion.
 
 - [ ] **2.2 Settings & Configuration Manager**
   - [ ] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('localpilot')`.
