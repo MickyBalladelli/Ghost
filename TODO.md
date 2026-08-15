@@ -88,18 +88,18 @@
 
 ## ⚡ Phase 3: Copilot-Style Inline Code Completion
 
-- [ ] **3.1 Create Inline Completion Provider**
-  - [ ] Create `src/providers/inlineCompletionProvider.ts`.
-  - [ ] Implement `vscode.InlineCompletionItemProvider`:
-    - Extract prefix text (lines above cursor) and suffix text (lines below cursor).
-    - Implement debouncing (e.g., 250ms–400ms delay) to avoid over-querying local GPU.
-    - Format prompt using FIM tags (e.g., `<PRE>`, `<SUF>`, `<MID>` for Qwen/StarCoder GGUFs).
-    - Call `fetchFimCompletion` using the lightweight fast model (`qwen2.5-coder:1.5b`).
-    - Return `vscode.InlineCompletionItem` with the predicted continuation code.
+- [x] **3.1 Create Inline Completion Provider**
+  - [x] Create `src/providers/inlineCompletionProvider.ts`.
+  - [x] Implement `vscode.InlineCompletionItemProvider`:
+    - [x] Extract prefix text (lines above cursor) and suffix text (lines below cursor).
+    - [x] Implement debouncing (e.g., 250ms–400ms delay) to avoid over-querying local GPU.
+    - [x] Format prompt using FIM tags (e.g., `<PRE>`, `<SUF>`, `<MID>` for Qwen/StarCoder GGUFs).
+    - [x] Call `fetchFimCompletion` using the lightweight fast model (`qwen2.5-coder:1.5b`).
+    - [x] Return `vscode.InlineCompletionItem` with the predicted continuation code.
 
-- [ ] **3.2 Register Inline Provider in Extension Activation**
-  - [ ] Register provider for all languages: `vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider)`.
-  - [ ] Add command to enable/disable autocompletion dynamically from status bar.
+- [x] **3.2 Register Inline Provider in Extension Activation**
+  - [x] Register provider for all languages: `vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider)`.
+  - [x] Add command to enable/disable autocompletion dynamically from status bar.
 
 ---
 
