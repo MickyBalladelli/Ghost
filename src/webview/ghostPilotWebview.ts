@@ -26,6 +26,11 @@ interface PromptPreset {
 
 interface ControlSettings {
   provider: GhostPilotProvider
+  ollamaUrl: string
+  mlxUrl: string
+  openaiUrl: string
+  toolAllowlist: string[]
+  toolDenylist: string[]
   chatModel: string
   autocompleteModel: string
   maxContextTokens: number
@@ -33,6 +38,20 @@ interface ControlSettings {
   responseLength: ResponseLength
   mode: GhostPilotMode
   enableConversationPersistence: boolean
+}
+
+interface UiPreferences {
+  assistantName: string
+  assistantAvatar: string
+  accentColor: string
+  compactLayout: boolean
+  showThinkingDetails: boolean
+  showToolProgress: boolean
+  showDiagnostics: boolean
+  autoContext: boolean
+  customSystemInstructions: string
+  composerHeight: number
+  workspaceOnly: boolean
 }
 
 interface ContextData {
@@ -93,7 +112,7 @@ interface GhostPilotState {
   promptHistory?: string[]
   presets?: PromptPreset[]
   showReasoning?: boolean
-  preferences?: Partial<ControlSettings>
+  preferences?: Partial<ControlSettings> & Partial<UiPreferences>
 }
 
 type GhostPilotExtensionMessage =
@@ -200,6 +219,7 @@ interface WebviewRequestOptions {
   maxTokens?: number
   mode: GhostPilotMode
   showReasoning: boolean
+  customSystemInstructions: string
   context: {
     workspace: boolean
     folders: boolean
@@ -327,6 +347,11 @@ let notice: { kind: NoticeKind; message: string } | undefined
 let userIsAtBottom = true
 let controls: ControlSettings = {
   provider: 'ollama',
+  ollamaUrl: 'http://localhost:11434',
+  mlxUrl: 'http://localhost:8000',
+  openaiUrl: 'http://localhost:8001/v1',
+  toolAllowlist: [],
+  toolDenylist: [],
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   maxContextTokens: 8192,
@@ -359,6 +384,19 @@ let contextEnabled = {
 }
 let attachments: Attachment[] = []
 let composerHeight = 180
+let uiPreferences: UiPreferences = {
+  assistantName: 'GhostPilot',
+  assistantAvatar: '✦',
+  accentColor: '',
+  compactLayout: false,
+  showThinkingDetails: true,
+  showToolProgress: true,
+  showDiagnostics: false,
+  autoContext: true,
+  customSystemInstructions: '',
+  composerHeight,
+  workspaceOnly: false
+}
 let persistenceReady = false
 let persistenceTimer: number | undefined
 let historyIndex = -1
@@ -470,8 +508,32 @@ app.innerHTML = `
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
           <label for="composer-height">Composer size</label>
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
+          <label for="provider-endpoint">Provider endpoint</label>
+          <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
+          <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
+          <button type="button" id="test-provider">Test provider connection</button>
+          <label for="tool-allowlist">Allowed tools</label>
+          <input id="tool-allowlist" type="text" placeholder="ghostpilot_read_file, ghostpilot_apply_edit">
+          <label for="tool-denylist">Denied tools</label>
+          <input id="tool-denylist" type="text" placeholder="ghostpilot_run_terminal_command">
+          <label for="assistant-name">Assistant name</label>
+          <input id="assistant-name" type="text" maxlength="40" value="GhostPilot">
+          <label for="assistant-avatar">Assistant avatar</label>
+          <input id="assistant-avatar" type="text" maxlength="4" value="✦">
+          <label for="accent-color">Accent color</label>
+          <input id="accent-color" type="color" value="#3794ff">
           <label class="settings-checkbox" for="show-reasoning"><input id="show-reasoning" type="checkbox"> Show provider reasoning when explicitly returned</label>
           <label class="settings-checkbox" for="persist-conversations"><input id="persist-conversations" type="checkbox"> Save conversations and preferences in VS Code storage</label>
+          <label class="settings-checkbox" for="compact-layout"><input id="compact-layout" type="checkbox"> Compact conversation layout</label>
+          <label class="settings-checkbox" for="show-thinking"><input id="show-thinking" type="checkbox"> Show thinking details</label>
+          <label class="settings-checkbox" for="show-tool-progress"><input id="show-tool-progress" type="checkbox"> Show tool progress</label>
+          <label class="settings-checkbox" for="show-diagnostics"><input id="show-diagnostics" type="checkbox"> Show telemetry-free diagnostics</label>
+          <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
+          <label class="settings-checkbox" for="workspace-settings"><input id="workspace-settings" type="checkbox"> Use workspace-specific settings</label>
+          <label for="system-instructions">Custom system instructions</label>
+          <textarea id="system-instructions" rows="4" maxlength="8000" placeholder="Optional instructions for GhostPilot"></textarea>
+          <button type="button" class="secondary" id="reset-system-instructions">Reset system instructions</button>
+          <p class="settings-help">These instructions are sent to the selected model. Do not put secrets here.</p>
         </div>
         <div class="preset-section">
           <div class="modal-subheader"><h3>Prompt presets</h3><button type="button" class="context-button" id="new-preset">New</button></div>
@@ -525,8 +587,24 @@ const maxContextElement = document.getElementById('max-context') as HTMLInputEle
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
 const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
+const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
+const providerHelpElement = document.getElementById('provider-help') as HTMLElement
+const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
+const toolAllowlistElement = document.getElementById('tool-allowlist') as HTMLInputElement
+const toolDenylistElement = document.getElementById('tool-denylist') as HTMLInputElement
+const assistantNameElement = document.getElementById('assistant-name') as HTMLInputElement
+const assistantAvatarElement = document.getElementById('assistant-avatar') as HTMLInputElement
+const accentColorElement = document.getElementById('accent-color') as HTMLInputElement
 const showReasoningElement = document.getElementById('show-reasoning') as HTMLInputElement
 const persistenceElement = document.getElementById('persist-conversations') as HTMLInputElement
+const compactLayoutElement = document.getElementById('compact-layout') as HTMLInputElement
+const showThinkingElement = document.getElementById('show-thinking') as HTMLInputElement
+const showToolProgressElement = document.getElementById('show-tool-progress') as HTMLInputElement
+const showDiagnosticsElement = document.getElementById('show-diagnostics') as HTMLInputElement
+const autoContextElement = document.getElementById('auto-context') as HTMLInputElement
+const workspaceSettingsElement = document.getElementById('workspace-settings') as HTMLInputElement
+const systemInstructionsElement = document.getElementById('system-instructions') as HTMLTextAreaElement
+const resetSystemInstructionsElement = document.getElementById('reset-system-instructions') as HTMLButtonElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
@@ -555,6 +633,11 @@ const createPersistedState = () => ({
   showReasoning,
   preferences: {
     provider: controls.provider,
+    ollamaUrl: controls.ollamaUrl,
+    mlxUrl: controls.mlxUrl,
+    openaiUrl: controls.openaiUrl,
+    toolAllowlist: controls.toolAllowlist,
+    toolDenylist: controls.toolDenylist,
     chatModel: controls.chatModel,
     autocompleteModel: controls.autocompleteModel,
     maxContextTokens: controls.maxContextTokens,
@@ -562,7 +645,17 @@ const createPersistedState = () => ({
     responseLength: controls.responseLength,
     mode: controls.mode,
     enableConversationPersistence: controls.enableConversationPersistence,
-    composerHeight
+    composerHeight,
+    assistantName: uiPreferences.assistantName,
+    assistantAvatar: uiPreferences.assistantAvatar,
+    accentColor: uiPreferences.accentColor,
+    compactLayout: uiPreferences.compactLayout,
+    showThinkingDetails: uiPreferences.showThinkingDetails,
+    showToolProgress: uiPreferences.showToolProgress,
+    showDiagnostics: uiPreferences.showDiagnostics,
+    autoContext: uiPreferences.autoContext,
+    customSystemInstructions: uiPreferences.customSystemInstructions,
+    workspaceOnly: uiPreferences.workspaceOnly
   }
 })
 
@@ -617,14 +710,33 @@ const sendSettingsUpdate = () => {
     ...lifecycleEnvelope('settings'),
     settings: {
       provider: controls.provider,
+      ollamaUrl: controls.ollamaUrl,
+      mlxUrl: controls.mlxUrl,
+      openaiUrl: controls.openaiUrl,
+      toolAllowlist: controls.toolAllowlist,
+      toolDenylist: controls.toolDenylist,
       chatModel: controls.chatModel,
       maxContextTokens: controls.maxContextTokens,
       temperature: controls.temperature,
       responseLength: controls.responseLength,
       mode: controls.mode,
-      enableConversationPersistence: controls.enableConversationPersistence
+      enableConversationPersistence: controls.enableConversationPersistence,
+      workspaceOnly: uiPreferences.workspaceOnly
     }
   })
+}
+
+const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
+  ? controls.mlxUrl
+  : controls.provider === 'openai-compatible'
+    ? controls.openaiUrl
+    : controls.ollamaUrl
+
+const applyUiPreferences = () => {
+  const accent = /^#[0-9a-f]{6}$/i.test(uiPreferences.accentColor) ? uiPreferences.accentColor : ''
+  document.documentElement.style.setProperty('--ghostpilot-accent', accent || 'var(--vscode-textLink-foreground, #3794ff)')
+  document.body.classList.toggle('compact-layout', uiPreferences.compactLayout)
+  document.title = uiPreferences.assistantName || 'GhostPilot'
 }
 
 const renderControls = () => {
@@ -643,8 +755,27 @@ const renderControls = () => {
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
   composerHeightElement.value = String(composerHeight)
+  providerEndpointElement.value = providerEndpoint()
+  providerHelpElement.textContent = controls.provider === 'mlx-vlm'
+    ? 'MLX VLM OpenAI-compatible endpoint.'
+    : controls.provider === 'openai-compatible'
+      ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
+      : 'Ollama endpoint.'
+  toolAllowlistElement.value = controls.toolAllowlist.join(', ')
+  toolDenylistElement.value = controls.toolDenylist.join(', ')
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
+  assistantNameElement.value = uiPreferences.assistantName
+  assistantAvatarElement.value = uiPreferences.assistantAvatar
+  accentColorElement.value = /^#[0-9a-f]{6}$/i.test(uiPreferences.accentColor) ? uiPreferences.accentColor : '#3794ff'
+  compactLayoutElement.checked = uiPreferences.compactLayout
+  showThinkingElement.checked = uiPreferences.showThinkingDetails
+  showToolProgressElement.checked = uiPreferences.showToolProgress
+  showDiagnosticsElement.checked = uiPreferences.showDiagnostics
+  autoContextElement.checked = uiPreferences.autoContext
+  systemInstructionsElement.value = uiPreferences.customSystemInstructions
+  workspaceSettingsElement.checked = uiPreferences.workspaceOnly
+  applyUiPreferences()
   connectionIndicatorElement.classList.toggle('online', connection === 'online')
   connectionIndicatorElement.classList.toggle('offline', connection === 'offline')
   connectionTextElement.textContent = connection === 'online'
@@ -774,7 +905,15 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
   maxTokens: maxTokensForLength(controls.responseLength),
   mode: controls.mode,
   showReasoning,
-  context: { ...contextEnabled }
+  customSystemInstructions: uiPreferences.customSystemInstructions,
+  context: uiPreferences.autoContext ? { ...contextEnabled } : {
+    workspace: false,
+    folders: false,
+    activeFile: false,
+    selection: false,
+    openFiles: false,
+    tools: contextEnabled.tools
+  }
 })
 
 const addAttachment = (attachment: Attachment) => {
@@ -1099,7 +1238,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
       ? 'Waiting for approval...'
       : ''
   article.innerHTML = `
-    <div class="message-header"><strong>${message.role === 'user' ? 'You' : 'GhostPilot'}</strong><span class="message-state">${messageState}</span></div>
+    <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'GhostPilot')}`}</strong><span class="message-state">${messageState}</span></div>
     <div class="message-body">${renderMarkdown(message.content)}</div>
     ${partSummary}
     <div class="message-actions" aria-label="Message actions"></div>
@@ -1126,10 +1265,10 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   const toolParts = parts.filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
   const warningParts = parts.filter((part): part is Extract<MessagePart, { kind: 'warning' }> => part.kind === 'warning')
   const errorParts = parts.filter((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
-  const renderedProgress = progressParts.length > 0
+  const renderedProgress = uiPreferences.showThinkingDetails && progressParts.length > 0
     ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
     : ''
-  const renderedTools = toolParts.map(part => {
+  const renderedTools = uiPreferences.showToolProgress ? toolParts.map(part => {
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
     const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
     const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''
@@ -1158,7 +1297,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<div class="tool-result-actions">${fileAction}${restoreAction}${selectedHunkAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>` : ''}</div>`
       : ''
     return `<div class="message-progress tool-progress"><strong>${escapeHtml(part.toolCall.name)}</strong> · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
-  }).join('')
+  }).join('') : ''
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
   return `<div class="message-part-summary">${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
@@ -1300,7 +1439,8 @@ const updateStatus = () => {
     const telemetry = activeRequest.tokenCount > 0
       ? ` · ~${activeRequest.tokenCount} tok${activeRequest.tokensPerSecond ? ` · ~${activeRequest.tokensPerSecond.toFixed(1)} tok/s` : ''}`
       : ''
-    statusTextElement.textContent = `${statusLabels[activeRequest.status]} · ${activeRequest.model} · ${elapsed}${telemetry}`
+    const diagnostics = uiPreferences.showDiagnostics && activeRequest.latestDetail ? ` · ${activeRequest.latestDetail}` : ''
+    statusTextElement.textContent = `${statusLabels[activeRequest.status]} · ${activeRequest.model} · ${elapsed}${telemetry}${diagnostics}`
     screenReaderStatusElement.textContent = activeRequest.latestDetail || statusLabels[activeRequest.status]
   } else if (viewStatus === 'offline') {
     statusTextElement.textContent = 'Offline'
@@ -1649,9 +1789,55 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
       if (typeof preferences.enableConversationPersistence === 'boolean') {
         controls.enableConversationPersistence = preferences.enableConversationPersistence
       }
+      if (typeof preferences.ollamaUrl === 'string') {
+        controls.ollamaUrl = preferences.ollamaUrl
+      }
+      if (typeof preferences.mlxUrl === 'string') {
+        controls.mlxUrl = preferences.mlxUrl
+      }
+      if (typeof preferences.openaiUrl === 'string') {
+        controls.openaiUrl = preferences.openaiUrl
+      }
+      if (Array.isArray(preferences.toolAllowlist)) {
+        controls.toolAllowlist = preferences.toolAllowlist.filter((item): item is string => typeof item === 'string')
+      }
+      if (Array.isArray(preferences.toolDenylist)) {
+        controls.toolDenylist = preferences.toolDenylist.filter((item): item is string => typeof item === 'string')
+      }
       if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
         composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
       }
+      if (typeof preferences.assistantName === 'string') {
+        uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
+      }
+      if (typeof preferences.assistantAvatar === 'string') {
+        uiPreferences.assistantAvatar = preferences.assistantAvatar.slice(0, 4)
+      }
+      if (typeof preferences.accentColor === 'string' && /^#[0-9a-f]{6}$/i.test(preferences.accentColor)) {
+        uiPreferences.accentColor = preferences.accentColor
+      }
+      if (typeof preferences.compactLayout === 'boolean') {
+        uiPreferences.compactLayout = preferences.compactLayout
+      }
+      if (typeof preferences.showThinkingDetails === 'boolean') {
+        uiPreferences.showThinkingDetails = preferences.showThinkingDetails
+      }
+      if (typeof preferences.showToolProgress === 'boolean') {
+        uiPreferences.showToolProgress = preferences.showToolProgress
+      }
+      if (typeof preferences.showDiagnostics === 'boolean') {
+        uiPreferences.showDiagnostics = preferences.showDiagnostics
+      }
+      if (typeof preferences.autoContext === 'boolean') {
+        uiPreferences.autoContext = preferences.autoContext
+      }
+      if (typeof preferences.customSystemInstructions === 'string') {
+        uiPreferences.customSystemInstructions = preferences.customSystemInstructions.slice(0, 8000)
+      }
+      if (typeof preferences.workspaceOnly === 'boolean') {
+        uiPreferences.workspaceOnly = preferences.workspaceOnly
+      }
+      uiPreferences.composerHeight = composerHeight
     } else if (!controls.enableConversationPersistence) {
       state = {
         schemaVersion: persistenceSchemaVersion,
@@ -2089,9 +2275,35 @@ providerElement.addEventListener('change', () => {
   post('refresh-models')
 })
 
+providerEndpointElement.addEventListener('change', () => {
+  const endpoint = providerEndpointElement.value.trim()
+  if (!endpoint) {
+    renderControls()
+    return
+  }
+  if (controls.provider === 'mlx-vlm') {
+    controls.mlxUrl = endpoint
+  } else if (controls.provider === 'openai-compatible') {
+    controls.openaiUrl = endpoint
+  } else {
+    controls.ollamaUrl = endpoint
+  }
+  sendSettingsUpdate()
+  post('refresh-models')
+})
+testProviderElement.addEventListener('click', () => post('test-provider'))
+const readToolNames = (value: string): string[] => [...new Set(value.split(',').map(item => item.trim()).filter(Boolean))].slice(0, 20)
+const updateToolPermissions = () => {
+  controls.toolAllowlist = readToolNames(toolAllowlistElement.value)
+  controls.toolDenylist = readToolNames(toolDenylistElement.value)
+  sendSettingsUpdate()
+  saveState()
+}
+toolAllowlistElement.addEventListener('change', updateToolPermissions)
+toolDenylistElement.addEventListener('change', updateToolPermissions)
+
 modelElement.addEventListener('change', () => {
   controls.chatModel = modelElement.value
-  post('select-model', { ...lifecycleEnvelope('select-model'), model: controls.chatModel })
   sendSettingsUpdate()
 })
 
@@ -2125,6 +2337,60 @@ showReasoningElement.addEventListener('change', () => {
 })
 persistenceElement.addEventListener('change', () => {
   controls.enableConversationPersistence = persistenceElement.checked
+  sendSettingsUpdate()
+  saveState()
+})
+assistantNameElement.addEventListener('input', () => {
+  uiPreferences.assistantName = assistantNameElement.value.slice(0, 40)
+  renderMessages(false)
+  saveState()
+})
+assistantAvatarElement.addEventListener('input', () => {
+  uiPreferences.assistantAvatar = assistantAvatarElement.value.slice(0, 4)
+  renderMessages(false)
+  saveState()
+})
+accentColorElement.addEventListener('input', () => {
+  uiPreferences.accentColor = accentColorElement.value
+  applyUiPreferences()
+  saveState()
+})
+compactLayoutElement.addEventListener('change', () => {
+  uiPreferences.compactLayout = compactLayoutElement.checked
+  applyUiPreferences()
+  saveState()
+})
+showThinkingElement.addEventListener('change', () => {
+  uiPreferences.showThinkingDetails = showThinkingElement.checked
+  renderMessages(false)
+  saveState()
+})
+showToolProgressElement.addEventListener('change', () => {
+  uiPreferences.showToolProgress = showToolProgressElement.checked
+  renderMessages(false)
+  saveState()
+})
+showDiagnosticsElement.addEventListener('change', () => {
+  uiPreferences.showDiagnostics = showDiagnosticsElement.checked
+  updateStatus()
+  saveState()
+})
+autoContextElement.addEventListener('change', () => {
+  uiPreferences.autoContext = autoContextElement.checked
+  renderControls()
+  saveState()
+})
+systemInstructionsElement.addEventListener('input', () => {
+  uiPreferences.customSystemInstructions = systemInstructionsElement.value.slice(0, 8000)
+  saveState()
+})
+resetSystemInstructionsElement.addEventListener('click', () => {
+  uiPreferences.customSystemInstructions = ''
+  systemInstructionsElement.value = ''
+  saveState()
+})
+workspaceSettingsElement.addEventListener('change', () => {
+  uiPreferences.workspaceOnly = workspaceSettingsElement.checked
   sendSettingsUpdate()
   saveState()
 })

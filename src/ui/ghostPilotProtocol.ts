@@ -40,6 +40,7 @@ export interface GhostPilotWebviewRequestOptions {
   mode?: GhostPilotMode
   context?: Partial<Record<GhostPilotContextKey, boolean>>
   showReasoning?: boolean
+  customSystemInstructions?: string
 }
 
 export interface GhostPilotSettingsUpdate {
@@ -51,6 +52,12 @@ export interface GhostPilotSettingsUpdate {
   responseLength?: GhostPilotResponseLength
   mode?: GhostPilotMode
   enableConversationPersistence?: boolean
+  ollamaUrl?: string
+  mlxUrl?: string
+  openaiUrl?: string
+  workspaceOnly?: boolean
+  toolAllowlist?: string[]
+  toolDenylist?: string[]
 }
 
 export interface GhostPilotPersistedState {
@@ -75,7 +82,7 @@ interface GhostPilotRequestEnvelope extends GhostPilotWebviewEnvelope {
 
 export type GhostPilotWebviewMessage =
   | (GhostPilotWebviewEnvelope & { type: 'ready' })
-  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' })
+  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' })
   | (GhostPilotWebviewEnvelope & { type: 'export'; state?: GhostPilotPersistedState })
   | (GhostPilotWebviewEnvelope & { type: 'persist-state'; state: GhostPilotPersistedState })
   | (GhostPilotRequestEnvelope & {
@@ -140,6 +147,11 @@ export type GhostPilotExtensionMessage =
         responseLength: GhostPilotResponseLength
         mode: GhostPilotMode
         enableConversationPersistence: boolean
+        ollamaUrl: string
+        mlxUrl: string
+        openaiUrl: string
+        toolAllowlist: string[]
+        toolDenylist: string[]
       }
       models: string[]
       connection: 'online' | 'offline' | 'unknown'
@@ -201,6 +213,7 @@ const isOptions = (value: unknown): value is GhostPilotWebviewRequestOptions => 
     (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||
     (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') ||
     (value.showReasoning !== undefined && typeof value.showReasoning !== 'boolean') ||
+    (value.customSystemInstructions !== undefined && typeof value.customSystemInstructions !== 'string') ||
     (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false
@@ -221,6 +234,12 @@ const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => 
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean')
+    && (value.ollamaUrl === undefined || typeof value.ollamaUrl === 'string')
+    && (value.mlxUrl === undefined || typeof value.mlxUrl === 'string')
+    && (value.openaiUrl === undefined || typeof value.openaiUrl === 'string')
+    && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
+    && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.every(item => typeof item === 'string')))
+    && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.every(item => typeof item === 'string')))
   )
 }
 
@@ -229,7 +248,7 @@ export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotW
     return false
   }
 
-  if (['ready', 'reset', 'clear', 'import', 'check-status', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
+  if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
     return true
   }
   if (value.type === 'export') {

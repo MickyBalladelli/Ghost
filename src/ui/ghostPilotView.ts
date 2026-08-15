@@ -879,7 +879,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     try {
       const client = settings.provider === 'mlx-vlm'
         ? new MlxClient(settings.mlxUrl)
-        : new OllamaClient(settings.ollamaUrl, settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto')
+        : new OllamaClient(
+            settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
+            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+          )
       const online = await client.checkHealth(1500)
       connection = online ? 'online' : 'offline'
       if (online) {
@@ -918,7 +921,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         temperature: settings.temperature,
         responseLength: settings.responseLength,
         mode: settings.mode,
-        enableConversationPersistence: settings.enableConversationPersistence
+        enableConversationPersistence: settings.enableConversationPersistence,
+        ollamaUrl: settings.ollamaUrl,
+        mlxUrl: settings.mlxUrl,
+        openaiUrl: settings.openaiUrl,
+        toolAllowlist: settings.toolAllowlist ?? [...GHOSTPILOT_TOOL_NAMES],
+        toolDenylist: settings.toolDenylist ?? []
       },
       models,
       connection,
@@ -932,30 +940,63 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     })
   }
 
+  private async testProvider(): Promise<void> {
+    const settings = getGhostPilotSettings()
+    const client = settings.provider === 'mlx-vlm'
+      ? new MlxClient(settings.mlxUrl)
+      : new OllamaClient(
+          settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+        )
+    const online = await client.checkHealth(3000)
+    if (online) {
+      await vscode.window.showInformationMessage(`${settings.provider} provider is reachable.`)
+    } else {
+      await vscode.window.showErrorMessage(`${settings.provider} provider is not reachable.`)
+    }
+    await this.sendControlsState()
+  }
+
   private async updateSettings(update: GhostPilotSettingsUpdate): Promise<void> {
+    const target = update.workspaceOnly ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global
+    if (typeof update.ollamaUrl === 'string' && update.ollamaUrl.trim()) {
+      await ghostPilotConfig.update('ollamaUrl', update.ollamaUrl.trim(), target)
+    }
+    if (typeof update.mlxUrl === 'string' && update.mlxUrl.trim()) {
+      await ghostPilotConfig.update('mlxUrl', update.mlxUrl.trim(), target)
+    }
+    if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
+      await ghostPilotConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+    }
+    if (Array.isArray(update.toolAllowlist)) {
+      await ghostPilotConfig.update('toolAllowlist', update.toolAllowlist, target)
+    }
+    if (Array.isArray(update.toolDenylist)) {
+      await ghostPilotConfig.update('toolDenylist', update.toolDenylist, target)
+    }
     if (update.provider) {
-      await ghostPilotConfig.update('provider', update.provider)
+      await ghostPilotConfig.update('provider', update.provider, target)
     }
     if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
-      await ghostPilotConfig.update('chatModel', update.chatModel.trim())
+      await ghostPilotConfig.update('chatModel', update.chatModel.trim(), target)
     }
     if (typeof update.autocompleteModel === 'string' && update.autocompleteModel.trim()) {
-      await ghostPilotConfig.update('autocompleteModel', update.autocompleteModel.trim())
+      await ghostPilotConfig.update('autocompleteModel', update.autocompleteModel.trim(), target)
     }
     if (typeof update.maxContextTokens === 'number' && Number.isFinite(update.maxContextTokens)) {
-      await ghostPilotConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)))
+      await ghostPilotConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)), target)
     }
     if (typeof update.temperature === 'number' && Number.isFinite(update.temperature)) {
-      await ghostPilotConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)))
+      await ghostPilotConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)), target)
     }
     if (update.responseLength) {
-      await ghostPilotConfig.update('responseLength', update.responseLength)
+      await ghostPilotConfig.update('responseLength', update.responseLength, target)
     }
     if (update.mode) {
-      await ghostPilotConfig.update('mode', update.mode)
+      await ghostPilotConfig.update('mode', update.mode, target)
     }
     if (typeof update.enableConversationPersistence === 'boolean') {
-      await ghostPilotConfig.update('enableConversationPersistence', update.enableConversationPersistence)
+      await ghostPilotConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)
       if (!update.enableConversationPersistence) {
         await this.clearPersistedState()
       }
@@ -1051,6 +1092,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         return
       case 'check-status':
         await vscode.commands.executeCommand('ghostpilot.checkOllamaStatus')
+        return
+      case 'test-provider':
+        await this.testProvider()
         return
       case 'submit':
         await this.submit(value.requestId, value.conversationId, value.prompt, value.options, value.attachments)
@@ -1524,6 +1568,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .settings-grid input,
       .settings-grid select,
+      .settings-grid textarea,
       .preset-section input,
       .preset-section textarea,
       #history-search {
@@ -1533,6 +1578,23 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .settings-checkbox input {
         width: auto;
+      }
+
+      .settings-help {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        grid-column: 1 / -1;
+        margin: -4px 0 2px;
+      }
+
+      .compact-layout .message {
+        margin-bottom: 8px;
+      }
+
+      .compact-layout .message.user,
+      .compact-layout .message-body {
+        padding-bottom: 5px;
+        padding-top: 5px;
       }
 
       .preset-section {

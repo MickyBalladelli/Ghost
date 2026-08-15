@@ -57,10 +57,23 @@ Settings are under `ghostpilot` in VS Code settings.
 | `ghostpilot.provider` | `ollama` | Provider: `ollama`, `mlx-vlm`, or `openai-compatible`. |
 | `ghostpilot.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghostpilot.mlxUrl` | `http://localhost:8000` | MLX VLM or compatible server URL. |
+| `ghostpilot.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
 | `ghostpilot.chatModel` | `qwen2.5-coder:7b` | Model used for chat. |
 | `ghostpilot.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
 | `ghostpilot.maxContextTokens` | `8192` | Maximum context budget sent to the model. |
 | `ghostpilot.enableInlineCompletions` | `true` | Master switch for inline completion. |
+| `ghostpilot.enableConversationPersistence` | `false` | Save conversations and preferences in VS Code storage. Enable only when wanted. |
+| `ghostpilot.toolAllowlist` / `ghostpilot.toolDenylist` | — | Control which agent tools can run in the workspace. |
+
+The **Controls** panel also changes context collection, response length, temperature, workflow mode, provider endpoint, assistant appearance, thinking/tool progress visibility, custom system instructions, and composer size. Enable workspace-specific settings when a project needs different provider or model defaults.
+
+Privacy notes:
+
+- Persistence is off by default. When enabled, conversations stay in VS Code global/workspace storage.
+- Attachments are used for the current request and are not saved in conversation state.
+- Custom system instructions are sent to the selected provider with each request.
+- GhostPilot has no telemetry service. Provider requests go only to the configured endpoint.
+- Larger context limits and tool progress use more memory; tool allow/deny settings control agent permissions.
 
 If an MLX server is detected at port 8000 while Ollama is unavailable, GhostPilot reports that `mlx-vlm` may be a better provider choice.
 

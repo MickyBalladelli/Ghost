@@ -16,6 +16,7 @@ export const GHOSTPILOT_TOOL_NAMES = [
 
 export interface GhostPilotSettings {
   ollamaUrl: string
+  openaiUrl: string
   chatModel: string
   autocompleteModel: string
   maxContextTokens: number
@@ -34,6 +35,7 @@ export type GhostPilotSetting = keyof GhostPilotSettings
 
 export const DEFAULT_GHOSTPILOT_SETTINGS: Readonly<GhostPilotSettings> = {
   ollamaUrl: 'http://localhost:11434',
+  openaiUrl: 'http://localhost:8001/v1',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   maxContextTokens: 8192,
@@ -59,6 +61,7 @@ export class GhostPilotConfig {
 
     return {
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOSTPILOT_SETTINGS.ollamaUrl),
+      openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOSTPILOT_SETTINGS.openaiUrl),
       chatModel: configuration.get('chatModel', DEFAULT_GHOSTPILOT_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOSTPILOT_SETTINGS.autocompleteModel),
       maxContextTokens: configuration.get('maxContextTokens', DEFAULT_GHOSTPILOT_SETTINGS.maxContextTokens),

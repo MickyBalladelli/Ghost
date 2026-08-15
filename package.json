@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -104,6 +104,11 @@
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
         },
+        "ghostpilot.openaiUrl": {
+          "type": "string",
+          "default": "http://localhost:8001/v1",
+          "description": "OpenAI-compatible model server URL."
+        },
         "ghostpilot.chatModel": {
           "type": "string",
           "default": "qwen2.5-coder:7b",
@@ -122,7 +127,7 @@
         },
         "ghostpilot.enableInlineCompletions": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Enable GhostPilot inline code completions."
         },
         "ghostpilot.provider": {
@@ -177,7 +182,7 @@
         },
         "ghostpilot.enableConversationPersistence": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Persist GhostPilot conversations and preferences in VS Code storage. Disable to keep chat history in memory only."
         },
         "ghostpilot.toolAllowlist": {

@@ -55,6 +55,7 @@ export interface GhostPilotRequestOptions {
   context?: GhostPilotContextSelection
   additionalContext?: string
   showReasoning?: boolean
+  customSystemInstructions?: string
   approveTool?: (call: LocalToolCall) => Promise<GhostPilotToolApproval>
 }
 
@@ -364,7 +365,8 @@ function createDefaultLlmFactory(configuration: GhostPilotConfig): LlmFactory {
   return new LlmFactory(
     {
       ollamaClient: new OllamaClient(settings.ollamaUrl),
-      mlxClient: new MlxClient(settings.mlxUrl)
+      mlxClient: new MlxClient(settings.mlxUrl),
+      openaiCompatibleClient: new OllamaClient(settings.openaiUrl, 'openai-compatible')
     },
     {
       configuration: vscode.workspace.getConfiguration('ghostpilot')
@@ -478,12 +480,16 @@ export function createChatParticipantHandler(
       return
     }
 
+    const baseSystemPrompt = requestOptions.context?.tools === false
+      ? 'You are GhostPilot, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
+      : SYSTEM_PROMPT
+    const systemPrompt = requestOptions.customSystemInstructions?.trim()
+      ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
+      : baseSystemPrompt
     const messages: MlxMessage[] = [
       {
         role: 'system',
-        content: requestOptions.context?.tools === false
-          ? 'You are GhostPilot, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
-          : SYSTEM_PROMPT
+        content: systemPrompt
       },
       { role: 'user', content: contextPrompt }
     ]

@@ -306,16 +306,16 @@
 
 ### 9.10 Customize the Extension
 
-- [ ] Add a GhostPilot settings page or webview panel for provider, model, context, permissions, appearance, and history settings.
-- [ ] Allow custom system instructions with a visible reset-to-default action.
-- [ ] Allow custom assistant name, avatar, accent color, and compact/full layout preference.
-- [ ] Allow users to enable or disable thinking details, tool progress, telemetry-free diagnostics, and automatic context collection.
-- [ ] Allow per-workspace overrides while preserving global defaults.
-- [ ] Add provider-specific settings without showing irrelevant controls.
-- [ ] Add model discovery, refresh, and validation actions.
-- [ ] Add a connection test with readable failure guidance.
-- [ ] Add import/export for GhostPilot configuration and prompt presets.
-- [ ] Document which settings affect privacy, performance, context size, and tool permissions.
+- [x] Add a GhostPilot settings page or webview panel for provider, model, context, permissions, appearance, and history settings.
+- [x] Allow custom system instructions with a visible reset-to-default action.
+- [x] Allow custom assistant name, avatar, accent color, and compact/full layout preference.
+- [x] Allow users to enable or disable thinking details, tool progress, telemetry-free diagnostics, and automatic context collection.
+- [x] Allow per-workspace overrides while preserving global defaults.
+- [x] Add provider-specific settings without showing irrelevant controls.
+- [x] Add model discovery, refresh, and validation actions.
+- [x] Add a connection test with readable failure guidance.
+- [x] Add import/export for GhostPilot configuration and prompt presets.
+- [x] Document which settings affect privacy, performance, context size, and tool permissions.
 
 ### 9.11 Reliability, Privacy, and Performance
 
