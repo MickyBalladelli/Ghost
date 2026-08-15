@@ -63,9 +63,9 @@
   - [x] Handle MLX vision-language input formatting (support encoding active editor image assets or screenshots if vision context is passed).
   - [x] Implement response streaming transformer to convert MLX server Server-Sent Events (SSE) into standard token chunks.
 
-- [ ] **2.4 Dynamic Provider Switching Logic**
-  - [ ] Update `src/services/llmFactory.ts` to route requests based on `localpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).
-  - [ ] Add auto-detection fallback: if MLX server is detected on port 8000, automatically suggest switching provider to `mlx-vlm`.
+- [x] **2.4 Dynamic Provider Switching Logic**
+  - [x] Update `src/services/llmFactory.ts` to route requests based on `localpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).
+  - [x] Add auto-detection fallback: if MLX server is detected on port 8000, automatically suggest switching provider to `mlx-vlm`.
 ---
 
 ## 🔌 Phase 2: Local LLM Infrastructure & API Client
