@@ -129,10 +129,10 @@
     - [x] `localpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
     - [x] `localpilot_list_directory`: Lists workspace file hierarchy.
 
-- [ ] **5.2 Implement Tool Execution Services**
-  - [ ] Create `src/tools/fileTools.ts` for file read/write operations using `vscode.workspace.fs`.
-  - [ ] Create `src/tools/terminalTools.ts` for running shell commands safely.
-  - [ ] Register tools using `vscode.lm.registerTool(...)`.
+- [x] **5.2 Implement Tool Execution Services**
+  - [x] Create `src/tools/fileTools.ts` for file read/write operations using `vscode.workspace.fs`.
+  - [x] Create `src/tools/terminalTools.ts` for running shell commands safely.
+  - [x] Register tools using `vscode.lm.registerTool(...)`.
 
 - [ ] **5.3 Implement Tool Calling Loop for Local Models**
   - [ ] In `src/agent/chatParticipant.ts`, construct system prompt defining JSON function signatures.
