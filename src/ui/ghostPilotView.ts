@@ -7,6 +7,7 @@ import { GHOSTPILOT_TOOL_NAMES, ghostPilotConfig, getGhostPilotSettings } from '
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
+import { applyGhostPilotEdit, parseGhostPilotEdit } from '../tools/editWorkflow'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
   GhostPilotAttachment,
@@ -41,7 +42,18 @@ interface PendingToolApproval {
   conversationId: string
   toolCallId: string
   call: LocalToolCall
+  expectedContent?: string
   resolve: (approval: GhostPilotToolApproval) => void
+}
+
+interface RecoveryRecord {
+  requestId: string
+  conversationId: string
+  toolCallId: string
+  path: string
+  before: string
+  after: string
+  applied: boolean
 }
 
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -54,6 +66,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   private readonly requests = new Map<string, GhostPilotRequestState>()
   private readonly completedRequests = new Set<string>()
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
+  private readonly recoveryRecords = new Map<string, RecoveryRecord>()
   private readonly sessionApprovedTools = new Set<string>()
   private pendingMessages: GhostPilotExtensionMessage[] = []
   private status: GhostPilotViewStatus = 'ready'
@@ -149,6 +162,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     const response = {
       markdown: (delta: string) => {
         if (pendingTool) {
+          this.markRecoveryApplied(pendingTool.toolCallId, `${pendingTool.name} completed`)
           this.postStreamEvent(requestId, request, {
             type: 'tool-result',
             tool: pendingTool.name,
@@ -183,6 +197,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         if (progress.startsWith('Tool result:')) {
           const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
           if (pendingTool && result) {
+            this.markRecoveryApplied(pendingTool.toolCallId, result[2])
             this.postStreamEvent(requestId, request, {
               type: 'tool-result',
               tool: pendingTool.name,
@@ -358,11 +373,11 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private requiresToolApproval(toolName: string): boolean {
-    return toolName === 'ghostpilot_write_file' || toolName === 'ghostpilot_run_terminal_command'
+    return toolName === 'ghostpilot_write_file' || toolName === 'ghostpilot_apply_edit' || toolName === 'ghostpilot_run_terminal_command'
   }
 
   private async getDiffPreview(call: LocalToolCall): Promise<GhostPilotToolDiffPreview | undefined> {
-    if (call.name !== 'ghostpilot_write_file' || typeof call.arguments.path !== 'string' || typeof call.arguments.content !== 'string') {
+    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
     }
     try {
@@ -372,18 +387,149 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         const bytes = await vscode.workspace.fs.readFile(uri)
         before = Buffer.from(bytes).toString('utf8')
       } catch {
-        before = '[new file]'
+        before = ''
       }
-      const after = call.arguments.content
+      const parsedEdit = call.name === 'ghostpilot_apply_edit' ? parseGhostPilotEdit(call.arguments) : undefined
+      const after = call.name === 'ghostpilot_write_file'
+        ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
+        : applyGhostPilotEdit(before, parsedEdit as NonNullable<typeof parsedEdit>)
+      if (after === undefined) {
+        return undefined
+      }
       const limit = 20000
-      return {
+      const preview = {
         path: uri.fsPath,
         before: before.slice(0, limit),
         after: after.slice(0, limit),
-        truncated: before.length > limit || after.length > limit
+        truncated: before.length > limit || after.length > limit,
+        ...(parsedEdit ? { hunks: parsedEdit.hunks } : {})
+      }
+      try {
+        let beforeDocument: vscode.TextDocument
+        try {
+          beforeDocument = await vscode.workspace.openTextDocument(uri)
+        } catch {
+          beforeDocument = await vscode.workspace.openTextDocument({ content: before })
+        }
+        const afterDocument = await vscode.workspace.openTextDocument({ language: beforeDocument.languageId, content: after })
+        await vscode.commands.executeCommand('vscode.diff', beforeDocument.uri, afterDocument.uri, `GhostPilot edit: ${uri.fsPath}`)
+      } catch {
+        // The inline preview remains available when the diff editor cannot open.
+      }
+      return preview
+    } catch {
+      return undefined
+    }
+  }
+
+  private async getExpectedFileContent(call: LocalToolCall): Promise<string | undefined> {
+    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
+      return undefined
+    }
+    try {
+      const uri = resolveWorkspacePath(call.arguments.path)
+      try {
+        return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
+      } catch {
+        return ''
       }
     } catch {
       return undefined
+    }
+  }
+
+  private async rememberRecovery(
+    requestId: string,
+    conversationId: string,
+    toolCallId: string,
+    call: LocalToolCall,
+    expectedContent: string | undefined,
+    selectedHunkIndexes?: number[]
+  ): Promise<void> {
+    if ((call.name !== 'ghostpilot_write_file' && call.name !== 'ghostpilot_apply_edit') || typeof call.arguments.path !== 'string') {
+      return
+    }
+    try {
+      const uri = resolveWorkspacePath(call.arguments.path)
+      let before = expectedContent
+      if (before === undefined) {
+        try {
+          before = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
+        } catch {
+          before = ''
+        }
+      }
+      const after = call.name === 'ghostpilot_write_file'
+        ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
+        : applyGhostPilotEdit(before, parseGhostPilotEdit(call.arguments), selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined)
+      if (after === undefined) {
+        return
+      }
+      this.recoveryRecords.set(toolCallId, {
+        requestId,
+        conversationId,
+        toolCallId,
+        path: uri.fsPath,
+        before,
+        after,
+        applied: false
+      })
+    } catch {
+      // The executor reports the validation error.
+    }
+  }
+
+  private markRecoveryApplied(toolCallId: string, detail: string): void {
+    const record = this.recoveryRecords.get(toolCallId)
+    if (!record) {
+      return
+    }
+    if (/error|failed|rejected|denied|cancelled/i.test(detail)) {
+      this.recoveryRecords.delete(toolCallId)
+      return
+    }
+    record.applied = true
+  }
+
+  private async restoreTool(requestId: string, conversationId: string, toolCallId: string): Promise<void> {
+    const record = this.recoveryRecords.get(toolCallId)
+    if (!record || record.requestId !== requestId || record.conversationId !== conversationId || !record.applied) {
+      await vscode.window.showWarningMessage('GhostPilot has no applied change to restore.')
+      return
+    }
+    try {
+      const uri = resolveWorkspacePath(record.path)
+      let current = ''
+      try {
+        current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
+      } catch {
+        current = ''
+      }
+      if (current !== record.after) {
+        await vscode.window.showErrorMessage('GhostPilot cannot restore this file because it changed after the edit.')
+        return
+      }
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(record.before, 'utf8'))
+      record.applied = false
+      await vscode.window.showInformationMessage(`Restored ${uri.fsPath}.`)
+    } catch (error) {
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not restore the file.')
+    }
+  }
+
+  private async openFile(filePath: string, line?: number): Promise<void> {
+    try {
+      const uri = resolveWorkspacePath(filePath)
+      const document = await vscode.workspace.openTextDocument(uri)
+      const editor = await vscode.window.showTextDocument(document)
+      if (line !== undefined) {
+        const targetLine = Math.min(Math.max(line - 1, 0), Math.max(document.lineCount - 1, 0))
+        const position = new vscode.Position(targetLine, 0)
+        editor.selection = new vscode.Selection(position, position)
+        editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter)
+      }
+    } catch (error) {
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not open the file.')
     }
   }
 
@@ -403,6 +549,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy
     const argumentsPayload = call.arguments as GhostPilotToolArguments
     const diffPreview = requiresApproval ? await this.getDiffPreview(call) : undefined
+    const expectedContent = requiresApproval ? await this.getExpectedFileContent(call) : undefined
     this.postStreamEvent(requestId, request, {
       type: 'tool-requested',
       tool: call.name,
@@ -417,10 +564,11 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     })
 
     if (blockedByPolicy) {
-      return { decision: 'reject' }
+      return { decision: 'reject', reason: 'Tool blocked by workspace policy.' }
     }
     if (!requiresApproval || this.sessionApprovedTools.has(call.name)) {
-      return { decision: 'once' }
+      await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedContent)
+      return { decision: 'once', expectedContent }
     }
 
     return new Promise(resolve => {
@@ -429,6 +577,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         conversationId: request.conversationId,
         toolCallId: pending.toolCallId,
         call,
+        expectedContent,
         resolve
       })
     })
@@ -457,8 +606,47 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     if (approval.decision === 'session') {
       this.sessionApprovedTools.add(pending.call.name)
     }
+    if (pending.call.name === 'ghostpilot_write_file' || pending.call.name === 'ghostpilot_apply_edit') {
+      void this.verifyExternalEdit(pending, approval)
+      return
+    }
     this.pendingApprovals.delete(toolCallId)
     pending.resolve(approval)
+  }
+
+  private async verifyExternalEdit(pending: PendingToolApproval, approval: GhostPilotToolApproval): Promise<void> {
+    const expected = pending.expectedContent
+    if (expected === undefined || typeof pending.call.arguments.path !== 'string') {
+      this.pendingApprovals.delete(pending.toolCallId)
+      pending.resolve(approval)
+      return
+    }
+    try {
+      const uri = resolveWorkspacePath(pending.call.arguments.path)
+      let current = ''
+      try {
+        current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
+      } catch {
+        current = ''
+      }
+      this.pendingApprovals.delete(pending.toolCallId)
+      if (current !== expected) {
+        pending.resolve({ decision: 'reject', reason: 'File changed externally since the diff was shown.' })
+        return
+      }
+      await this.rememberRecovery(
+        pending.requestId,
+        pending.conversationId,
+        pending.toolCallId,
+        pending.call,
+        expected,
+        approval.selectedHunkIndexes
+      )
+      pending.resolve({ ...approval, expectedContent: expected })
+    } catch {
+      this.pendingApprovals.delete(pending.toolCallId)
+      pending.resolve({ decision: 'reject', reason: 'Edit path is outside the workspace.' })
+    }
   }
 
   private async editToolArguments(
@@ -472,6 +660,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       return
     }
     pending.call.arguments = argumentsPayload
+    pending.expectedContent = await this.getExpectedFileContent(pending.call)
     const request = this.requests.get(requestId)
     if (!request) {
       return
@@ -683,6 +872,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     }
     this.requests.clear()
     this.pendingApprovals.clear()
+    this.recoveryRecords.clear()
     this.sessionApprovedTools.clear()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
@@ -718,7 +908,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         this.cancel(value.requestId)
         return
       case 'approve-tool':
-        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, { decision: value.decision })
+        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, {
+          decision: value.decision,
+          selectedHunkIndexes: value.selectedHunkIndexes
+        })
         return
       case 'reject-tool':
         this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, { decision: 'reject' })
@@ -728,6 +921,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         return
       case 'edit-tool':
         await this.editToolArguments(value.requestId, value.conversationId, value.toolCallId, value.arguments)
+        return
+      case 'restore-tool':
+        await this.restoreTool(value.requestId, value.conversationId, value.toolCallId)
+        return
+      case 'open-file':
+        await this.openFile(value.path, value.line)
         return
       case 'load-controls':
       case 'refresh-models':

@@ -18,7 +18,7 @@ const SYSTEM_PROMPT = [
   'Be concise. Put code in fenced Markdown blocks with the correct language when useful.',
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
-  'Available tools: ghostpilot_read_file({"path":"absolute workspace path"}), ghostpilot_write_file({"path":"absolute workspace path","content":"full text"}), ghostpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghostpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'Available tools: ghostpilot_read_file({"path":"absolute workspace path"}), ghostpilot_write_file({"path":"absolute workspace path","content":"full text"}), ghostpilot_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghostpilot_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghostpilot_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After receiving a tool result, continue the task and provide the final answer.'
 ].join(' ')
 
@@ -61,6 +61,9 @@ export interface GhostPilotRequestOptions {
 export interface GhostPilotToolApproval {
   decision: 'once' | 'session' | 'reject'
   arguments?: Record<string, unknown>
+  expectedContent?: string
+  selectedHunkIndexes?: number[]
+  reason?: string
 }
 
 interface EditorContext {
@@ -538,7 +541,7 @@ export function createChatParticipantHandler(
           toolCall.arguments = approval.arguments
         }
         if (approval.decision === 'reject') {
-          const rejection = 'User rejected this tool call.'
+          const rejection = approval.reason ?? 'User rejected this tool call.'
           response.progress(`Tool result: ${toolCall.name}: ${rejection}`)
           messages.push(
             { role: 'assistant', content: generated },
@@ -549,7 +552,11 @@ export function createChatParticipantHandler(
         let toolResult: string
 
         try {
-          toolResult = await toolExecutor.execute(toolCall, token, { approved: Boolean(requestOptions.approveTool) })
+          toolResult = await toolExecutor.execute(toolCall, token, {
+            approved: Boolean(requestOptions.approveTool),
+            expectedContent: approval.expectedContent,
+            selectedHunkIndexes: approval.selectedHunkIndexes
+          })
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown tool error'
           toolResult = `Tool error: ${message}`

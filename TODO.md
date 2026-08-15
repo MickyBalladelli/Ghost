@@ -284,14 +284,14 @@
 
 ### 9.8 Add File Editing and Diff Workflow
 
-- [ ] Define a structured edit format for local models that need to modify files.
-- [ ] Parse edits robustly and reject incomplete, ambiguous, or out-of-workspace paths.
-- [ ] Show proposed changes in a VS Code diff editor before applying them.
-- [ ] Support apply, reject, apply selected hunks, and restore actions.
-- [ ] Detect external file changes between proposal and apply.
-- [ ] Keep an undo/recovery path for every applied change.
-- [ ] Link each changed file and code location back to the editor.
-- [ ] Show a concise change summary in the conversation.
+- [x] Define a structured edit format for local models that need to modify files.
+- [x] Parse edits robustly and reject incomplete, ambiguous, or out-of-workspace paths.
+- [x] Show proposed changes in a VS Code diff editor before applying them.
+- [x] Support apply, reject, apply selected hunks, and restore actions.
+- [x] Detect external file changes between proposal and apply.
+- [x] Keep an undo/recovery path for every applied change.
+- [x] Link each changed file and code location back to the editor.
+- [x] Show a concise change summary in the conversation.
 
 ### 9.9 Persist Conversations and User Preferences
 

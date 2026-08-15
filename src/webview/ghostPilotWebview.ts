@@ -68,7 +68,7 @@ interface ToolCall {
   arguments?: string
   requiresApproval?: boolean
   approval?: 'pending' | 'approved' | 'rejected'
-  diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
+  diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number
@@ -143,7 +143,7 @@ type GhostPilotExtensionMessage =
       toolCallId?: string
       arguments?: Record<string, unknown>
       requiresApproval?: boolean
-      diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
+      diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
       message?: string
       status?: 'completed' | 'cancelled' | 'failed'
     }
@@ -1064,7 +1064,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`
       : ''
     const diffBlock = part.toolCall.diffPreview
-      ? `<details class="tool-details"><summary>Diff preview · ${escapeHtml(part.toolCall.diffPreview.path)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary><pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
+      ? `<details class="tool-details"><summary>Diff preview · ${escapeHtml(part.toolCall.diffPreview.path)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary>${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<label><input type="checkbox" data-tool-hunk="${index}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" checked> Lines ${hunk.startLine}-${hunk.endLine}<button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open line</button></label>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
       : ''
     const resultBlock = part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
@@ -1072,8 +1072,17 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
       ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve once</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Always this session</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
-    const resultActions = part.toolCall.result
-      ? `<div class="tool-result-actions"><button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button></div>`
+    const selectedHunkAction = part.toolCall.status === 'requested' && part.toolCall.diffPreview?.hunks?.length
+      ? `<button type="button" data-tool-action="approve-selected" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Apply selected hunks</button>`
+      : ''
+    const fileAction = part.toolCall.diffPreview
+      ? `<button type="button" class="secondary" data-tool-action="open-file" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open file</button>`
+      : ''
+    const restoreAction = part.toolCall.status === 'completed' && (part.toolCall.name === 'ghostpilot_write_file' || part.toolCall.name === 'ghostpilot_apply_edit')
+      ? `<button type="button" class="secondary" data-tool-action="restore" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Restore</button>`
+      : ''
+    const resultActions = part.toolCall.result || fileAction || restoreAction
+      ? `<div class="tool-result-actions">${fileAction}${restoreAction}${selectedHunkAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>` : ''}</div>`
       : ''
     return `<div class="message-progress tool-progress"><strong>${escapeHtml(part.toolCall.name)}</strong> · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }).join('')
@@ -1396,7 +1405,7 @@ const findToolCall = (toolCallId: string): { message: ChatMessage; toolCall: Too
   return undefined
 }
 
-const handleToolAction = (action: string, toolCallId: string): void => {
+const handleToolAction = (action: string, toolCallId: string, line?: number): void => {
   const found = findToolCall(toolCallId)
   if (!found) {
     return
@@ -1412,6 +1421,21 @@ const handleToolAction = (action: string, toolCallId: string): void => {
   const conversationId = getActiveConversation().id
   if (action === 'copy-result' && found.toolCall.result) {
     void copyText(found.toolCall.result)
+    return
+  }
+  if ((action === 'open-file' || action === 'open-hunk') && found.toolCall.diffPreview) {
+    post('open-file', {
+      requestId,
+      conversationId,
+      path: found.toolCall.diffPreview.path,
+      ...(line !== undefined ? { line } : {})
+    })
+    return
+  }
+  if (action === 'restore') {
+    post('restore-tool', { requestId, conversationId, toolCallId })
+    found.toolCall.result = 'Restore requested.'
+    renderMessages(false)
     return
   }
   if (action === 'cancel') {
@@ -1439,14 +1463,21 @@ const handleToolAction = (action: string, toolCallId: string): void => {
     }
     return
   }
-  if (action === 'approve' || action === 'approve-session') {
+  if (action === 'approve' || action === 'approve-session' || action === 'approve-selected') {
     found.toolCall.approval = 'approved'
     found.toolCall.status = 'running'
+    const selectedHunkIndexes = action === 'approve-selected'
+      ? Array.from(document.querySelectorAll<HTMLInputElement>(`input[data-tool-call-id="${CSS.escape(toolCallId)}"][data-tool-hunk]`))
+        .filter(input => input.checked)
+        .map(input => Number(input.dataset.toolHunk))
+        .filter(index => Number.isInteger(index))
+      : undefined
     post('approve-tool', {
       requestId,
       conversationId,
       toolCallId,
-      decision: action === 'approve-session' ? 'session' : 'once'
+      decision: action === 'approve-session' ? 'session' : 'once',
+      ...(selectedHunkIndexes ? { selectedHunkIndexes } : {})
     })
   } else if (action === 'reject') {
     found.toolCall.approval = 'rejected'
@@ -1802,7 +1833,8 @@ messagesElement.addEventListener('click', event => {
   }
   const toolAction = target.closest<HTMLButtonElement>('[data-tool-action]')
   if (toolAction?.dataset.toolAction && toolAction.dataset.toolCallId) {
-    handleToolAction(toolAction.dataset.toolAction, toolAction.dataset.toolCallId)
+    const line = toolAction.dataset.toolLine ? Number(toolAction.dataset.toolLine) : undefined
+    handleToolAction(toolAction.dataset.toolAction, toolAction.dataset.toolCallId, Number.isFinite(line) ? line : undefined)
     return
   }
   const stateAction = target.closest<HTMLButtonElement>('[data-state-action]')

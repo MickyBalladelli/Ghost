@@ -21,6 +21,7 @@ export interface GhostPilotToolDiffPreview {
   before: string
   after: string
   truncated?: boolean
+  hunks?: Array<{ startLine: number; endLine: number; replacement: string }>
 }
 
 export interface GhostPilotAttachment {
@@ -70,9 +71,11 @@ export type GhostPilotWebviewMessage =
       attachments?: GhostPilotAttachment[]
     })
   | (GhostPilotRequestEnvelope & { type: 'cancel' })
-  | (GhostPilotRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostPilotToolApprovalDecision, 'reject'> })
+  | (GhostPilotRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostPilotToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
   | (GhostPilotRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
   | (GhostPilotRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostPilotToolArguments })
+  | (GhostPilotRequestEnvelope & { type: 'restore-tool'; toolCallId: string })
+  | (GhostPilotRequestEnvelope & { type: 'open-file'; path: string; line?: number })
   | (GhostPilotRequestEnvelope & { type: 'retry' | 'regenerate'; messageId: string })
   | (GhostPilotRequestEnvelope & { type: 'edit'; messageId: string; prompt: string })
   | (GhostPilotRequestEnvelope & { type: 'attach'; attachments: GhostPilotAttachment[] })
@@ -215,13 +218,20 @@ export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotW
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
   }
   if (value.type === 'approve-tool') {
-    return isNonEmptyString(value.toolCallId) && (value.decision === 'once' || value.decision === 'session')
+    return isNonEmptyString(value.toolCallId) && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
   }
   if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
     return isNonEmptyString(value.toolCallId)
   }
   if (value.type === 'edit-tool') {
     return isNonEmptyString(value.toolCallId) && isRecord(value.arguments)
+  }
+  if (value.type === 'restore-tool') {
+    return isNonEmptyString(value.toolCallId)
+  }
+  if (value.type === 'open-file') {
+    const line = value.line
+    return isNonEmptyString(value.path) && (line === undefined || (typeof line === 'number' && Number.isInteger(line) && line >= 1))
   }
   if (value.type === 'edit') {
     return isNonEmptyString(value.messageId) && typeof value.prompt === 'string'

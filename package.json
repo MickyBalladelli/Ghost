@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -181,6 +181,7 @@
             "enum": [
               "ghostpilot_read_file",
               "ghostpilot_write_file",
+              "ghostpilot_apply_edit",
               "ghostpilot_run_terminal_command",
               "ghostpilot_list_directory"
             ]
@@ -188,6 +189,7 @@
           "default": [
             "ghostpilot_read_file",
             "ghostpilot_write_file",
+            "ghostpilot_apply_edit",
             "ghostpilot_run_terminal_command",
             "ghostpilot_list_directory"
           ],
@@ -200,6 +202,7 @@
             "enum": [
               "ghostpilot_read_file",
               "ghostpilot_write_file",
+              "ghostpilot_apply_edit",
               "ghostpilot_run_terminal_command",
               "ghostpilot_list_directory"
             ]
@@ -266,6 +269,46 @@
             "path",
             "content"
           ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghostpilot_apply_edit",
+        "displayName": "GhostPilot Apply Edit",
+        "toolReferenceName": "ghostpilot_apply_edit",
+        "userDescription": "Apply reviewed, structured edits inside the current workspace.",
+        "modelDescription": "Proposes line-based edits to a workspace file. The user must approve the edit before it is applied. Paths must be absolute and inside the workspace.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute workspace file path."
+            },
+            "expectedContent": {
+              "type": "string",
+              "description": "Optional exact content expected before applying the edit."
+            },
+            "hunks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "startLine": { "type": "integer", "minimum": 1 },
+                  "endLine": { "type": "integer", "minimum": 1 },
+                  "replacement": { "type": "string" }
+                },
+                "required": ["startLine", "endLine", "replacement"],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 50
+            }
+          },
+          "required": ["path", "hunks"],
           "additionalProperties": false
         }
       },

@@ -1,6 +1,7 @@
 export const LOCAL_TOOL_NAMES = [
   'ghostpilot_read_file',
   'ghostpilot_write_file',
+  'ghostpilot_apply_edit',
   'ghostpilot_run_terminal_command',
   'ghostpilot_list_directory'
 ] as const
