@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { LocalPilotConfig, localPilotConfig } from '../config'
@@ -54,7 +55,7 @@ function createCancellationSignal(token: vscode.CancellationToken): {
   }
 }
 
-function truncateContext(text: string, maxTokens: number): string {
+export function truncateContext(text: string, maxTokens: number): string {
   const maxCharacters = Math.max(1000, maxTokens * 4)
 
   if (text.length <= maxCharacters) {
@@ -123,7 +124,11 @@ function decodeText(bytes: Uint8Array): string | undefined {
     return undefined
   }
 
-  return Buffer.from(bytes).toString('utf8')
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return undefined
+  }
 }
 
 function getReferenceUri(value: unknown): { uri: vscode.Uri; range?: vscode.Range } | undefined {

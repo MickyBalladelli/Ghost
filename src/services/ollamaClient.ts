@@ -159,7 +159,7 @@ function extractOllamaText(payload: OllamaCompletionResponse): string {
   return payload.response ?? payload.message?.content ?? ''
 }
 
-async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
+export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
   let buffer = ''
 
   for await (const chunk of body as AsyncIterable<Buffer | string>) {

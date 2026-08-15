@@ -1,4 +1,5 @@
 import * as path from 'node:path'
+import { TextDecoder } from 'node:util'
 
 import * as vscode from 'vscode'
 
@@ -23,7 +24,11 @@ function decodeText(bytes: Uint8Array): string {
     throw new Error('Binary files are not supported by the text file tool')
   }
 
-  return Buffer.from(bytes).toString('utf8')
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('Non-UTF-8 binary files are not supported by the text file tool')
+  }
 }
 
 function textResult(value: string): vscode.LanguageModelToolResult {

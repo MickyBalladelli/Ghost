@@ -27,7 +27,7 @@ function createCancellationSignal(token: vscode.CancellationToken): {
   }
 }
 
-function waitForDebounce(milliseconds: number, token: vscode.CancellationToken): Promise<boolean> {
+export function waitForDebounce(milliseconds: number, token: vscode.CancellationToken): Promise<boolean> {
   return new Promise(resolve => {
     let settled = false
     let subscription: vscode.Disposable
