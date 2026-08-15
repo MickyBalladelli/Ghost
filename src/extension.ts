@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { createChatParticipant } from './agent/chatParticipant'
 import { localPilotConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
+import { registerLanguageModelTools } from './tools/registerTools'
 
 export function activate(context: vscode.ExtensionContext) {
   const helloWorldCommand = vscode.commands.registerCommand('localpilot-ai.helloWorld', () => {
@@ -38,6 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
   const chatParticipant = createChatParticipant()
+  registerLanguageModelTools(context)
 
   updateStatusBar()
   context.subscriptions.push(
