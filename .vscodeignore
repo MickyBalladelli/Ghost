@@ -6,4 +6,7 @@ tsconfig.json
 *.ts
 node_modules/**
 .gitignore
+AGENTS.md
+TODO.md
+out/test/**
 .gitmodules

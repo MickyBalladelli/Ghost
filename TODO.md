@@ -30,7 +30,7 @@
 
 - [x] **1.3 Configure `package.json` Manifest**
   - [x] Add extension categories: `["AI", "Programming Languages", "Other"]`.
-  - [x] Set minimum VS Code engine target: `"vscode": "^1.90.0"`.
+  - [x] Set minimum VS Code engine target: `"vscode": "^1.125.0"` (required by the language-model tool APIs).
   - [x] Add configuration settings under `contributes.configuration`:
     - [x] `localpilot.ollamaUrl` (default: `"http://localhost:11434"`)
     - [x] `localpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
@@ -171,18 +171,18 @@
 
 ## 📦 Phase 8: Build, Packaging & Documentation
 
-- [ ] **8.1 Documentation**
-  - [ ] Write detailed `README.md`:
+- [x] **8.1 Documentation**
+  - [x] Write detailed `README.md`:
     - Prerequisites (Installing Ollama, pulling recommended models).
     - Features overview (Inline completion, @local agent, tools).
     - Key bindings & configuration reference.
-  - [ ] Add extension icon (`icon.png`).
-  - [ ] Create `CHANGELOG.md` and `LICENSE` (MIT).
+  - [x] Add extension icon (`icon.png`).
+  - [x] Create `CHANGELOG.md` and `LICENSE` (MIT).
 
 - [ ] **8.2 Packaging**
-  - [ ] Install `@vscode/vsce` globally or as dev dependency.
-  - [ ] Run `npm run vscode:prepublish` to verify TypeScript compilation.
-  - [ ] Package extension into `.vsix` file:
+  - [x] Install `@vscode/vsce` globally or as dev dependency.
+  - [x] Run `npm run vscode:prepublish` to verify TypeScript compilation.
+  - [x] Package extension into `.vsix` file:
     ```bash
     npx vsce package --out localpilot-ai-1.0.0.vsix
     ```
