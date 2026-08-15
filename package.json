@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",
@@ -23,6 +23,12 @@
     "onCommand:ghostpilot.checkOllamaStatus",
     "onCommand:ghostpilot.toggleInline",
     "onCommand:ghostpilot.checkModels",
+    "onCommand:ghostpilot.open",
+    "onCommand:ghostpilot.focus",
+    "onCommand:ghostpilot.reset",
+    "onCommand:ghostpilot.export",
+    "onCommand:ghostpilot.clear",
+    "onView:ghostpilot.chat",
     "onChatParticipant:ghostpilot.agent",
     "onLanguageModelTool:ghostpilot_read_file",
     "onLanguageModelTool:ghostpilot_write_file",
@@ -47,8 +53,48 @@
       {
         "command": "ghostpilot.checkModels",
         "title": "GhostPilot: Check Required Models"
+      },
+      {
+        "command": "ghostpilot.open",
+        "title": "GhostPilot: Open Interface"
+      },
+      {
+        "command": "ghostpilot.focus",
+        "title": "GhostPilot: Focus Interface"
+      },
+      {
+        "command": "ghostpilot.reset",
+        "title": "GhostPilot: Reset Interface"
+      },
+      {
+        "command": "ghostpilot.export",
+        "title": "GhostPilot: Export Interface"
+      },
+      {
+        "command": "ghostpilot.clear",
+        "title": "GhostPilot: Clear Interface"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ghostpilot",
+          "title": "GhostPilot",
+          "icon": "./resources/ghostpilot.svg"
+        }
+      ]
+    },
+    "views": {
+      "ghostpilot": [
+        {
+          "id": "ghostpilot.chat",
+          "name": "GhostPilot",
+          "type": "webview",
+          "icon": "./resources/ghostpilot.svg",
+          "when": "true"
+        }
+      ]
+    },
     "configuration": {
       "title": "GhostPilot AI",
       "properties": {

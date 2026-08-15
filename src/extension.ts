@@ -5,6 +5,7 @@ import { ghostPilotConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { OllamaClient } from './services/ollamaClient'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
+import { GhostPilotViewProvider } from './ui/ghostPilotView'
 import { GhostPilotStatusBar } from './ui/statusBar'
 import { registerLanguageModelTools } from './tools/registerTools'
 
@@ -47,6 +48,7 @@ export function activate(context: vscode.ExtensionContext) {
     const client = new OllamaClient(settings.ollamaUrl)
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')
+    ghostPilotView.setStatus(online ? 'ready' : 'offline')
 
     if (online) {
       await vscode.window.showInformationMessage(`Ollama is online at ${settings.ollamaUrl}.`)
@@ -56,6 +58,26 @@ export function activate(context: vscode.ExtensionContext) {
   })
   const checkModelsCommand = vscode.commands.registerCommand('ghostpilot.checkModels', () => {
     return checkRequiredOllamaModels()
+  })
+  const ghostPilotView = new GhostPilotViewProvider(context.extensionUri)
+  const ghostPilotViewRegistration = vscode.window.registerWebviewViewProvider(
+    GhostPilotViewProvider.viewType,
+    ghostPilotView,
+    { webviewOptions: { retainContextWhenHidden: true } }
+  )
+  const openGhostPilotView = () => vscode.commands.executeCommand('workbench.view.extension.ghostpilot')
+  const openViewCommand = vscode.commands.registerCommand('ghostpilot.open', openGhostPilotView)
+  const focusViewCommand = vscode.commands.registerCommand('ghostpilot.focus', openGhostPilotView)
+  const resetViewCommand = vscode.commands.registerCommand('ghostpilot.reset', async () => {
+    await openGhostPilotView()
+    ghostPilotView.reset()
+  })
+  const exportViewCommand = vscode.commands.registerCommand('ghostpilot.export', () => {
+    return ghostPilotView.export()
+  })
+  const clearViewCommand = vscode.commands.registerCommand('ghostpilot.clear', async () => {
+    await openGhostPilotView()
+    ghostPilotView.clear()
   })
   const chatParticipant = createChatParticipant({ statusBar })
   registerLanguageModelTools(context)
@@ -67,6 +89,13 @@ export function activate(context: vscode.ExtensionContext) {
     toggleInlineCommand,
     checkOllamaCommand,
     checkModelsCommand,
+    ghostPilotView,
+    ghostPilotViewRegistration,
+    openViewCommand,
+    focusViewCommand,
+    resetViewCommand,
+    exportViewCommand,
+    clearViewCommand,
     configurationListener,
     statusBar,
     inlineStatusBar,

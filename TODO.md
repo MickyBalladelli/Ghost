@@ -196,13 +196,13 @@
 
 ### 9.1 Choose and Register the Interface
 
-- [ ] Decide on the primary surface: a persistent `WebviewView` in the GhostPilot Activity Bar, with an optional editor `WebviewPanel` for a larger workspace.
-- [ ] Add an Activity Bar container and GhostPilot view contribution in `package.json`.
-- [ ] Add commands to open, focus, reset, export, and clear the GhostPilot interface.
-- [ ] Add a view icon and product styling that works in light, dark, and high-contrast VS Code themes.
-- [ ] Create a dedicated webview entry point and keep webview code separate from extension-host code.
-- [ ] Configure the webview content security policy, nonce handling, local resource roots, and message origin checks.
-- [ ] Keep the existing native `@local` Chat Participant working while the new interface is introduced.
+- [x] Decide on the primary surface: a persistent `WebviewView` in the GhostPilot Activity Bar, with an optional editor `WebviewPanel` for a larger workspace.
+- [x] Add an Activity Bar container and GhostPilot view contribution in `package.json`.
+- [x] Add commands to open, focus, reset, export, and clear the GhostPilot interface.
+- [x] Add a view icon and product styling that works in light, dark, and high-contrast VS Code themes.
+- [x] Create a dedicated webview entry point and keep webview code separate from extension-host code.
+- [x] Configure the webview content security policy, nonce handling, local resource roots, and message origin checks.
+- [x] Keep the existing native `@local` Chat Participant working while the new interface is introduced.
 
 ### 9.2 Build the Chat UI
 
