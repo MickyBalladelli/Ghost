@@ -21,7 +21,11 @@
     "onCommand:localpilot-ai.helloWorld",
     "onCommand:localpilot.checkOllamaStatus",
     "onCommand:localpilot.toggleInline",
-    "onChatParticipant:localpilot.agent"
+    "onChatParticipant:localpilot.agent",
+    "onLanguageModelTool:localpilot_read_file",
+    "onLanguageModelTool:localpilot_write_file",
+    "onLanguageModelTool:localpilot_run_terminal_command",
+    "onLanguageModelTool:localpilot_list_directory"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -96,6 +100,114 @@
         "name": "local",
         "description": "Local AI Agent (Ollama)",
         "isDefault": true
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "localpilot_read_file",
+        "displayName": "LocalPilot Read File",
+        "toolReferenceName": "localpilot_read_file",
+        "userDescription": "Read a text file from the current workspace.",
+        "modelDescription": "Reads the complete content of a text file in the current workspace. Use this for inspecting code or configuration. The path must be absolute and inside the workspace. Do not use it for binary files.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(file)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the text file to read. The path must be inside the current workspace."
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "localpilot_write_file",
+        "displayName": "LocalPilot Write File",
+        "toolReferenceName": "localpilot_write_file",
+        "userDescription": "Create or replace a text file in the current workspace.",
+        "modelDescription": "Creates a new text file or replaces the complete content of an existing file in the current workspace. The path must be absolute and inside the workspace. This changes user files and requires confirmation.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute path of the file to create or replace. The path must be inside the current workspace."
+            },
+            "content": {
+              "type": "string",
+              "description": "Complete UTF-8 text content to write to the file."
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "localpilot_run_terminal_command",
+        "displayName": "LocalPilot Run Terminal Command",
+        "toolReferenceName": "localpilot_run_terminal_command",
+        "userDescription": "Run a shell command in the current workspace.",
+        "modelDescription": "Runs a bash or PowerShell command in the current workspace and returns its output. Use only when the user asks for command execution or when it is needed to verify a change. Commands can change the system and require confirmation.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(terminal)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "The bash or PowerShell command to run."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Optional absolute working directory inside the current workspace."
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "localpilot_list_directory",
+        "displayName": "LocalPilot List Directory",
+        "toolReferenceName": "localpilot_list_directory",
+        "userDescription": "List files and directories in the current workspace.",
+        "modelDescription": "Lists the file and directory hierarchy under a workspace directory. The path must be absolute and inside the current workspace. Use this to discover project structure before reading or editing files.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(folder)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute directory path to list. The path must be inside the current workspace."
+            },
+            "recursive": {
+              "type": "boolean",
+              "description": "Whether to include nested directories.",
+              "default": false
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
       }
     ]
   },
