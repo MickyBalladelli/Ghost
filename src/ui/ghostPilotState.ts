@@ -9,6 +9,8 @@ export type GhostPilotRequestStatus =
   | 'cancelled'
   | 'failed'
 
+export type GhostPilotProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
+
 export type GhostPilotMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export interface GhostPilotTextPart {
@@ -19,6 +21,11 @@ export interface GhostPilotTextPart {
 export interface GhostPilotProgressPart {
   kind: 'reasoning' | 'progress'
   text: string
+  phase?: GhostPilotProgressPhase
+  elapsedMs?: number
+  tokenCount?: number
+  tokensPerSecond?: number
+  model?: string
 }
 
 export interface GhostPilotToolCall {
@@ -43,11 +50,17 @@ export interface GhostPilotErrorPart {
   recoverable?: boolean
 }
 
+export interface GhostPilotWarningPart {
+  kind: 'warning'
+  message: string
+}
+
 export type GhostPilotMessagePart =
   | GhostPilotTextPart
   | GhostPilotProgressPart
   | GhostPilotToolPart
   | GhostPilotErrorPart
+  | GhostPilotWarningPart
 
 export interface GhostPilotAttachmentState {
   id: string

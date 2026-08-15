@@ -49,6 +49,7 @@ export interface GhostPilotRequestOptions {
   mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
   context?: GhostPilotContextSelection
   additionalContext?: string
+  showReasoning?: boolean
 }
 
 interface EditorContext {
@@ -285,12 +286,17 @@ async function buildContextPrompt(
   request: vscode.ChatRequest,
   settings: ReturnType<GhostPilotConfig['getSettings']>,
   token: vscode.CancellationToken,
-  options: GhostPilotRequestOptions = {}
+  options: GhostPilotRequestOptions = {},
+  onProgress?: (detail: string) => void
 ): Promise<string> {
   const context = options.context ?? {}
+  onProgress?.('Context: collecting prompt context')
   const editor = context.activeFile === false
     ? undefined
     : getActiveEditorContext(settings.maxContextTokens, context.selection !== false)
+  if (editor) {
+    onProgress?.('Context: reading active file')
+  }
   const sections = [`User request:\n${request.prompt.trim()}`]
 
   if (editor) {
@@ -301,17 +307,21 @@ async function buildContextPrompt(
   }
 
   if (context.workspace !== false) {
+    onProgress?.('Context: preparing workspace context')
     sections.push(getWorkspaceContext(context.openFiles !== false, context.folders !== false))
   }
 
-  const workspaceSearch = context.workspace === false
-    ? ''
-    : await getWorkspaceSearchContext(request.prompt, settings.maxContextTokens, token)
+  let workspaceSearch = ''
+  if (context.workspace !== false) {
+    onProgress?.('Context: searching workspace')
+    workspaceSearch = await getWorkspaceSearchContext(request.prompt, settings.maxContextTokens, token)
+  }
 
   if (workspaceSearch) {
     sections.push(workspaceSearch)
   }
 
+  onProgress?.('Context: preparing attachments')
   const references = await getReferenceContext(request, settings.maxContextTokens, token)
 
   if (references) {
@@ -352,11 +362,48 @@ async function streamModelTurn(
   llmFactory: LlmFactory,
   options: Parameters<LlmFactory['streamChatCompletion']>[0],
   response: vscode.ChatResponseStream,
-  token: vscode.CancellationToken
+  token: vscode.CancellationToken,
+  showReasoning = false
 ): Promise<{ generated: string; streamed: boolean }> {
   let generated = ''
   let decided = false
   let bufferingToolCall = false
+  let hidingReasoning = false
+  let hiddenReasoningNotified = false
+
+  const emitVisibleChunk = (chunk: string): void => {
+    if (showReasoning) {
+      response.markdown(chunk)
+      return
+    }
+    let remaining = chunk
+    while (remaining) {
+      if (hidingReasoning) {
+        const closing = remaining.search(/<\/(?:think|analysis)>/i)
+        if (closing < 0) {
+          return
+        }
+        remaining = remaining.slice(closing).replace(/^<\/(?:think|analysis)>/i, '')
+        hidingReasoning = false
+        continue
+      }
+      const opening = remaining.search(/<(?:think|analysis)>/i)
+      if (opening < 0) {
+        response.markdown(remaining)
+        return
+      }
+      const visible = remaining.slice(0, opening)
+      if (visible) {
+        response.markdown(visible)
+      }
+      if (!hiddenReasoningNotified) {
+        response.progress('Safe progress: provider reasoning hidden')
+        hiddenReasoningNotified = true
+      }
+      remaining = remaining.slice(opening).replace(/^<(?:think|analysis)>/i, '')
+      hidingReasoning = true
+    }
+  }
 
   for await (const chunk of llmFactory.streamChatCompletion(options)) {
     if (token.isCancellationRequested) {
@@ -364,7 +411,7 @@ async function streamModelTurn(
     }
 
     if (decided && !bufferingToolCall) {
-      response.markdown(chunk)
+      emitVisibleChunk(chunk)
       continue
     }
 
@@ -378,7 +425,7 @@ async function streamModelTurn(
         bufferingToolCall = true
       } else if (firstContent) {
         decided = true
-        response.markdown(generated)
+        emitVisibleChunk(generated)
         generated = ''
       }
     }
@@ -411,7 +458,7 @@ export function createChatParticipantHandler(
       ...settings,
       maxContextTokens: Math.max(1, Math.floor(requestOptions.maxContextTokens ?? settings.maxContextTokens))
     }
-    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions)
+    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions, detail => response.progress(detail))
 
     if (token.isCancellationRequested) {
       return
@@ -431,6 +478,7 @@ export function createChatParticipantHandler(
     statusBar?.setStatus('generating')
 
     try {
+      response.progress('Preparing model request')
       for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         const turn = await streamModelTurn(
           llmFactory,
@@ -442,7 +490,8 @@ export function createChatParticipantHandler(
             signal: cancellation.signal
           },
           response,
-          token
+          token,
+          requestOptions.showReasoning === true
         )
 
         if (token.isCancellationRequested || turn.streamed) {

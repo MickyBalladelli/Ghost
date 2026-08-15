@@ -2,7 +2,7 @@
   "name": "ghostpilot-ai",
   "displayName": "GhostPilot AI",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "publisher": "ghostpilot",
   "license": "MIT",
   "icon": "icon.png",

@@ -5,6 +5,7 @@ type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
+type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
 
 interface Attachment {
   name: string
@@ -55,9 +56,10 @@ interface ChatMessage {
 
 type MessagePart =
   | { kind: 'text'; text: string }
-  | { kind: 'reasoning' | 'progress'; text: string }
+  | { kind: 'reasoning' | 'progress'; text: string; phase?: ProgressPhase; elapsedMs?: number; tokenCount?: number; tokensPerSecond?: number; model?: string }
   | { kind: 'tool'; toolCall: ToolCall }
   | { kind: 'error'; message: string; recoverable?: boolean }
+  | { kind: 'warning'; message: string }
 
 interface ToolCall {
   id: string
@@ -85,6 +87,7 @@ interface GhostPilotState {
   activeConversationId: string
   promptHistory?: string[]
   presets?: PromptPreset[]
+  showReasoning?: boolean
 }
 
 type GhostPilotExtensionMessage =
@@ -124,6 +127,12 @@ type GhostPilotExtensionMessage =
       conversationId: string
       sequence: number
       state?: RequestStatus
+      phase?: ProgressPhase
+      elapsedMs?: number
+      model?: string
+      tokenCount?: number
+      tokensPerSecond?: number
+      startedAt?: number
       detail?: string
       delta?: string
       tool?: string
@@ -145,6 +154,11 @@ interface ActiveRequest {
   status: RequestStatus
   attempt: number
   startedAt: number
+  model: string
+  phase: ProgressPhase
+  latestDetail: string
+  tokenCount: number
+  tokensPerSecond?: number
 }
 
 interface ModelMetadata {
@@ -161,6 +175,7 @@ interface WebviewRequestOptions {
   maxContextTokens: number
   maxTokens?: number
   mode: GhostPilotMode
+  showReasoning: boolean
   context: {
     workspace: boolean
     folders: boolean
@@ -265,7 +280,8 @@ const getInitialState = (): GhostPilotState => {
       conversations,
       activeConversationId,
       ...(Array.isArray(stored.promptHistory) ? { promptHistory: stored.promptHistory.filter(item => typeof item === 'string').slice(0, 100) } : {}),
-      ...(Array.isArray(stored.presets) ? { presets: stored.presets } : {})
+      ...(Array.isArray(stored.presets) ? { presets: stored.presets } : {}),
+      ...(typeof stored.showReasoning === 'boolean' ? { showReasoning: stored.showReasoning } : {})
     }
   }
 
@@ -278,6 +294,7 @@ const getInitialState = (): GhostPilotState => {
 }
 
 let state = getInitialState()
+let showReasoning = state.showReasoning === true
 let viewStatus: GhostPilotViewStatus = 'ready'
 let activeRequest: ActiveRequest | undefined
 let notice: { kind: NoticeKind; message: string } | undefined
@@ -317,6 +334,31 @@ let attachments: Attachment[] = []
 let historyIndex = -1
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
+let progressTimer: number | undefined
+
+const formatElapsed = (milliseconds: number): string => {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+const stopProgressTimer = (): void => {
+  if (progressTimer !== undefined) {
+    window.clearInterval(progressTimer)
+    progressTimer = undefined
+  }
+}
+
+const startProgressTimer = (): void => {
+  stopProgressTimer()
+  progressTimer = window.setInterval(() => {
+    if (activeRequest) {
+      updateStatus()
+    } else {
+      stopProgressTimer()
+    }
+  }, 1000)
+}
 
 app.innerHTML = `
   <div class="app">
@@ -395,6 +437,7 @@ app.innerHTML = `
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <label class="settings-checkbox" for="show-reasoning"><input id="show-reasoning" type="checkbox"> Show provider reasoning when explicitly returned</label>
         </div>
         <div class="preset-section">
           <div class="modal-subheader"><h3>Prompt presets</h3><button type="button" class="context-button" id="new-preset">New</button></div>
@@ -447,6 +490,7 @@ const temperatureValueElement = document.getElementById('temperature-value') as 
 const maxContextElement = document.getElementById('max-context') as HTMLInputElement
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
+const showReasoningElement = document.getElementById('show-reasoning') as HTMLInputElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
@@ -519,6 +563,7 @@ const renderControls = () => {
   maxContextElement.value = String(controls.maxContextTokens)
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
+  showReasoningElement.checked = showReasoning
   connectionIndicatorElement.classList.toggle('online', connection === 'online')
   connectionIndicatorElement.classList.toggle('offline', connection === 'offline')
   connectionTextElement.textContent = connection === 'online'
@@ -647,6 +692,7 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
   maxContextTokens: controls.maxContextTokens,
   maxTokens: maxTokensForLength(controls.responseLength),
   mode: controls.mode,
+  showReasoning,
   context: { ...contextEnabled }
 })
 
@@ -903,13 +949,24 @@ const appendTextPart = (message: ChatMessage, delta: string): void => {
   message.updatedAt = Date.now()
 }
 
-const appendProgressPart = (message: ChatMessage, text: string): void => {
+const appendProgressPart = (message: ChatMessage, text: string, metadata: {
+  phase?: ProgressPhase
+  elapsedMs?: number
+  tokenCount?: number
+  tokensPerSecond?: number
+  model?: string
+} = {}): void => {
   const lastPart = message.parts[message.parts.length - 1]
-  if (lastPart?.kind === 'progress' || lastPart?.kind === 'reasoning') {
-    lastPart.text = text
+  if ((lastPart?.kind === 'progress' || lastPart?.kind === 'reasoning') && lastPart.text === text) {
+    Object.assign(lastPart, metadata)
   } else {
-    message.parts.push({ kind: 'progress', text })
+    message.parts.push({ kind: 'progress', text, ...metadata })
   }
+  message.updatedAt = Date.now()
+}
+
+const appendWarningPart = (message: ChatMessage, warning: string): void => {
+  message.parts.push({ kind: 'warning', message: warning })
   message.updatedAt = Date.now()
 }
 
@@ -955,8 +1012,13 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
   article.dataset.messageId = message.id
   const partSummary = renderMessagePartSummary(message)
+  const messageState = message.status === 'streaming'
+    ? 'Thinking...'
+    : message.requestStatus === 'waiting-for-approval'
+      ? 'Waiting for approval...'
+      : ''
   article.innerHTML = `
-    <div class="message-header"><strong>${message.role === 'user' ? 'You' : 'GhostPilot'}</strong><span class="message-state">${message.status === 'streaming' ? 'Thinking...' : ''}</span></div>
+    <div class="message-header"><strong>${message.role === 'user' ? 'You' : 'GhostPilot'}</strong><span class="message-state">${messageState}</span></div>
     <div class="message-body">${renderMarkdown(message.content)}</div>
     ${partSummary}
     <div class="message-actions" aria-label="Message actions"></div>
@@ -979,17 +1041,20 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   if (parts.length === 0) {
     return ''
   }
-  const rendered = parts.map(part => {
-    if (part.kind === 'tool') {
-      const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
-      return `<div class="message-progress tool-progress">${escapeHtml(part.toolCall.name)} · ${escapeHtml(part.toolCall.status)}${escapeHtml(result)}</div>`
-    }
-    if (part.kind === 'error') {
-      return `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`
-    }
-    return `<div class="message-progress">${escapeHtml(part.text)}</div>`
+  const progressParts = parts.filter((part): part is Extract<MessagePart, { kind: 'progress' | 'reasoning' }> => part.kind === 'progress' || part.kind === 'reasoning')
+  const toolParts = parts.filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
+  const warningParts = parts.filter((part): part is Extract<MessagePart, { kind: 'warning' }> => part.kind === 'warning')
+  const errorParts = parts.filter((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
+  const renderedProgress = progressParts.length > 0
+    ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
+    : ''
+  const renderedTools = toolParts.map(part => {
+    const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
+    return `<div class="message-progress tool-progress">${escapeHtml(part.toolCall.name)} · ${escapeHtml(part.toolCall.status)}${escapeHtml(result)}</div>`
   }).join('')
-  return `<div class="message-part-summary">${rendered}</div>`
+  const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
+  const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
+  return `<div class="message-part-summary">${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
 }
 
 const stateCard = (): string => {
@@ -1124,8 +1189,12 @@ const updateStatus = () => {
       cancelled: 'Cancelled',
       failed: 'Request failed'
     }
-    statusTextElement.textContent = statusLabels[activeRequest.status]
-    screenReaderStatusElement.textContent = statusLabels[activeRequest.status]
+    const elapsed = formatElapsed(Date.now() - activeRequest.startedAt)
+    const telemetry = activeRequest.tokenCount > 0
+      ? ` · ~${activeRequest.tokenCount} tok${activeRequest.tokensPerSecond ? ` · ~${activeRequest.tokensPerSecond.toFixed(1)} tok/s` : ''}`
+      : ''
+    statusTextElement.textContent = `${statusLabels[activeRequest.status]} · ${activeRequest.model} · ${elapsed}${telemetry}`
+    screenReaderStatusElement.textContent = activeRequest.latestDetail || statusLabels[activeRequest.status]
   } else if (viewStatus === 'offline') {
     statusTextElement.textContent = 'Offline'
   } else if (notice) {
@@ -1177,6 +1246,7 @@ const applySlashCommand = (prompt: string): string | undefined => {
     attachments = []
     notice = undefined
     activeRequest = undefined
+    stopProgressTimer()
     requests.clear()
     render(true)
     return undefined
@@ -1223,9 +1293,14 @@ const submitPrompt = (rawPrompt: string) => {
     lastSequence: 0,
     status: 'preparing',
     attempt: 0,
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    model: controls.chatModel,
+    phase: 'context',
+    latestDetail: 'Preparing context',
+    tokenCount: 0
   }
   requests.set(requestId, activeRequest)
+  startProgressTimer()
   notice = undefined
   state.promptHistory = [prompt, ...promptHistory().filter(item => item !== prompt)].slice(0, 100)
   promptElement.value = ''
@@ -1337,6 +1412,12 @@ const handleConversationAction = (action: string, conversationId: string) => {
 const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (message.type === 'state') {
     viewStatus = message.status
+    if (message.status === 'offline' && activeRequest) {
+      activeRequest.status = 'failed'
+      activeRequest.phase = 'error'
+      activeRequest.latestDetail = 'Provider disconnected'
+      stopProgressTimer()
+    }
     render(false)
     return
   }
@@ -1365,10 +1446,13 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     state = {
       schemaVersion: 1,
       conversations: [createConversation()],
-      activeConversationId: ''
+      activeConversationId: '',
+      showReasoning: false
     }
     state.activeConversationId = state.conversations[0].id
+    showReasoning = false
     activeRequest = undefined
+    stopProgressTimer()
     requests.clear()
     notice = undefined
     render(true)
@@ -1380,6 +1464,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     conversation.messages = []
     conversation.updatedAt = Date.now()
     activeRequest = undefined
+    stopProgressTimer()
     requests.clear()
     notice = undefined
     render(true)
@@ -1408,13 +1493,41 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     request.status = message.state
     assistantMessage.requestStatus = message.state
   }
+  if (message.phase) {
+    request.phase = message.phase
+  }
+  if (message.model) {
+    request.model = message.model
+  }
+  if (typeof message.tokenCount === 'number') {
+    request.tokenCount = message.tokenCount
+  }
+  if (typeof message.tokensPerSecond === 'number') {
+    request.tokensPerSecond = message.tokensPerSecond
+  }
+  if (typeof message.startedAt === 'number' && message.type === 'request-started') {
+    request.startedAt = message.startedAt
+  }
+  if (message.detail) {
+    request.latestDetail = message.detail
+  }
   if (message.type === 'request-started') {
+    request.status = message.state ?? 'preparing'
+    assistantMessage.requestStatus = request.status
+    startProgressTimer()
     updateStatus()
     return
   }
   if (message.type === 'thinking') {
-    request.status = 'thinking'
-    appendProgressPart(assistantMessage, message.detail ?? 'GhostPilot is working')
+    request.status = message.state ?? (message.phase === 'context' ? 'preparing' : message.phase === 'provider' ? 'connecting' : 'thinking')
+    const detail = message.detail ?? 'GhostPilot is working'
+    appendProgressPart(assistantMessage, detail, {
+      phase: message.phase,
+      elapsedMs: message.elapsedMs,
+      tokenCount: message.tokenCount,
+      tokensPerSecond: message.tokensPerSecond,
+      model: message.model
+    })
     screenReaderStatusElement.textContent = message.detail ?? 'GhostPilot is working'
     updateMessageElement(assistantMessage)
     updateStatus()
@@ -1472,7 +1585,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
   if (message.type === 'warning') {
     const warning = message.message ?? 'GhostPilot returned a warning'
-    appendProgressPart(assistantMessage, `Warning: ${warning}`)
+    appendWarningPart(assistantMessage, warning)
     notice = { kind: 'info', message: warning }
     screenReaderStatusElement.textContent = warning
     updateMessageElement(assistantMessage)
@@ -1505,6 +1618,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
     }
     if (activeRequest?.requestId === message.requestId) {
       activeRequest = undefined
+      stopProgressTimer()
     }
     conversation.activeRequestId = undefined
     conversation.updatedAt = Date.now()
@@ -1549,7 +1663,13 @@ const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage
     typeof message.requestId === 'string' &&
     typeof message.conversationId === 'string' &&
     typeof message.sequence === 'number' &&
-    (message.state === undefined || ['idle', 'preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval', 'completed', 'cancelled', 'failed'].includes(message.state as string))
+    (message.state === undefined || ['idle', 'preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval', 'completed', 'cancelled', 'failed'].includes(message.state as string)) &&
+    (message.phase === undefined || ['context', 'provider', 'thinking', 'streaming', 'tool', 'complete', 'error'].includes(message.phase as string)) &&
+    (message.elapsedMs === undefined || typeof message.elapsedMs === 'number') &&
+    (message.model === undefined || typeof message.model === 'string') &&
+    (message.tokenCount === undefined || typeof message.tokenCount === 'number') &&
+    (message.tokensPerSecond === undefined || typeof message.tokensPerSecond === 'number') &&
+    (message.startedAt === undefined || typeof message.startedAt === 'number')
   )
 }
 
@@ -1702,6 +1822,11 @@ responseLengthElement.addEventListener('change', () => {
 modeElement.addEventListener('change', () => {
   controls.mode = modeElement.value as GhostPilotMode
   sendSettingsUpdate()
+})
+showReasoningElement.addEventListener('change', () => {
+  showReasoning = showReasoningElement.checked
+  state.showReasoning = showReasoning
+  saveState()
 })
 
 document.getElementById('settings')?.addEventListener('click', () => {

@@ -258,16 +258,16 @@
 
 ### 9.6 Show Thinking and Agent Progress
 
-- [ ] Define a local-model-compatible progress protocol for models that do not expose native reasoning tokens.
-- [ ] Show a compact “GhostPilot is thinking…” state while context is collected and the provider connects.
-- [ ] Stream visible reasoning only when the provider explicitly returns it and the user enables it.
-- [ ] Default to showing safe progress summaries instead of raw hidden reasoning.
-- [ ] Show context collection steps such as reading the active file, searching the workspace, or preparing attachments.
-- [ ] Show elapsed time, token counts where available, current model, and estimated completion state.
-- [ ] Add collapsible progress details for each request.
-- [ ] Clearly separate model answer, tool activity, warnings, and system diagnostics.
-- [ ] Ensure progress indicators stop on completion, cancellation, disconnect, and error.
-- [ ] Provide indicators for tokens/sec
+- [x] Define a local-model-compatible progress protocol for models that do not expose native reasoning tokens.
+- [x] Show a compact “GhostPilot is thinking…” state while context is collected and the provider connects.
+- [x] Stream visible reasoning only when the provider explicitly returns it and the user enables it.
+- [x] Default to showing safe progress summaries instead of raw hidden reasoning.
+- [x] Show context collection steps such as reading the active file, searching the workspace, or preparing attachments.
+- [x] Show elapsed time, token counts where available, current model, and estimated completion state.
+- [x] Add collapsible progress details for each request.
+- [x] Clearly separate model answer, tool activity, warnings, and system diagnostics.
+- [x] Ensure progress indicators stop on completion, cancellation, disconnect, and error.
+- [x] Provide indicators for tokens/sec
 
 ### 9.7 Integrate Tools with Approval and Results
 

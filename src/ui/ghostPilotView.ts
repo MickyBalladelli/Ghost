@@ -27,6 +27,8 @@ interface GhostPilotRequestState {
   startedAt: number
   lastActivityAt: number
   timedOut: boolean
+  model: string
+  outputTokens: number
 }
 
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -119,7 +121,9 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       attempt: 0,
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
-      timedOut: false
+      timedOut: false,
+      model: options.model?.trim() || getGhostPilotSettings().chatModel,
+      outputTokens: 0
     }
     this.requests.set(requestId, request)
     this.postStreamEvent(requestId, request, {
@@ -133,17 +137,20 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
           this.postStreamEvent(requestId, request, {
             type: 'tool-result',
             tool: pendingTool,
-            detail: `${pendingTool} completed`
+            detail: `${pendingTool} completed`,
+            phase: 'tool'
           })
           pendingTool = undefined
         }
         const markerCount = (delta.match(/```/g) ?? []).length
         const type = request.codeMode || markerCount > 0 ? 'code-delta' : 'text-delta'
+        request.outputTokens += Math.max(1, Math.ceil(delta.length / 4))
         if (markerCount % 2 === 1) {
           request.codeMode = !request.codeMode
         }
         this.postStreamEvent(requestId, request, {
           type,
+          phase: 'streaming',
           delta
         })
       },
@@ -153,11 +160,16 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
           this.postStreamEvent(requestId, request, {
             type: 'tool-requested',
             tool: pendingTool,
-            detail: progress
+            detail: progress,
+            phase: 'tool'
           })
           return
         }
-        this.postStreamEvent(requestId, request, { type: 'thinking', detail: progress })
+        const normalizedProgress = progress.toLowerCase()
+        const phase = normalizedProgress.startsWith('context:') || normalizedProgress.includes('reading ') || normalizedProgress.includes('searching ') || normalizedProgress.includes('preparing attachment')
+          ? 'context'
+          : 'thinking'
+        this.postStreamEvent(requestId, request, { type: 'thinking', detail: progress, phase })
       }
     } as unknown as vscode.ChatResponseStream
 
@@ -224,6 +236,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         this.postStreamEvent(requestId, request, {
           type: 'thinking',
           state: 'connecting',
+          phase: 'provider',
           detail: attempt === 1 ? 'Connecting to provider…' : `Reconnecting to provider (attempt ${attempt})…`
         })
         try {
@@ -259,6 +272,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       }
       this.postStreamEvent(requestId, request, {
         type: 'request-completed',
+        phase: 'complete',
         status: request.timedOut
           ? 'failed'
           : cancellation.token.isCancellationRequested
@@ -268,7 +282,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     } catch (error) {
       if (!cancellation.token.isCancellationRequested || !request.timedOut) {
         const message = error instanceof Error ? error.message : 'GhostPilot request failed'
-        this.postStreamEvent(requestId, request, { type: 'error', message })
+        this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message })
       }
       this.postStreamEvent(requestId, request, {
         type: 'request-completed',
@@ -311,6 +325,18 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     request.lastActivityAt = Date.now()
     if (event.state) {
       request.status = event.state as GhostPilotRequestStatus
+    } else if (event.phase === 'context') {
+      request.status = 'preparing'
+    } else if (event.phase === 'provider') {
+      request.status = 'connecting'
+    } else if (event.phase === 'streaming') {
+      request.status = 'streaming'
+    } else if (event.phase === 'tool') {
+      request.status = event.type === 'tool-requested' ? 'waiting-for-approval' : 'thinking'
+    } else if (event.phase === 'error') {
+      request.status = 'failed'
+    } else if (event.phase === 'complete') {
+      request.status = 'completed'
     } else if (event.type === 'request-started') {
       request.status = 'preparing'
     } else if (event.type === 'thinking') {
@@ -336,6 +362,14 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       conversationId: request.conversationId,
       sequence: request.sequence,
       state: request.status,
+      phase: event.phase as GhostPilotStreamEvent['phase'],
+      elapsedMs: Date.now() - request.startedAt,
+      model: request.model,
+      tokenCount: request.outputTokens,
+      startedAt: request.startedAt,
+      ...(request.outputTokens > 0
+        ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
+        : {}),
       ...event
     } as GhostPilotStreamEvent)
   }
@@ -949,6 +983,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         font-size: 0.85em;
       }
 
+      .settings-checkbox {
+        align-items: center;
+        display: flex;
+        gap: 6px;
+        grid-column: 1 / -1;
+      }
+
       .settings-grid input,
       .settings-grid select,
       .preset-section input,
@@ -956,6 +997,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       #history-search {
         padding: 5px 7px;
         width: 100%;
+      }
+
+      .settings-checkbox input {
+        width: auto;
       }
 
       .preset-section {
@@ -1212,6 +1257,24 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         margin-top: 8px;
       }
 
+      .progress-details {
+        background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
+        border-left: 2px solid var(--ghostpilot-accent);
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        padding: 4px 7px;
+      }
+
+      .progress-details summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .progress-details .message-progress {
+        border-left: 0;
+        padding-left: 0;
+      }
+
       .message-progress {
         background: var(--vscode-textBlockQuote-background, var(--ghostpilot-surface));
         border-left: 2px solid var(--ghostpilot-accent);
@@ -1222,6 +1285,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
       .tool-progress {
         border-left-color: var(--vscode-charts-yellow, #cca700);
+      }
+
+      .warning-progress {
+        border-left-color: var(--vscode-editorWarning-foreground, #cca700);
       }
 
       .error-progress {
@@ -1399,6 +1466,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         gap: 6px;
+        overflow-wrap: anywhere;
         padding: 7px 12px;
       }
 

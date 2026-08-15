@@ -1,4 +1,4 @@
-import type { GhostPilotRequestStatus } from './ghostPilotState'
+import type { GhostPilotProgressPhase, GhostPilotRequestStatus } from './ghostPilotState'
 
 export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1 as const
 
@@ -8,6 +8,7 @@ export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostPilotContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
 export type { GhostPilotRequestStatus }
+export type { GhostPilotProgressPhase }
 
 export interface GhostPilotAttachment {
   name: string
@@ -23,6 +24,7 @@ export interface GhostPilotWebviewRequestOptions {
   maxTokens?: number
   mode?: GhostPilotMode
   context?: Partial<Record<GhostPilotContextKey, boolean>>
+  showReasoning?: boolean
 }
 
 export interface GhostPilotSettingsUpdate {
@@ -82,6 +84,12 @@ interface GhostPilotRequestEnvelopeBase {
   requestId: string
   conversationId: string
   state?: GhostPilotRequestStatus
+  phase?: GhostPilotProgressPhase
+  elapsedMs?: number
+  model?: string
+  tokenCount?: number
+  tokensPerSecond?: number
+  startedAt?: number
 }
 
 export type GhostPilotExtensionMessage =
@@ -146,6 +154,7 @@ const isOptions = (value: unknown): value is GhostPilotWebviewRequestOptions => 
     (value.temperature !== undefined && typeof value.temperature !== 'number') ||
     (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||
     (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') ||
+    (value.showReasoning !== undefined && typeof value.showReasoning !== 'boolean') ||
     (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false
