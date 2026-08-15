@@ -80,9 +80,9 @@
     - [x] Yield chunks as `AsyncGenerator<string>`.
   - [x] Implement `fetchFimCompletion` (Fill-In-the-Middle) for inline code autocompletion.
 
-- [ ] **2.2 Settings & Configuration Manager**
-  - [ ] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('localpilot')`.
-  - [ ] Implement event listener for configuration changes (`vscode.workspace.onDidChangeConfiguration`).
+- [x] **2.2 Settings & Configuration Manager**
+  - [x] Create `src/config.ts` to manage reading/updating settings via `vscode.workspace.getConfiguration('localpilot')`.
+  - [x] Implement event listener for configuration changes (`vscode.workspace.onDidChangeConfiguration`).
 
 ---
 
