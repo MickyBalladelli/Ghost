@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 
+import { createChatParticipant } from './agent/chatParticipant'
 import { localPilotConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 
@@ -36,6 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
       updateStatusBar()
     }
   })
+  const chatParticipant = createChatParticipant()
 
   updateStatusBar()
   context.subscriptions.push(
@@ -43,7 +45,8 @@ export function activate(context: vscode.ExtensionContext) {
     inlineProviderRegistration,
     toggleInlineCommand,
     configurationListener,
-    statusBar
+    statusBar,
+    chatParticipant
   )
 }
 
