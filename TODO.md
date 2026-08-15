@@ -105,29 +105,29 @@
 
 ## 💬 Phase 4: Native Chat Agent & Context Injection
 
-- [ ] **4.1 Implement Chat Participant Handler**
-  - [ ] Create `src/agent/chatParticipant.ts`.
-  - [ ] Implement `vscode.ChatRequestHandler` callback:
-    - Parse user's prompt from `request.prompt`.
-    - Extract active text editor context (active file name, selected text or full file).
-    - Gather workspace context (open tabs, terminal output if applicable).
-  - [ ] Stream model response directly to VS Code native chat panel via `stream.markdown()`.
-  - [ ] Support cancellation tokens (`token.isCancellationRequested`).
+- [x] **4.1 Implement Chat Participant Handler**
+  - [x] Create `src/agent/chatParticipant.ts`.
+  - [x] Implement `vscode.ChatRequestHandler` callback:
+    - [x] Parse user's prompt from `request.prompt`.
+    - [x] Extract active text editor context (active file name, selected text or full file).
+    - [x] Gather workspace context (open tabs, terminal output if applicable).
+  - [x] Stream model response directly to VS Code native chat panel via `stream.markdown()`.
+  - [x] Support cancellation tokens (`token.isCancellationRequested`).
 
-- [ ] **4.2 Context Mentions & Attachments**
-  - [ ] Support `@workspace` references by searching files matching user keywords.
-  - [ ] Pass file attachments from `request.references` into model prompt context.
+- [x] **4.2 Context Mentions & Attachments**
+  - [x] Support `@workspace` references by searching files matching user keywords.
+  - [x] Pass file attachments from `request.references` into model prompt context.
 
 ---
 
 ## 🛠️ Phase 5: Agentic Tool Calling (Codex/Claude Computer Use Style)
 
-- [ ] **5.1 Define Language Model Tools in Manifest**
-  - [ ] Add `contributes.languageModelTools` in `package.json`:
-    - `localpilot_read_file`: Reads full content of a file in workspace.
-    - `localpilot_write_file`: Creates or replaces file content.
-    - `localpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
-    - `localpilot_list_directory`: Lists workspace file hierarchy.
+- [x] **5.1 Define Language Model Tools in Manifest**
+  - [x] Add `contributes.languageModelTools` in `package.json`:
+    - [x] `localpilot_read_file`: Reads full content of a file in workspace.
+    - [x] `localpilot_write_file`: Creates or replaces file content.
+    - [x] `localpilot_run_terminal_command`: Executes bash/powershell command in workspace terminal.
+    - [x] `localpilot_list_directory`: Lists workspace file hierarchy.
 
 - [ ] **5.2 Implement Tool Execution Services**
   - [ ] Create `src/tools/fileTools.ts` for file read/write operations using `vscode.workspace.fs`.
