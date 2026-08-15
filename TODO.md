@@ -236,14 +236,14 @@
 
 ### 9.4 Define the Webview Message Contract
 
-- [ ] Define typed extension-to-webview and webview-to-extension message unions.
-- [ ] Add request IDs and conversation IDs to every prompt lifecycle message.
-- [ ] Support messages for submit, cancel, retry, regenerate, edit, attach, remove-context, select-model, and update-settings.
-- [ ] Support streamed events for request-started, thinking, text-delta, code-delta, tool-requested, tool-result, warning, error, and request-completed.
-- [ ] Validate every incoming message at the extension boundary before acting on it.
-- [ ] Handle stale, duplicated, out-of-order, and late stream events safely.
-- [ ] Ensure cancellation disposes network, stream, timer, and webview resources.
-- [ ] Add a protocol version so future UI and extension-host changes can remain compatible.
+- [x] Define typed extension-to-webview and webview-to-extension message unions.
+- [x] Add request IDs and conversation IDs to every prompt lifecycle message.
+- [x] Support messages for submit, cancel, retry, regenerate, edit, attach, remove-context, select-model, and update-settings.
+- [x] Support streamed events for request-started, thinking, text-delta, code-delta, tool-requested, tool-result, warning, error, and request-completed.
+- [x] Validate every incoming message at the extension boundary before acting on it.
+- [x] Handle stale, duplicated, out-of-order, and late stream events safely.
+- [x] Ensure cancellation disposes network, stream, timer, and webview resources.
+- [x] Add a protocol version so future UI and extension-host changes can remain compatible.
 
 ### 9.5 Implement Conversation and Request State
 

@@ -92,13 +92,15 @@ type GhostPilotExtensionMessage =
   | {
       source: 'ghostpilot-extension'
       version: 1
-      type: 'chat-started' | 'chat-delta' | 'chat-progress' | 'chat-completed' | 'chat-error'
+      type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'warning' | 'error' | 'request-completed'
       requestId: string
       conversationId: string
+      sequence: number
+      detail?: string
       delta?: string
-      progress?: string
-      status?: 'completed' | 'cancelled'
-      error?: string
+      tool?: string
+      message?: string
+      status?: 'completed' | 'cancelled' | 'failed'
     }
 
 interface GhostPilotWebviewApi {
@@ -111,6 +113,8 @@ interface ActiveRequest {
   requestId: string
   conversationId: string
   assistantMessageId: string
+  lastSequence: number
+  status: 'active' | 'completed' | 'cancelled' | 'failed'
 }
 
 interface WebviewRequestOptions {
@@ -366,8 +370,14 @@ const promptHistory = (): string[] => state.promptHistory ?? []
 
 const presets = (): PromptPreset[] => state.presets ?? []
 
+const lifecycleEnvelope = (prefix: string) => ({
+  requestId: createId(prefix),
+  conversationId: state.activeConversationId
+})
+
 const sendSettingsUpdate = () => {
   post('update-settings', {
+    ...lifecycleEnvelope('settings'),
     settings: {
       provider: controls.provider,
       chatModel: controls.chatModel,
@@ -528,6 +538,7 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
 const addAttachment = (attachment: Attachment) => {
   if (!attachments.some(existing => existing.name === attachment.name && existing.path === attachment.path)) {
     attachments = [...attachments, attachment]
+    post('attach', { ...lifecycleEnvelope('attach'), attachments: [attachment] })
     renderControls()
   }
 }
@@ -999,7 +1010,9 @@ const submitPrompt = (rawPrompt: string) => {
   activeRequest = {
     requestId,
     conversationId: conversation.id,
-    assistantMessageId: assistantMessage.id
+    assistantMessageId: assistantMessage.id,
+    lastSequence: 0,
+    status: 'active'
   }
   requests.set(requestId, activeRequest)
   notice = undefined
@@ -1070,10 +1083,13 @@ const handleMessageAction = (action: string, messageId: string) => {
   if (action === 'copy') {
     void copyText(message.content)
   } else if (action === 'edit') {
+    post('edit', { ...lifecycleEnvelope('edit'), messageId, prompt: message.content })
     editMessage(messageId)
   } else if (action === 'edit-resend') {
+    post('edit', { ...lifecycleEnvelope('edit'), messageId, prompt: message.content })
     editAndResendMessage(messageId)
   } else if (action === 'retry' || action === 'regenerate') {
+    post(action, { ...lifecycleEnvelope(action), messageId })
     retryMessage(messageId)
   }
 }
@@ -1156,35 +1172,53 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   if (!request || request.conversationId !== message.conversationId) {
     return
   }
+  if (!('sequence' in message) || typeof message.sequence !== 'number' || message.sequence <= request.lastSequence || request.status !== 'active') {
+    return
+  }
+  request.lastSequence = message.sequence
   const conversation = state.conversations.find(item => item.id === request.conversationId)
   const assistantMessage = conversation ? findMessage(conversation, request.assistantMessageId) : undefined
   if (!conversation || !assistantMessage) {
     return
   }
 
-  if (message.type === 'chat-started') {
+  if (message.type === 'request-started') {
     updateStatus()
     return
   }
-  if (message.type === 'chat-progress') {
-    screenReaderStatusElement.textContent = message.progress ?? 'GhostPilot is working'
+  if (message.type === 'thinking' || message.type === 'tool-requested' || message.type === 'tool-result') {
+    screenReaderStatusElement.textContent = message.detail ?? message.tool ?? 'GhostPilot is working'
     return
   }
-  if (message.type === 'chat-delta') {
+  if (message.type === 'text-delta' || message.type === 'code-delta') {
     assistantMessage.content += message.delta ?? ''
     updateMessageElement(assistantMessage)
     scrollMessages(false)
     return
   }
-  if (message.type === 'chat-error') {
-    assistantMessage.status = 'error'
-    assistantMessage.content = message.error ?? 'GhostPilot request failed'
-    notice = { kind: 'error', message: assistantMessage.content }
+  if (message.type === 'warning') {
+    const warning = message.message ?? 'GhostPilot returned a warning'
+    notice = { kind: 'info', message: warning }
+    screenReaderStatusElement.textContent = warning
+    updateStatus()
+    return
   }
-  if (message.type === 'chat-completed' || message.type === 'chat-error') {
-    assistantMessage.status = message.type === 'chat-error' ? 'error' : undefined
-    if (message.status === 'cancelled' && assistantMessage.content.length === 0) {
+  if (message.type === 'error') {
+    assistantMessage.status = 'error'
+    assistantMessage.content = message.message ?? 'GhostPilot request failed'
+    notice = { kind: 'error', message: assistantMessage.content }
+    updateMessageElement(assistantMessage)
+    return
+  }
+  if (message.type === 'request-completed') {
+    const status = message.status ?? 'failed'
+    request.status = status
+    assistantMessage.status = status === 'failed' ? 'error' : undefined
+    if (status === 'cancelled' && assistantMessage.content.length === 0) {
       assistantMessage.content = 'Request cancelled.'
+    }
+    if (status === 'failed' && assistantMessage.content.length === 0) {
+      assistantMessage.content = 'GhostPilot request failed.'
     }
     if (/model.*(not found|missing)|ollama pull/i.test(assistantMessage.content)) {
       notice = { kind: 'no-model', message: assistantMessage.content }
@@ -1223,14 +1257,16 @@ const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage
   if (message.type === 'file-picked') {
     return Array.isArray(message.attachments)
   }
-  if (!['chat-started', 'chat-delta', 'chat-progress', 'chat-completed', 'chat-error'].includes(message.type)) {
+  if (!['request-started', 'thinking', 'text-delta', 'code-delta', 'tool-requested', 'tool-result', 'warning', 'error', 'request-completed'].includes(message.type)) {
     return false
   }
   return (
     'requestId' in message &&
     'conversationId' in message &&
+    'sequence' in message &&
     typeof message.requestId === 'string' &&
-    typeof message.conversationId === 'string'
+    typeof message.conversationId === 'string' &&
+    typeof message.sequence === 'number'
   )
 }
 
@@ -1263,6 +1299,12 @@ contextChipsElement.addEventListener('click', event => {
     return
   }
   contextEnabled[key] = !contextEnabled[key]
+  if (!contextEnabled[key]) {
+    post('remove-context', {
+      ...lifecycleEnvelope('remove-context'),
+      contextKey: key
+    })
+  }
   renderControls()
 })
 
@@ -1353,6 +1395,7 @@ providerElement.addEventListener('change', () => {
 
 modelElement.addEventListener('change', () => {
   controls.chatModel = modelElement.value
+  post('select-model', { ...lifecycleEnvelope('select-model'), model: controls.chatModel })
   sendSettingsUpdate()
 })
 

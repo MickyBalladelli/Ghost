@@ -1,6 +1,10 @@
-export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1
+export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1 as const
 
 export type GhostPilotViewStatus = 'ready' | 'offline'
+export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostPilotMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+export type GhostPilotResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+export type GhostPilotContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
 
 export interface GhostPilotAttachment {
   name: string
@@ -14,102 +18,81 @@ export interface GhostPilotWebviewRequestOptions {
   temperature?: number
   maxContextTokens?: number
   maxTokens?: number
-  mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-  context?: {
-    workspace?: boolean
-    folders?: boolean
-    activeFile?: boolean
-    selection?: boolean
-    openFiles?: boolean
-    tools?: boolean
-  }
+  mode?: GhostPilotMode
+  context?: Partial<Record<GhostPilotContextKey, boolean>>
 }
 
 export interface GhostPilotSettingsUpdate {
-  provider?: 'ollama' | 'mlx-vlm' | 'openai-compatible'
+  provider?: GhostPilotProvider
   chatModel?: string
   autocompleteModel?: string
   maxContextTokens?: number
   temperature?: number
-  responseLength?: 'short' | 'balanced' | 'long' | 'unlimited'
-  mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+  responseLength?: GhostPilotResponseLength
+  mode?: GhostPilotMode
+}
+
+interface GhostPilotWebviewEnvelope {
+  source: 'ghostpilot-webview'
+  version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+}
+
+interface GhostPilotRequestEnvelope extends GhostPilotWebviewEnvelope {
+  requestId: string
+  conversationId: string
 }
 
 export type GhostPilotWebviewMessage =
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'ready'
-    }
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'reset' | 'clear' | 'export' | 'check-status'
-    }
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+  | (GhostPilotWebviewEnvelope & { type: 'ready' })
+  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'export' | 'check-status' })
+  | (GhostPilotRequestEnvelope & {
       type: 'submit'
-      requestId: string
-      conversationId: string
       prompt: string
       options?: GhostPilotWebviewRequestOptions
       attachments?: GhostPilotAttachment[]
-    }
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'cancel'
-      requestId: string
-    }
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'load-controls' | 'refresh-models' | 'pick-file'
-    }
-  | {
-      source: 'ghostpilot-webview'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'update-settings'
-      settings: GhostPilotSettingsUpdate
-    }
+    })
+  | (GhostPilotRequestEnvelope & { type: 'cancel' })
+  | (GhostPilotRequestEnvelope & { type: 'retry' | 'regenerate'; messageId: string })
+  | (GhostPilotRequestEnvelope & { type: 'edit'; messageId: string; prompt: string })
+  | (GhostPilotRequestEnvelope & { type: 'attach'; attachments: GhostPilotAttachment[] })
+  | (GhostPilotRequestEnvelope & { type: 'remove-context'; contextKey: GhostPilotContextKey })
+  | (GhostPilotRequestEnvelope & { type: 'select-model'; model: string })
+  | (GhostPilotWebviewEnvelope & { type: 'load-controls' | 'refresh-models' | 'pick-file' })
+  | (GhostPilotRequestEnvelope & { type: 'update-settings'; settings: GhostPilotSettingsUpdate })
+
+interface GhostPilotExtensionEnvelope {
+  source: 'ghostpilot-extension'
+  version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+}
+
+export type GhostPilotStreamEvent =
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-started'; sequence: number })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; detail?: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; detail: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'error'; sequence: number; message: string })
+  | (GhostPilotExtensionEnvelope & GhostPilotRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed' })
+
+interface GhostPilotRequestEnvelopeBase {
+  requestId: string
+  conversationId: string
+}
 
 export type GhostPilotExtensionMessage =
-  | {
-      source: 'ghostpilot-extension'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'state'
-      status: GhostPilotViewStatus
-      detail: string
-    }
-  | {
-      source: 'ghostpilot-extension'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'reset' | 'clear'
-    }
-  | {
-      source: 'ghostpilot-extension'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'chat-started' | 'chat-delta' | 'chat-progress' | 'chat-completed' | 'chat-error'
-      requestId: string
-      conversationId: string
-      delta?: string
-      progress?: string
-      status?: 'completed' | 'cancelled'
-      error?: string
-    }
-  | {
-      source: 'ghostpilot-extension'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
+  | (GhostPilotExtensionEnvelope & { type: 'state'; status: GhostPilotViewStatus; detail: string })
+  | (GhostPilotExtensionEnvelope & { type: 'reset' | 'clear' })
+  | (GhostPilotExtensionEnvelope & {
       type: 'controls-state'
       settings: {
-        provider: 'ollama' | 'mlx-vlm' | 'openai-compatible'
+        provider: GhostPilotProvider
         chatModel: string
         autocompleteModel: string
         maxContextTokens: number
         temperature: number
-        responseLength: 'short' | 'balanced' | 'long' | 'unlimited'
-        mode: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+        responseLength: GhostPilotResponseLength
+        mode: GhostPilotMode
       }
       models: string[]
       connection: 'online' | 'offline' | 'unknown'
@@ -120,60 +103,102 @@ export type GhostPilotExtensionMessage =
         openFiles: string[]
       }
       tools: string[]
-    }
-  | {
-      source: 'ghostpilot-extension'
-      version: typeof GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION
-      type: 'file-picked'
-      attachments: GhostPilotAttachment[]
-    }
+    })
+  | (GhostPilotExtensionEnvelope & { type: 'file-picked'; attachments: GhostPilotAttachment[] })
+  | GhostPilotStreamEvent
 
-export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotWebviewMessage {
-  if (!value || typeof value !== 'object') {
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+)
+
+const isNonEmptyString = (value: unknown): value is string => (
+  typeof value === 'string' && value.trim().length > 0
+)
+
+const isRequestEnvelope = (message: Record<string, unknown>): boolean => (
+  isNonEmptyString(message.requestId) && isNonEmptyString(message.conversationId)
+)
+
+const isAttachment = (value: unknown): value is GhostPilotAttachment => {
+  if (!isRecord(value) || !isNonEmptyString(value.name)) {
     return false
   }
+  return (
+    (value.path === undefined || isNonEmptyString(value.path)) &&
+    (value.content === undefined || typeof value.content === 'string') &&
+    (value.mimeType === undefined || typeof value.mimeType === 'string')
+  )
+}
 
-  const message = value as Record<string, unknown>
+const isOptions = (value: unknown): value is GhostPilotWebviewRequestOptions => {
+  if (value === undefined) {
+    return true
+  }
+  if (!isRecord(value)) {
+    return false
+  }
   if (
-    message.source !== 'ghostpilot-webview' ||
-    message.version !== GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION ||
-    typeof message.type !== 'string'
+    (value.model !== undefined && typeof value.model !== 'string') ||
+    (value.temperature !== undefined && typeof value.temperature !== 'number') ||
+    (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||
+    (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') ||
+    (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false
   }
+  return value.context === undefined || isRecord(value.context)
+}
 
-  if (['ready', 'reset', 'clear', 'export', 'check-status', 'load-controls', 'refresh-models', 'pick-file'].includes(message.type)) {
+const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => {
+  if (!isRecord(value)) {
+    return false
+  }
+  return (
+    (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) &&
+    (value.chatModel === undefined || typeof value.chatModel === 'string') &&
+    (value.autocompleteModel === undefined || typeof value.autocompleteModel === 'string') &&
+    (value.maxContextTokens === undefined || typeof value.maxContextTokens === 'number') &&
+    (value.temperature === undefined || typeof value.temperature === 'number') &&
+    (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
+    (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
+  )
+}
+
+export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotWebviewMessage {
+  if (!isRecord(value) || value.source !== 'ghostpilot-webview' || value.version !== GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
+    return false
+  }
+
+  if (['ready', 'reset', 'clear', 'export', 'check-status', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
     return true
   }
-
-  if (message.type === 'cancel') {
-    return typeof message.requestId === 'string' && message.requestId.length > 0
+  if (!isRequestEnvelope(value)) {
+    return false
   }
-
-  if (message.type === 'submit') {
+  if (value.type === 'submit') {
     return (
-      typeof message.requestId === 'string' &&
-      message.requestId.length > 0 &&
-      typeof message.conversationId === 'string' &&
-      message.conversationId.length > 0 &&
-      typeof message.prompt === 'string' &&
-      message.prompt.trim().length > 0
+      isNonEmptyString(value.prompt) &&
+      isOptions(value.options) &&
+      (value.attachments === undefined || (Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)))
     )
   }
-
-  if (message.type === 'update-settings') {
-    if (!message.settings || typeof message.settings !== 'object') {
-      return false
-    }
-    const settings = message.settings as Record<string, unknown>
-    return (
-      (settings.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible'].includes(settings.provider as string)) &&
-      (settings.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(settings.responseLength as string)) &&
-      (settings.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(settings.mode as string)) &&
-      (settings.temperature === undefined || typeof settings.temperature === 'number') &&
-      (settings.maxContextTokens === undefined || typeof settings.maxContextTokens === 'number')
-    )
+  if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate') {
+    return value.type === 'cancel' || isNonEmptyString(value.messageId)
   }
-
+  if (value.type === 'edit') {
+    return isNonEmptyString(value.messageId) && typeof value.prompt === 'string'
+  }
+  if (value.type === 'attach') {
+    return Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)
+  }
+  if (value.type === 'remove-context') {
+    return ['workspace', 'folders', 'activeFile', 'selection', 'openFiles', 'tools'].includes(value.contextKey as string)
+  }
+  if (value.type === 'select-model') {
+    return isNonEmptyString(value.model)
+  }
+  if (value.type === 'update-settings') {
+    return isSettingsUpdate(value.settings)
+  }
   return false
 }

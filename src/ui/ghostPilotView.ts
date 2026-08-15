@@ -10,19 +10,29 @@ import {
   GhostPilotAttachment,
   GhostPilotExtensionMessage,
   GhostPilotSettingsUpdate,
+  GhostPilotStreamEvent,
   GhostPilotViewStatus,
   GhostPilotWebviewRequestOptions,
   isGhostPilotWebviewMessage
 } from './ghostPilotProtocol'
+
+interface GhostPilotRequestState {
+  cancellation: vscode.CancellationTokenSource
+  conversationId: string
+  sequence: number
+  codeMode: boolean
+}
 
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghostpilot.chat'
 
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
-  private readonly requests = new Map<string, vscode.CancellationTokenSource>()
+  private readonly requests = new Map<string, GhostPilotRequestState>()
+  private readonly completedRequests = new Set<string>()
   private pendingMessages: GhostPilotExtensionMessage[] = []
   private status: GhostPilotViewStatus = 'ready'
+  private disposed = false
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
@@ -87,40 +97,54 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     options: GhostPilotWebviewRequestOptions = {},
     attachments: GhostPilotAttachment[] = []
   ): Promise<void> {
-    if (this.requests.has(requestId)) {
+    if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
       return
     }
 
     const cancellation = new vscode.CancellationTokenSource()
-    this.requests.set(requestId, cancellation)
-    this.postMessage({
-      source: 'ghostpilot-extension',
-      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-      type: 'chat-started',
-      requestId,
-      conversationId
+    const request: GhostPilotRequestState = {
+      cancellation,
+      conversationId,
+      sequence: 0,
+      codeMode: false
+    }
+    this.requests.set(requestId, request)
+    this.postStreamEvent(requestId, request, {
+      type: 'request-started'
     })
 
+    let pendingTool: string | undefined
     const response = {
       markdown: (delta: string) => {
-        this.postMessage({
-          source: 'ghostpilot-extension',
-          version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-          type: 'chat-delta',
-          requestId,
-          conversationId,
+        if (pendingTool) {
+          this.postStreamEvent(requestId, request, {
+            type: 'tool-result',
+            tool: pendingTool,
+            detail: `${pendingTool} completed`
+          })
+          pendingTool = undefined
+        }
+        const markerCount = (delta.match(/```/g) ?? []).length
+        const type = request.codeMode || markerCount > 0 ? 'code-delta' : 'text-delta'
+        if (markerCount % 2 === 1) {
+          request.codeMode = !request.codeMode
+        }
+        this.postStreamEvent(requestId, request, {
+          type,
           delta
         })
       },
       progress: (progress: string) => {
-        this.postMessage({
-          source: 'ghostpilot-extension',
-          version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-          type: 'chat-progress',
-          requestId,
-          conversationId,
-          progress
-        })
+        if (progress.startsWith('Running ')) {
+          pendingTool = progress.slice('Running '.length)
+          this.postStreamEvent(requestId, request, {
+            type: 'tool-requested',
+            tool: pendingTool,
+            detail: progress
+          })
+          return
+        }
+        this.postStreamEvent(requestId, request, { type: 'thinking', detail: progress })
       }
     } as unknown as vscode.ChatResponseStream
 
@@ -158,38 +182,51 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         response,
         cancellation.token
       )
-      this.postMessage({
-        source: 'ghostpilot-extension',
-        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-        type: 'chat-completed',
-        requestId,
-        conversationId,
+      this.postStreamEvent(requestId, request, {
+        type: 'request-completed',
         status: cancellation.token.isCancellationRequested ? 'cancelled' : 'completed'
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'GhostPilot request failed'
-      this.postMessage({
-        source: 'ghostpilot-extension',
-        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
-        type: 'chat-error',
-        requestId,
-        conversationId,
-        error: message
-      })
+      this.postStreamEvent(requestId, request, { type: 'error', message })
+      this.postStreamEvent(requestId, request, { type: 'request-completed', status: 'failed' })
     } finally {
       this.requests.delete(requestId)
+      this.completedRequests.add(requestId)
+      if (this.completedRequests.size > 100) {
+        const oldest = this.completedRequests.values().next().value
+        if (oldest) {
+          this.completedRequests.delete(oldest)
+        }
+      }
       cancellation.dispose()
     }
   }
 
   private cancel(requestId: string): void {
-    this.requests.get(requestId)?.cancel()
+    this.requests.get(requestId)?.cancellation.cancel()
   }
 
   private cancelRequests(): void {
     for (const request of this.requests.values()) {
-      request.cancel()
+      request.cancellation.cancel()
     }
+  }
+
+  private postStreamEvent(
+    requestId: string,
+    request: GhostPilotRequestState,
+    event: { type: GhostPilotStreamEvent['type']; [key: string]: unknown }
+  ): void {
+    request.sequence += 1
+    this.postMessage({
+      source: 'ghostpilot-extension',
+      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      requestId,
+      conversationId: request.conversationId,
+      sequence: request.sequence,
+      ...event
+    } as GhostPilotStreamEvent)
   }
 
   private async sendControlsState(): Promise<void> {
@@ -326,7 +363,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   dispose(): void {
+    this.disposed = true
     this.cancelRequests()
+    for (const request of this.requests.values()) {
+      request.cancellation.dispose()
+    }
+    this.requests.clear()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
     this.view = undefined
@@ -370,6 +412,15 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       case 'pick-file':
         await this.pickFiles()
         return
+      case 'select-model':
+        await this.updateSettings({ chatModel: value.model })
+        return
+      case 'retry':
+      case 'regenerate':
+      case 'edit':
+      case 'attach':
+      case 'remove-context':
+        return
     }
   }
 
@@ -387,7 +438,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   }
 
   private postMessage(message: GhostPilotExtensionMessage): void {
+    if (this.disposed) {
+      return
+    }
     if (!this.view) {
+      if (['request-started', 'thinking', 'text-delta', 'code-delta', 'tool-requested', 'tool-result', 'warning', 'error', 'request-completed'].includes(message.type)) {
+        return
+      }
       this.pendingMessages.push(message)
       return
     }
