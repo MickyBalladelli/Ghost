@@ -1,4 +1,4 @@
-# TODO: Build "LocalPilot AI" VS Code Extension
+# TODO: Build "GhostPilot AI" VS Code Extension
 
 **Extension Name:** LocalPilot AI (`localpilot-ai`)  
 **Objective:** Create a privacy-first, fully local AI coding assistant for Visual Studio Code that provides inline code completions, a sidebar chat agent, workspace file context, and agentic tool execution (terminal commands & file editing) using Ollama / vLLM.
@@ -18,50 +18,50 @@
     - Package manager: `npm` or `pnpm`
   - [x] Initialize Git repository and commit baseline files.
 
-- [ ] **1.2 Install Project Dependencies**
-  - [ ] Core dependencies:
+- [x] **1.2 Install Project Dependencies**
+  - [x] Core dependencies:
     ```bash
     npm install node-fetch@2 @types/node-fetch@2
     ```
-  - [ ] Dev dependencies:
+  - [x] Dev dependencies:
     ```bash
     npm install --save-dev @types/vscode typescript eslint @vscode/test-electron
     ```
 
-- [ ] **1.3 Configure `package.json` Manifest**
-  - [ ] Add extension categories: `["AI", "Programming Languages", "Other"]`.
-  - [ ] Set minimum VS Code engine target: `"vscode": "^1.90.0"`.
-  - [ ] Add configuration settings under `contributes.configuration`:
-    - [ ] `localpilot.ollamaUrl` (default: `"http://localhost:11434"`)
-    - [ ] `localpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
-    - [ ] `localpilot.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
-    - [ ] `localpilot.maxContextTokens` (default: `8192`)
-    - [ ] `localpilot.enableInlineCompletions` (default: `true`)
-  - [ ] Register Chat Participant under `contributes.chatParticipants`:
-    - [ ] ID: `localpilot.agent`
-    - [ ] Name: `local`
-    - [ ] Description: `Local AI Agent (Ollama)`
-    - [ ] `isDefault`: `true`
-  - [ ] Register commands under `contributes.commands`:
-    - [ ] `localpilot.checkOllamaStatus` -> "LocalPilot: Check Ollama Connection"
-    - [ ] `localpilot.toggleInline` -> "LocalPilot: Toggle Autocomplete"
+- [x] **1.3 Configure `package.json` Manifest**
+  - [x] Add extension categories: `["AI", "Programming Languages", "Other"]`.
+  - [x] Set minimum VS Code engine target: `"vscode": "^1.90.0"`.
+  - [x] Add configuration settings under `contributes.configuration`:
+    - [x] `localpilot.ollamaUrl` (default: `"http://localhost:11434"`)
+    - [x] `localpilot.chatModel` (default: `"qwen2.5-coder:7b"`)
+    - [x] `localpilot.autocompleteModel` (default: `"qwen2.5-coder:1.5b"`)
+    - [x] `localpilot.maxContextTokens` (default: `8192`)
+    - [x] `localpilot.enableInlineCompletions` (default: `true`)
+  - [x] Register Chat Participant under `contributes.chatParticipants`:
+    - [x] ID: `localpilot.agent`
+    - [x] Name: `local`
+    - [x] Description: `Local AI Agent (Ollama)`
+    - [x] `isDefault`: `true`
+  - [x] Register commands under `contributes.commands`:
+    - [x] `localpilot.checkOllamaStatus` -> "LocalPilot: Check Ollama Connection"
+    - [x] `localpilot.toggleInline` -> "LocalPilot: Toggle Autocomplete"
 
 
 ### Update to Phase 1.3 (`package.json` Manifest Configuration)
-s
-- [ ] **1.3.1 Add MLX Backend Settings**
-  - [ ] Add `localpilot.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
-  - [ ] Add `localpilot.mlxUrl` setting (default: `"http://localhost:8000"`).
+
+- [x] **1.3.1 Add MLX Backend Settings**
+  - [x] Add `localpilot.provider` setting (enum: `["ollama", "mlx-vlm", "openai-compatible"]`, default: `"ollama"`).
+  - [x] Add `localpilot.mlxUrl` setting (default: `"http://localhost:8000"`).
 
 ---
 
 ### New Section: Phase 2.3 & 2.4 (MLX VLM Backend Integration)
 
-- [ ] **2.3 Implement MLX VLM Server Client (`src/services/mlxClient.ts`)**
-  - [ ] Create API adapter specifically targeting the `mlx_vlm.server` OpenAI-compatible endpoints (`http://localhost:8000/v1`).
-  - [ ] Implement health check ping to `/v1/models` or root endpoint to verify server active status.
-  - [ ] Handle MLX vision-language input formatting (support encoding active editor image assets or screenshots if vision context is passed).
-  - [ ] Implement response streaming transformer to convert MLX server Server-Sent Events (SSE) into standard token chunks.
+- [x] **2.3 Implement MLX VLM Server Client (`src/services/mlxClient.ts`)**
+  - [x] Create API adapter specifically targeting the `mlx_vlm.server` OpenAI-compatible endpoints (`http://localhost:8000/v1`).
+  - [x] Implement health check ping to `/v1/models` or root endpoint to verify server active status.
+  - [x] Handle MLX vision-language input formatting (support encoding active editor image assets or screenshots if vision context is passed).
+  - [x] Implement response streaming transformer to convert MLX server Server-Sent Events (SSE) into standard token chunks.
 
 - [ ] **2.4 Dynamic Provider Switching Logic**
   - [ ] Update `src/services/llmFactory.ts` to route requests based on `localpilot.provider` (dispatching to either `ollamaClient` or `mlxClient`).

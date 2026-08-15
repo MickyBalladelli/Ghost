@@ -1,4 +1,4 @@
-# LocalPilot AI
+# GhostPilot AI
 
 Local, offline Copilot & Codex alternative powered by Ollama/vLLM.
 
