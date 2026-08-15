@@ -1,6 +1,7 @@
 import type { GhostPilotProgressPhase, GhostPilotRequestStatus } from './ghostPilotState'
 
 export const GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION = 1 as const
+export const GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION = 2 as const
 
 export type GhostPilotViewStatus = 'ready' | 'offline'
 export type GhostPilotProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
@@ -49,6 +50,17 @@ export interface GhostPilotSettingsUpdate {
   temperature?: number
   responseLength?: GhostPilotResponseLength
   mode?: GhostPilotMode
+  enableConversationPersistence?: boolean
+}
+
+export interface GhostPilotPersistedState {
+  schemaVersion: number
+  conversations?: unknown[]
+  activeConversationId?: string
+  promptHistory?: string[]
+  presets?: unknown[]
+  showReasoning?: boolean
+  preferences?: Record<string, unknown>
 }
 
 interface GhostPilotWebviewEnvelope {
@@ -63,7 +75,9 @@ interface GhostPilotRequestEnvelope extends GhostPilotWebviewEnvelope {
 
 export type GhostPilotWebviewMessage =
   | (GhostPilotWebviewEnvelope & { type: 'ready' })
-  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'export' | 'check-status' })
+  | (GhostPilotWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' })
+  | (GhostPilotWebviewEnvelope & { type: 'export'; state?: GhostPilotPersistedState })
+  | (GhostPilotWebviewEnvelope & { type: 'persist-state'; state: GhostPilotPersistedState })
   | (GhostPilotRequestEnvelope & {
       type: 'submit'
       prompt: string
@@ -114,6 +128,7 @@ interface GhostPilotRequestEnvelopeBase {
 export type GhostPilotExtensionMessage =
   | (GhostPilotExtensionEnvelope & { type: 'state'; status: GhostPilotViewStatus; detail: string })
   | (GhostPilotExtensionEnvelope & { type: 'reset' | 'clear' })
+  | (GhostPilotExtensionEnvelope & { type: 'persisted-state'; state: GhostPilotPersistedState })
   | (GhostPilotExtensionEnvelope & {
       type: 'controls-state'
       settings: {
@@ -124,6 +139,7 @@ export type GhostPilotExtensionMessage =
         temperature: number
         responseLength: GhostPilotResponseLength
         mode: GhostPilotMode
+        enableConversationPersistence: boolean
       }
       models: string[]
       connection: 'online' | 'offline' | 'unknown'
@@ -144,6 +160,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 
 const isNonEmptyString = (value: unknown): value is string => (
   typeof value === 'string' && value.trim().length > 0
+)
+
+const isPersistedState = (value: unknown): value is GhostPilotPersistedState => (
+  isRecord(value) &&
+  (value.schemaVersion === 1 || value.schemaVersion === GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION) &&
+  (value.conversations === undefined || Array.isArray(value.conversations)) &&
+  (value.activeConversationId === undefined || typeof value.activeConversationId === 'string') &&
+  (value.promptHistory === undefined || (Array.isArray(value.promptHistory) && value.promptHistory.every(item => typeof item === 'string'))) &&
+  (value.presets === undefined || Array.isArray(value.presets)) &&
+  (value.showReasoning === undefined || typeof value.showReasoning === 'boolean') &&
+  (value.preferences === undefined || isRecord(value.preferences))
 )
 
 const isRequestEnvelope = (message: Record<string, unknown>): boolean => (
@@ -192,7 +219,8 @@ const isSettingsUpdate = (value: unknown): value is GhostPilotSettingsUpdate => 
     (value.maxContextTokens === undefined || typeof value.maxContextTokens === 'number') &&
     (value.temperature === undefined || typeof value.temperature === 'number') &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
-    (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
+    (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
+    (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean')
   )
 }
 
@@ -201,8 +229,14 @@ export function isGhostPilotWebviewMessage(value: unknown): value is GhostPilotW
     return false
   }
 
-  if (['ready', 'reset', 'clear', 'export', 'check-status', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
+  if (['ready', 'reset', 'clear', 'import', 'check-status', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
     return true
+  }
+  if (value.type === 'export') {
+    return value.state === undefined || isPersistedState(value.state)
+  }
+  if (value.type === 'persist-state') {
+    return isPersistedState(value.state)
   }
   if (!isRequestEnvelope(value)) {
     return false

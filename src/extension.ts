@@ -60,7 +60,9 @@ export function activate(context: vscode.ExtensionContext) {
     return checkRequiredOllamaModels()
   })
   const ghostPilotView = new GhostPilotViewProvider(context.extensionUri, {
-    chatHandler: createChatParticipantHandler({ statusBar })
+    chatHandler: createChatParticipantHandler({ statusBar }),
+    globalState: context.globalState,
+    workspaceState: context.workspaceState
   })
   const ghostPilotViewRegistration = vscode.window.registerWebviewViewProvider(
     GhostPilotViewProvider.viewType,
@@ -72,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
   const focusViewCommand = vscode.commands.registerCommand('ghostpilot.focus', openGhostPilotView)
   const resetViewCommand = vscode.commands.registerCommand('ghostpilot.reset', async () => {
     await openGhostPilotView()
-    ghostPilotView.reset()
+    await ghostPilotView.reset()
   })
   const exportViewCommand = vscode.commands.registerCommand('ghostpilot.export', () => {
     return ghostPilotView.export()

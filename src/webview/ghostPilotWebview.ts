@@ -32,6 +32,7 @@ interface ControlSettings {
   temperature: number
   responseLength: ResponseLength
   mode: GhostPilotMode
+  enableConversationPersistence: boolean
 }
 
 interface ContextData {
@@ -86,12 +87,13 @@ interface Conversation {
 }
 
 interface GhostPilotState {
-  schemaVersion: 1
+  schemaVersion: number
   conversations: Conversation[]
   activeConversationId: string
   promptHistory?: string[]
   presets?: PromptPreset[]
   showReasoning?: boolean
+  preferences?: Partial<ControlSettings>
 }
 
 type GhostPilotExtensionMessage =
@@ -116,6 +118,20 @@ type GhostPilotExtensionMessage =
       connection: 'online' | 'offline' | 'unknown'
       context: Omit<ContextData, 'tools'>
       tools: string[]
+    }
+  | {
+      source: 'ghostpilot-extension'
+      version: 1
+      type: 'persisted-state'
+      state: {
+        schemaVersion: number
+        conversations?: unknown[]
+        activeConversationId?: string
+        promptHistory?: string[]
+        presets?: unknown[]
+        showReasoning?: boolean
+        preferences?: Record<string, unknown>
+      }
     }
   | {
       source: 'ghostpilot-extension'
@@ -204,6 +220,7 @@ if (!app) {
 }
 
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+const persistenceSchemaVersion = 2
 
 const createConversation = (): Conversation => {
   const timestamp = Date.now()
@@ -284,18 +301,19 @@ const getInitialState = (): GhostPilotState => {
       ? stored.activeConversationId
       : conversations[0].id
     return {
-      schemaVersion: 1,
+      schemaVersion: persistenceSchemaVersion,
       conversations,
       activeConversationId,
       ...(Array.isArray(stored.promptHistory) ? { promptHistory: stored.promptHistory.filter(item => typeof item === 'string').slice(0, 100) } : {}),
       ...(Array.isArray(stored.presets) ? { presets: stored.presets } : {}),
-      ...(typeof stored.showReasoning === 'boolean' ? { showReasoning: stored.showReasoning } : {})
+      ...(typeof stored.showReasoning === 'boolean' ? { showReasoning: stored.showReasoning } : {}),
+      ...(stored.preferences ? { preferences: stored.preferences } : {})
     }
   }
 
   const conversation = createConversation()
   return {
-    schemaVersion: 1,
+    schemaVersion: persistenceSchemaVersion,
     conversations: [conversation],
     activeConversationId: conversation.id
   }
@@ -314,7 +332,8 @@ let controls: ControlSettings = {
   maxContextTokens: 8192,
   temperature: 0.2,
   responseLength: 'balanced',
-  mode: 'ask'
+  mode: 'ask',
+  enableConversationPersistence: false
 }
 let availableModels: string[] = [controls.chatModel]
 let availableModelMetadata: ModelMetadata[] = [{
@@ -339,6 +358,9 @@ let contextEnabled = {
   tools: true
 }
 let attachments: Attachment[] = []
+let composerHeight = 180
+let persistenceReady = false
+let persistenceTimer: number | undefined
 let historyIndex = -1
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
@@ -379,6 +401,7 @@ app.innerHTML = `
         </div>
       </div>
       <div class="header-actions">
+        <button type="button" class="icon-button" id="import" aria-label="Import conversations" title="Import conversations">⇩</button>
         <button type="button" class="icon-button" id="export" aria-label="Export conversations" title="Export conversations">⇧</button>
         <button type="button" class="icon-button" id="reset" aria-label="Reset interface" title="Reset interface">↻</button>
       </div>
@@ -445,7 +468,10 @@ app.innerHTML = `
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <label for="composer-height">Composer size</label>
+          <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
           <label class="settings-checkbox" for="show-reasoning"><input id="show-reasoning" type="checkbox"> Show provider reasoning when explicitly returned</label>
+          <label class="settings-checkbox" for="persist-conversations"><input id="persist-conversations" type="checkbox"> Save conversations and preferences in VS Code storage</label>
         </div>
         <div class="preset-section">
           <div class="modal-subheader"><h3>Prompt presets</h3><button type="button" class="context-button" id="new-preset">New</button></div>
@@ -498,7 +524,9 @@ const temperatureValueElement = document.getElementById('temperature-value') as 
 const maxContextElement = document.getElementById('max-context') as HTMLInputElement
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
+const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
 const showReasoningElement = document.getElementById('show-reasoning') as HTMLInputElement
+const persistenceElement = document.getElementById('persist-conversations') as HTMLInputElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
@@ -518,7 +546,49 @@ const post = (type: string, details: Record<string, unknown> = {}) => {
   })
 }
 
-const saveState = () => vscode.setState(state)
+const createPersistedState = () => ({
+  schemaVersion: persistenceSchemaVersion,
+  conversations: state.conversations,
+  activeConversationId: state.activeConversationId,
+  promptHistory: state.promptHistory ?? [],
+  presets: state.presets ?? [],
+  showReasoning,
+  preferences: {
+    provider: controls.provider,
+    chatModel: controls.chatModel,
+    autocompleteModel: controls.autocompleteModel,
+    maxContextTokens: controls.maxContextTokens,
+    temperature: controls.temperature,
+    responseLength: controls.responseLength,
+    mode: controls.mode,
+    enableConversationPersistence: controls.enableConversationPersistence,
+    composerHeight
+  }
+})
+
+const saveState = () => {
+  if (controls.enableConversationPersistence) {
+    vscode.setState(state)
+  } else {
+    vscode.setState({
+      schemaVersion: persistenceSchemaVersion,
+      conversations: [createConversation()],
+      activeConversationId: '',
+      promptHistory: [],
+      presets: [],
+      showReasoning: false
+    })
+  }
+  if (persistenceReady) {
+    if (persistenceTimer !== undefined) {
+      window.clearTimeout(persistenceTimer)
+    }
+    persistenceTimer = window.setTimeout(() => {
+      persistenceTimer = undefined
+      post('persist-state', { state: createPersistedState() })
+    }, 250)
+  }
+}
 
 const maxTokensForLength = (length: ResponseLength): number | undefined => {
   if (length === 'short') {
@@ -551,7 +621,8 @@ const sendSettingsUpdate = () => {
       maxContextTokens: controls.maxContextTokens,
       temperature: controls.temperature,
       responseLength: controls.responseLength,
-      mode: controls.mode
+      mode: controls.mode,
+      enableConversationPersistence: controls.enableConversationPersistence
     }
   })
 }
@@ -571,7 +642,9 @@ const renderControls = () => {
   maxContextElement.value = String(controls.maxContextTokens)
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
+  composerHeightElement.value = String(composerHeight)
   showReasoningElement.checked = showReasoning
+  persistenceElement.checked = controls.enableConversationPersistence
   connectionIndicatorElement.classList.toggle('online', connection === 'online')
   connectionIndicatorElement.classList.toggle('offline', connection === 'offline')
   connectionTextElement.textContent = connection === 'online'
@@ -729,7 +802,7 @@ const getActiveConversation = (): Conversation => {
 
   const conversation = createConversation()
   state = {
-    schemaVersion: 1,
+    schemaVersion: persistenceSchemaVersion,
     conversations: [...state.conversations, conversation],
     activeConversationId: conversation.id
   }
@@ -1180,8 +1253,8 @@ const updateComposer = () => {
   const length = promptElement.value.length
   composerCountElement.textContent = `${length} chars · ~${Math.ceil(length / 4)} tokens`
   promptElement.style.height = 'auto'
-  promptElement.style.height = `${Math.min(promptElement.scrollHeight, 180)}px`
-  promptElement.style.overflowY = promptElement.scrollHeight > 180 ? 'auto' : 'hidden'
+  promptElement.style.height = `${Math.min(promptElement.scrollHeight, composerHeight)}px`
+  promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
   const busy = Boolean(activeRequest && !['completed', 'cancelled', 'failed'].includes(activeRequest.status))
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   stopElement.hidden = !busy
@@ -1256,7 +1329,7 @@ const startNewConversation = () => {
   saveDraft()
   const conversation = createConversation()
   state = {
-    schemaVersion: 1,
+    schemaVersion: persistenceSchemaVersion,
     conversations: [conversation, ...state.conversations],
     activeConversationId: conversation.id
   }
@@ -1536,6 +1609,66 @@ const handleConversationAction = (action: string, conversationId: string) => {
 }
 
 const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
+  if (message.type === 'persisted-state') {
+    if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
+      const conversations = message.state.conversations.map(value => normalizeConversation(value as Partial<Conversation>))
+      state = {
+        schemaVersion: persistenceSchemaVersion,
+        conversations,
+        activeConversationId: conversations.some(conversation => conversation.id === message.state.activeConversationId)
+          ? message.state.activeConversationId as string
+          : conversations[0].id,
+        promptHistory: message.state.promptHistory?.filter(item => typeof item === 'string').slice(0, 100),
+        presets: message.state.presets as PromptPreset[] | undefined,
+        showReasoning: message.state.showReasoning === true,
+        preferences: message.state.preferences as Partial<ControlSettings> | undefined
+      }
+      showReasoning = state.showReasoning === true
+      const preferences = message.state.preferences ?? {}
+      if (preferences.provider === 'ollama' || preferences.provider === 'mlx-vlm' || preferences.provider === 'openai-compatible') {
+        controls.provider = preferences.provider
+      }
+      if (typeof preferences.chatModel === 'string' && preferences.chatModel.trim()) {
+        controls.chatModel = preferences.chatModel
+      }
+      if (typeof preferences.autocompleteModel === 'string' && preferences.autocompleteModel.trim()) {
+        controls.autocompleteModel = preferences.autocompleteModel
+      }
+      if (typeof preferences.maxContextTokens === 'number' && Number.isFinite(preferences.maxContextTokens)) {
+        controls.maxContextTokens = Math.max(1, Math.floor(preferences.maxContextTokens))
+      }
+      if (typeof preferences.temperature === 'number' && Number.isFinite(preferences.temperature)) {
+        controls.temperature = Math.min(2, Math.max(0, preferences.temperature))
+      }
+      if (preferences.responseLength === 'short' || preferences.responseLength === 'balanced' || preferences.responseLength === 'long' || preferences.responseLength === 'unlimited') {
+        controls.responseLength = preferences.responseLength
+      }
+      if (preferences.mode === 'ask' || preferences.mode === 'edit' || preferences.mode === 'agent' || preferences.mode === 'explain' || preferences.mode === 'inline') {
+        controls.mode = preferences.mode
+      }
+      if (typeof preferences.enableConversationPersistence === 'boolean') {
+        controls.enableConversationPersistence = preferences.enableConversationPersistence
+      }
+      if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
+        composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
+      }
+    } else if (!controls.enableConversationPersistence) {
+      state = {
+        schemaVersion: persistenceSchemaVersion,
+        conversations: [createConversation()],
+        activeConversationId: '',
+        promptHistory: [],
+        presets: [],
+        showReasoning: false
+      }
+      state.activeConversationId = state.conversations[0].id
+      showReasoning = false
+    }
+    persistenceReady = true
+    render(false)
+    restoreDraft()
+    return
+  }
   if (message.type === 'state') {
     viewStatus = message.status
     if (message.status === 'offline' && activeRequest) {
@@ -1570,7 +1703,7 @@ const handleExtensionMessage = (message: GhostPilotExtensionMessage) => {
   }
   if (message.type === 'reset') {
     state = {
-      schemaVersion: 1,
+      schemaVersion: persistenceSchemaVersion,
       conversations: [createConversation()],
       activeConversationId: '',
       showReasoning: false
@@ -1789,6 +1922,10 @@ const isExtensionMessage = (value: unknown): value is GhostPilotExtensionMessage
   if (message.type === 'reset' || message.type === 'clear') {
     return true
   }
+  if (message.type === 'persisted-state') {
+    const state = message.state as { schemaVersion?: unknown }
+    return Boolean(state && typeof state === 'object' && (state.schemaVersion === 1 || state.schemaVersion === 2))
+  }
   if (message.type === 'controls-state') {
     return (
       message.settings !== undefined &&
@@ -1976,9 +2113,19 @@ modeElement.addEventListener('change', () => {
   controls.mode = modeElement.value as GhostPilotMode
   sendSettingsUpdate()
 })
+composerHeightElement.addEventListener('input', () => {
+  composerHeight = Math.min(320, Math.max(80, Number(composerHeightElement.value) || 180))
+  updateComposer()
+  saveState()
+})
 showReasoningElement.addEventListener('change', () => {
   showReasoning = showReasoningElement.checked
   state.showReasoning = showReasoning
+  saveState()
+})
+persistenceElement.addEventListener('change', () => {
+  controls.enableConversationPersistence = persistenceElement.checked
+  sendSettingsUpdate()
   saveState()
 })
 
@@ -2112,7 +2259,8 @@ promptElement.addEventListener('keydown', event => {
 })
 
 document.getElementById('new-chat')?.addEventListener('click', startNewConversation)
-document.getElementById('export')?.addEventListener('click', () => post('export'))
+document.getElementById('import')?.addEventListener('click', () => post('import'))
+document.getElementById('export')?.addEventListener('click', () => post('export', { state: createPersistedState() }))
 document.getElementById('reset')?.addEventListener('click', () => post('reset'))
 stopElement.addEventListener('click', () => {
   if (activeRequest) {

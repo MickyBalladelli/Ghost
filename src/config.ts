@@ -25,6 +25,7 @@ export interface GhostPilotSettings {
   temperature: number
   responseLength: GhostPilotResponseLength
   mode: GhostPilotMode
+  enableConversationPersistence: boolean
   toolAllowlist?: string[]
   toolDenylist?: string[]
 }
@@ -42,6 +43,7 @@ export const DEFAULT_GHOSTPILOT_SETTINGS: Readonly<GhostPilotSettings> = {
   temperature: 0.2,
   responseLength: 'balanced',
   mode: 'ask',
+  enableConversationPersistence: false,
   toolAllowlist: [...GHOSTPILOT_TOOL_NAMES],
   toolDenylist: []
 }
@@ -69,6 +71,7 @@ export class GhostPilotConfig {
       temperature: configuration.get('temperature', DEFAULT_GHOSTPILOT_SETTINGS.temperature),
       responseLength: configuration.get('responseLength', DEFAULT_GHOSTPILOT_SETTINGS.responseLength),
       mode: configuration.get('mode', DEFAULT_GHOSTPILOT_SETTINGS.mode),
+      enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOSTPILOT_SETTINGS.enableConversationPersistence),
       toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOSTPILOT_SETTINGS.toolAllowlist),
       toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOSTPILOT_SETTINGS.toolDenylist)
     }

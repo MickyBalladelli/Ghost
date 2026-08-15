@@ -10,8 +10,10 @@ import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostPilotEdit, parseGhostPilotEdit } from '../tools/editWorkflow'
 import {
   GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+  GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
   GhostPilotAttachment,
   GhostPilotExtensionMessage,
+  GhostPilotPersistedState,
   GhostPilotSettingsUpdate,
   GhostPilotStreamEvent,
   GhostPilotToolArguments,
@@ -56,6 +58,24 @@ interface RecoveryRecord {
   applied: boolean
 }
 
+interface StoredWorkspaceState {
+  schemaVersion: number
+  conversations?: unknown[]
+  activeConversationId?: string
+}
+
+interface StoredGlobalState {
+  schemaVersion: number
+  promptHistory?: string[]
+  presets?: unknown[]
+  showReasoning?: boolean
+  preferences?: Record<string, unknown>
+}
+
+const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+)
+
 export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghostpilot.chat'
   private static readonly requestTimeoutMs = 120_000
@@ -68,6 +88,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
   private readonly recoveryRecords = new Map<string, RecoveryRecord>()
   private readonly sessionApprovedTools = new Set<string>()
+  private readonly globalState?: vscode.Memento
+  private readonly workspaceState?: vscode.Memento
+  private static readonly globalStateKey = 'ghostpilot.global.v2'
+  private static readonly workspaceStateKey = 'ghostpilot.workspace.v2'
   private pendingMessages: GhostPilotExtensionMessage[] = []
   private status: GhostPilotViewStatus = 'ready'
   private disposed = false
@@ -76,8 +100,10 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    options: { chatHandler?: vscode.ChatRequestHandler } = {}
+    options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento } = {}
   ) {
+    this.globalState = options.globalState
+    this.workspaceState = options.workspaceState
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.disposables.push(ghostPilotConfig.onDidChange(() => {
       void this.sendControlsState()
@@ -116,8 +142,17 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     void this.sendControlsState()
   }
 
-  reset(): void {
+  async reset(): Promise<void> {
+    const confirmation = await vscode.window.showWarningMessage(
+      'Delete all GhostPilot conversation history and preferences?',
+      { modal: true, detail: 'This removes saved global and workspace chat data.' },
+      'Delete all history'
+    )
+    if (confirmation !== 'Delete all history') {
+      return
+    }
     this.cancelRequests()
+    await this.clearPersistedState()
     this.status = 'ready'
     this.postMessage(this.createMessage('reset'))
     this.postState()
@@ -735,6 +770,107 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     } as GhostPilotStreamEvent)
   }
 
+  private persistenceEnabled(): boolean {
+    return getGhostPilotSettings().enableConversationPersistence
+  }
+
+  private async readPersistedState(): Promise<GhostPilotPersistedState> {
+    const global = this.globalState?.get<StoredGlobalState>(GhostPilotViewProvider.globalStateKey)
+    const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostPilotViewProvider.workspaceStateKey)
+    const globalRecord: Record<string, unknown> = isStoredRecord(global) ? global : {}
+    const workspaceRecord: Record<string, unknown> = isStoredRecord(workspace) ? workspace : {}
+    return {
+      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      conversations: Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
+      activeConversationId: typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
+      promptHistory: Array.isArray(globalRecord.promptHistory) ? globalRecord.promptHistory.filter(item => typeof item === 'string') : [],
+      presets: Array.isArray(globalRecord.presets) ? globalRecord.presets : [],
+      showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
+      preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
+    }
+  }
+
+  private async sendPersistedState(): Promise<void> {
+    const state = this.persistenceEnabled()
+      ? await this.readPersistedState()
+      : { schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION, conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
+    this.postMessage({
+      source: 'ghostpilot-extension',
+      version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+      type: 'persisted-state',
+      state
+    })
+  }
+
+  private async persistState(state: GhostPilotPersistedState): Promise<void> {
+    if (!this.globalState || !this.workspaceState) {
+      return
+    }
+    if (!this.persistenceEnabled()) {
+      await this.globalState.update(GhostPilotViewProvider.globalStateKey, undefined)
+      await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, undefined)
+      return
+    }
+    await this.globalState.update(GhostPilotViewProvider.globalStateKey, {
+      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      promptHistory: state.promptHistory?.slice(0, 100) ?? [],
+      presets: state.presets ?? [],
+      showReasoning: state.showReasoning === true,
+      preferences: state.preferences ?? {}
+    } satisfies StoredGlobalState)
+    await this.workspaceState.update(GhostPilotViewProvider.workspaceStateKey, {
+      schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+      conversations: state.conversations ?? [],
+      activeConversationId: state.activeConversationId
+    } satisfies StoredWorkspaceState)
+  }
+
+  private async clearPersistedState(): Promise<void> {
+    await Promise.all([
+      this.globalState?.update(GhostPilotViewProvider.globalStateKey, undefined),
+      this.workspaceState?.update(GhostPilotViewProvider.workspaceStateKey, undefined)
+    ])
+  }
+
+  private async importState(): Promise<void> {
+    const files = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      canSelectFolders: false,
+      canSelectFiles: true,
+      openLabel: 'Import GhostPilot conversations',
+      filters: { JSON: ['json'] }
+    })
+    if (!files?.[0]) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(files[0]))) as unknown
+      const candidate = isStoredRecord(parsed) && isStoredRecord(parsed.state) ? parsed.state : parsed
+      if (!isStoredRecord(candidate) || !Array.isArray(candidate.conversations)) {
+        throw new Error('The file does not contain GhostPilot conversations.')
+      }
+      const state: GhostPilotPersistedState = {
+        schemaVersion: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
+        conversations: candidate.conversations,
+        activeConversationId: typeof candidate.activeConversationId === 'string' ? candidate.activeConversationId : undefined,
+        promptHistory: Array.isArray(candidate.promptHistory) ? candidate.promptHistory.filter(item => typeof item === 'string') : [],
+        presets: Array.isArray(candidate.presets) ? candidate.presets : [],
+        showReasoning: candidate.showReasoning === true,
+        preferences: isStoredRecord(candidate.preferences) ? candidate.preferences : {}
+      }
+      await this.persistState(state)
+      this.postMessage({
+        source: 'ghostpilot-extension',
+        version: GHOSTPILOT_WEBVIEW_PROTOCOL_VERSION,
+        type: 'persisted-state',
+        state
+      })
+      await vscode.window.showInformationMessage('GhostPilot conversations imported.')
+    } catch (error) {
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'GhostPilot could not import that file.')
+    }
+  }
+
   private async sendControlsState(): Promise<void> {
     const settings = getGhostPilotSettings()
     let models: string[] = []
@@ -781,7 +917,8 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
         maxContextTokens: settings.maxContextTokens,
         temperature: settings.temperature,
         responseLength: settings.responseLength,
-        mode: settings.mode
+        mode: settings.mode,
+        enableConversationPersistence: settings.enableConversationPersistence
       },
       models,
       connection,
@@ -817,6 +954,12 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     if (update.mode) {
       await ghostPilotConfig.update('mode', update.mode)
     }
+    if (typeof update.enableConversationPersistence === 'boolean') {
+      await ghostPilotConfig.update('enableConversationPersistence', update.enableConversationPersistence)
+      if (!update.enableConversationPersistence) {
+        await this.clearPersistedState()
+      }
+    }
     await this.sendControlsState()
   }
 
@@ -838,7 +981,7 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
     })
   }
 
-  async export(): Promise<void> {
+  async export(state?: GhostPilotPersistedState): Promise<void> {
     const settings = getGhostPilotSettings()
     const defaultUri = vscode.workspace.workspaceFolders?.[0]
       ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ghostpilot-export.json')
@@ -853,12 +996,13 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
       return
     }
 
+    const exportState = state ?? await this.readPersistedState()
     const exportData = {
-      version: 1,
+      version: GHOSTPILOT_PERSISTENCE_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       provider: settings.provider,
       chatModel: settings.chatModel,
-      conversations: []
+      state: exportState
     }
     await vscode.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'))
     await vscode.window.showInformationMessage(`GhostPilot interface exported to ${target.fsPath}.`)
@@ -887,16 +1031,23 @@ export class GhostPilotViewProvider implements vscode.WebviewViewProvider, vscod
 
     switch (value.type) {
       case 'ready':
+        await this.sendPersistedState()
         this.postState()
         return
       case 'reset':
-        this.reset()
+        await this.reset()
         return
       case 'clear':
         this.clear()
         return
       case 'export':
-        await this.export()
+        await this.export(value.state)
+        return
+      case 'import':
+        await this.importState()
+        return
+      case 'persist-state':
+        await this.persistState(value.state)
         return
       case 'check-status':
         await vscode.commands.executeCommand('ghostpilot.checkOllamaStatus')

@@ -295,14 +295,14 @@
 
 ### 9.9 Persist Conversations and User Preferences
 
-- [ ] Store conversation metadata and messages using `ExtensionContext.globalState` or a versioned local storage file.
-- [ ] Store workspace-specific conversations separately from global conversations.
-- [ ] Persist selected model, provider, mode, prompt presets, composer size, and UI preferences.
-- [ ] Add schema versioning and migrations for stored data.
-- [ ] Add conversation import/export as JSON or Markdown.
-- [ ] Add “delete all history” with confirmation and reliable cleanup.
-- [ ] Add a setting to disable conversation persistence.
-- [ ] Avoid persisting attachments or sensitive content unless the user explicitly chooses it.
+- [x] Store conversation metadata and messages using `ExtensionContext.globalState` or a versioned local storage file.
+- [x] Store workspace-specific conversations separately from global conversations.
+- [x] Persist selected model, provider, mode, prompt presets, composer size, and UI preferences.
+- [x] Add schema versioning and migrations for stored data.
+- [x] Add conversation import/export as JSON or Markdown.
+- [x] Add “delete all history” with confirmation and reliable cleanup.
+- [x] Add a setting to disable conversation persistence.
+- [x] Avoid persisting attachments or sensitive content unless the user explicitly chooses it.
 
 ### 9.10 Customize the Extension
 

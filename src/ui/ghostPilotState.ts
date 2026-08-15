@@ -102,9 +102,11 @@ export interface GhostPilotModelMetadata {
 }
 
 export interface GhostPilotConversationState {
-  schemaVersion: 1
+  schemaVersion: number
   conversations: GhostPilotConversation[]
   activeConversationId: string
   promptHistory?: string[]
   presets?: unknown[]
+  showReasoning?: boolean
+  preferences?: Record<string, unknown>
 }
