@@ -53,6 +53,7 @@ interface UiPreferences {
   autoContext: boolean
   customSystemInstructions: string
   composerHeight: number
+  promptRows: number
   workspaceOnly: boolean
 }
 
@@ -434,6 +435,7 @@ let contextEnabled = {
 }
 let attachments: Attachment[] = []
 let composerHeight = 180
+let promptRows = 3
 let uiPreferences: UiPreferences = {
   assistantName: 'Ghost',
   assistantAvatar: '✦',
@@ -445,6 +447,7 @@ let uiPreferences: UiPreferences = {
   autoContext: true,
   customSystemInstructions: '',
   composerHeight,
+  promptRows,
   workspaceOnly: false
 }
 let persistenceReady = false
@@ -530,7 +533,7 @@ app.innerHTML = `
           </div>
           <div class="attachment-list" id="attachment-list" aria-label="Attachments"></div>
           <div class="prompt-wrap">
-            <textarea id="prompt" rows="1" placeholder="Ask Ghost anything..." aria-describedby="composer-hint composer-count"></textarea>
+            <textarea id="prompt" rows="3" placeholder="Ask Ghost anything..." aria-describedby="composer-hint composer-count"></textarea>
             <div class="mention-menu" id="mention-menu" role="listbox" hidden></div>
           </div>
           <div class="composer-footer">
@@ -561,6 +564,8 @@ app.innerHTML = `
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
           <label for="composer-height">Composer size</label>
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
+          <label for="prompt-rows">Prompt rows</label>
+          <input id="prompt-rows" type="number" min="1" max="12" step="1" value="3">
           <label for="provider-endpoint">Provider endpoint</label>
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
@@ -641,6 +646,7 @@ const maxContextElement = document.getElementById('max-context') as HTMLInputEle
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
 const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
+const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
 const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
@@ -701,6 +707,7 @@ const createPersistedState = () => ({
     mode: controls.mode,
     enableConversationPersistence: controls.enableConversationPersistence,
     composerHeight,
+    promptRows,
     assistantName: uiPreferences.assistantName,
     assistantAvatar: uiPreferences.assistantAvatar,
     accentColor: uiPreferences.accentColor,
@@ -828,6 +835,8 @@ const renderControls = () => {
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
   composerHeightElement.value = String(composerHeight)
+  promptRowsElement.value = String(promptRows)
+  promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
   providerHelpElement.textContent = controls.provider === 'mlx-vlm'
     ? 'MLX VLM OpenAI-compatible endpoint.'
@@ -1485,6 +1494,7 @@ const renderConversationList = () => {
 const updateComposer = () => {
   const length = promptElement.value.length
   composerCountElement.textContent = `${length} chars · ~${Math.ceil(length / 4)} tokens`
+  promptElement.rows = promptRows
   promptElement.style.height = 'auto'
   promptElement.style.height = `${Math.min(promptElement.scrollHeight, composerHeight)}px`
   promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
@@ -1864,7 +1874,7 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
         promptHistory: message.state.promptHistory?.filter(item => typeof item === 'string').slice(0, 100),
         presets: message.state.presets as PromptPreset[] | undefined,
         showReasoning: message.state.showReasoning === true,
-        preferences: message.state.preferences as Partial<ControlSettings> | undefined
+        preferences: message.state.preferences as Partial<ControlSettings> & Partial<UiPreferences> | undefined
       }
       showReasoning = state.showReasoning === true
       const preferences = message.state.preferences ?? {}
@@ -1913,6 +1923,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
         composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
       }
+      if (typeof preferences.promptRows === 'number' && Number.isFinite(preferences.promptRows)) {
+        promptRows = Math.min(12, Math.max(1, Math.floor(preferences.promptRows)))
+      }
       if (typeof preferences.assistantName === 'string') {
         uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
       }
@@ -1944,6 +1957,7 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
         uiPreferences.workspaceOnly = preferences.workspaceOnly
       }
       uiPreferences.composerHeight = composerHeight
+      uiPreferences.promptRows = promptRows
     } else if (!controls.enableConversationPersistence) {
       state = {
         schemaVersion: persistenceSchemaVersion,
@@ -2444,6 +2458,13 @@ modeElement.addEventListener('change', () => {
 })
 composerHeightElement.addEventListener('input', () => {
   composerHeight = Math.min(320, Math.max(80, Number(composerHeightElement.value) || 180))
+  updateComposer()
+  saveState()
+})
+promptRowsElement.addEventListener('input', () => {
+  promptRows = Math.min(12, Math.max(1, Math.floor(Number(promptRowsElement.value) || 3)))
+  promptRowsElement.value = String(promptRows)
+  uiPreferences.promptRows = promptRows
   updateComposer()
   saveState()
 })
