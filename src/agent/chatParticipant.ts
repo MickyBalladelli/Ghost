@@ -589,6 +589,15 @@ export function createChatParticipantHandler(
         if (approval.arguments) {
           toolCall.arguments = approval.arguments
         }
+        const approvedToolArgumentError = getToolArgumentError(toolCall)
+        if (approvedToolArgumentError) {
+          response.progress(`Invalid tool call: ${approvedToolArgumentError}`)
+          messages.push(
+            { role: 'assistant', content: generated },
+            { role: 'user', content: `Tool result for ${toolCall.name}:\n${approvedToolArgumentError}` }
+          )
+          continue
+        }
         if (approval.decision === 'reject') {
           const rejection = approval.reason ?? 'User rejected this tool call.'
           response.progress(`Tool result: ${toolCall.name}: ${rejection}`)

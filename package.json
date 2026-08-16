@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.48",
+  "version": "1.0.49",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -254,6 +254,7 @@
           "properties": {
             "path": {
               "type": "string",
+              "minLength": 1,
               "description": "Absolute path of the text file to read. The path must be inside the current workspace."
             }
           },
@@ -277,6 +278,7 @@
           "properties": {
             "path": {
               "type": "string",
+              "minLength": 1,
               "description": "Absolute path of the file to create or replace. The path must be inside the current workspace."
             },
             "content": {
@@ -305,6 +307,7 @@
           "properties": {
             "path": {
               "type": "string",
+              "minLength": 1,
               "description": "Absolute workspace file path."
             },
             "expectedContent": {
@@ -360,6 +363,7 @@
           "properties": {
             "command": {
               "type": "string",
+              "minLength": 1,
               "description": "The bash or PowerShell command to run."
             },
             "cwd": {
@@ -387,6 +391,7 @@
           "properties": {
             "path": {
               "type": "string",
+              "minLength": 1,
               "description": "Absolute directory path to list. The path must be inside the current workspace."
             },
             "recursive": {

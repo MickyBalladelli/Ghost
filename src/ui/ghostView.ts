@@ -729,6 +729,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
       return
     }
+    const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
+    const requiredArgument = pathTools.has(pending.call.name)
+      ? 'path'
+      : pending.call.name === 'ghost_run_terminal_command'
+        ? 'command'
+        : undefined
+    if (requiredArgument && (typeof argumentsPayload[requiredArgument] !== 'string' || !argumentsPayload[requiredArgument].trim())) {
+      const request = this.requests.get(requestId)
+      if (!request) {
+        return
+      }
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-requested',
+        tool: pending.call.name,
+        toolCallId,
+        arguments: pending.call.arguments,
+        requiresApproval: true,
+        detail: `Arguments rejected: ${pending.call.name} requires a non-empty '${requiredArgument}'.`,
+        phase: 'tool'
+      })
+      return
+    }
     pending.call.arguments = argumentsPayload
     pending.expectedContent = await this.getExpectedFileContent(pending.call)
     const request = this.requests.get(requestId)
