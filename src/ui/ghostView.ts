@@ -1207,8 +1207,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       body {
+        height: 100%;
         margin: 0;
         min-width: 220px;
+        overflow: hidden;
         color: var(--vscode-foreground);
         background: var(--vscode-sideBar-background);
         font-family: var(--vscode-font-family);
@@ -1236,8 +1238,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .app {
         display: flex;
-        min-height: 100vh;
+        height: 100vh;
         flex-direction: column;
+        min-height: 0;
       }
 
       .header {
@@ -1775,6 +1778,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         display: flex;
         flex: 1;
         min-height: 0;
+        overflow: hidden;
       }
 
       .conversation-item {
@@ -1836,6 +1840,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         flex-direction: column;
         min-width: 0;
         min-height: 0;
+        overflow: hidden;
       }
 
       .messages {
