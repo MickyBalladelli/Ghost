@@ -1176,6 +1176,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebview.js')
     )
+    const iconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'icon.png')
+    )
     const csp = [
       "default-src 'none'",
       `img-src ${webview.cspSource} data:`,
@@ -1253,8 +1256,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .brand-mark {
-        color: var(--ghost-accent);
-        font-size: 18px;
+        display: inline-flex;
+        height: 24px;
+        width: 24px;
+      }
+
+      .brand-mark img {
+        display: block;
+        height: 100%;
+        width: 100%;
       }
 
       .title {
@@ -2274,7 +2284,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
     </style>
   </head>
-  <body>
+  <body data-ghost-icon="${iconUri}">
     <div id="app"></div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>

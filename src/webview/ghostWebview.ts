@@ -253,6 +253,7 @@ declare function acquireVsCodeApi(): GhostWebviewApi
 
 const vscode = acquireVsCodeApi()
 const app = document.getElementById('app')
+const ghostIconUri = document.body.dataset.ghostIcon ?? ''
 
 if (!app) {
   throw new Error('Ghost webview root is missing')
@@ -496,7 +497,7 @@ app.innerHTML = `
   <div class="app">
     <header class="header">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span class="brand-mark" aria-hidden="true"><img src="${ghostIconUri}" alt=""></span>
         <div>
           <div class="title">Ghost</div>
           <div class="subtitle">Local-first coding assistant</div>
