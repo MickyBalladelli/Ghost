@@ -1513,6 +1513,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         z-index: 5;
       }
 
+      .modal-backdrop[hidden] {
+        display: none;
+      }
+
       .modal {
         background: var(--vscode-quickInput-background, var(--ghost-surface));
         border: 1px solid var(--ghost-border);

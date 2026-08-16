@@ -2504,6 +2504,24 @@ document.querySelectorAll<HTMLElement>('[data-close-modal]').forEach(button => {
     }
   })
 })
+document.querySelectorAll<HTMLElement>('.modal-backdrop').forEach(backdrop => {
+  backdrop.addEventListener('click', event => {
+    if (event.target === backdrop) {
+      setModalVisibility(backdrop, false)
+    }
+  })
+})
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') {
+    return
+  }
+  const visibleModal = Array.from(document.querySelectorAll<HTMLElement>('.modal-backdrop'))
+    .find(modal => !modal.hidden)
+  if (visibleModal) {
+    setModalVisibility(visibleModal, false)
+    event.preventDefault()
+  }
+})
 historySearchElement.addEventListener('input', renderHistory)
 historyListElement.addEventListener('click', event => {
   const item = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-history-prompt]')
