@@ -1945,6 +1945,11 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'controls-state') {
     controls = message.settings
     availableModels = message.models
+    const configuredModel = controls.chatModel
+    if (availableModels.length > 0 && !availableModels.includes(configuredModel)) {
+      controls.chatModel = availableModels[0]
+      sendSettingsUpdate()
+    }
     availableModelMetadata = message.models.map(model => ({
       id: model,
       label: model,

@@ -6,6 +6,7 @@ export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 
 export interface LlmClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
+  listModels?(signal?: AbortSignal): Promise<string[]>
   streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string>
 }
 
@@ -65,7 +66,8 @@ export class LlmFactory {
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
     const resolved = await this.resolve()
-    yield* resolved.client.streamChatCompletion(options)
+    const model = await this.selectAvailableModel(resolved.client, options.model, options.signal)
+    yield* resolved.client.streamChatCompletion({ ...options, model })
   }
 
   resetMlxDetection(): void {
@@ -95,6 +97,24 @@ export class LlmFactory {
     }
 
     return this.clients.openaiCompatibleClient
+  }
+
+  private async selectAvailableModel(client: LlmClient, configuredModel: string, signal?: AbortSignal): Promise<string> {
+    if (!client.listModels || !configuredModel.trim()) {
+      return configuredModel
+    }
+
+    try {
+      const models = await client.listModels(signal)
+
+      if (models.length === 0 || models.includes(configuredModel)) {
+        return configuredModel
+      }
+
+      return models[0]
+    } catch {
+      return configuredModel
+    }
   }
 
   private async suggestMlxProvider(): Promise<boolean> {
