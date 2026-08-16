@@ -901,7 +901,17 @@ const renderControls = () => {
     button.type = 'button'
     button.className = `context-chip${contextEnabled[chip.key] ? '' : ' removed'}`
     button.textContent = `${contextEnabled[chip.key] ? '✓ ' : '＋ '}${chip.label}`
-    button.title = contextEnabled[chip.key] ? `Remove ${chip.label} from prompt context` : `Add ${chip.label} to prompt context`
+    const contextAction = contextEnabled[chip.key] ? `Remove ${chip.label} from prompt context` : `Add ${chip.label} to prompt context`
+    button.title = contextAction
+    if (chip.key === 'tools') {
+      const toolList = contextData.tools.map(tool => `• ${tool}`).join('\n')
+      button.dataset.tooltip = `Available tools:\n${toolList}`
+      button.setAttribute('aria-label', `${chip.label}. ${contextData.tools.join(', ')}`)
+    } else if (chip.key === 'openFiles') {
+      const openFileList = contextData.openFiles.map(file => `• ${file}`).join('\n')
+      button.dataset.tooltip = `Open files:\n${openFileList}`
+      button.setAttribute('aria-label', `${chip.label}. ${contextData.openFiles.join(', ')}`)
+    }
     button.dataset.contextKey = chip.key
     contextChipsElement.append(button)
   }

@@ -4,11 +4,14 @@
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
   "version": "1.0.25",
   "publisher": "ghost",
+  "author": {
+    "name": "Micky Balladelli"
+  },
   "license": "MIT",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MickyBalladelli/ghost"
+    "url": "https://github.com/MickyBalladelli/Ghost"
   },
   "engines": {
     "vscode": "^1.125.0"

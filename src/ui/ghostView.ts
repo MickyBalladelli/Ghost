@@ -1443,6 +1443,41 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-descriptionForeground);
       }
 
+      .context-chip[data-tooltip] {
+        overflow: visible;
+        position: relative;
+      }
+
+      .context-chip[data-tooltip]::after {
+        background: var(--vscode-quickInput-background, var(--ghost-surface));
+        border: 1px solid var(--ghost-border);
+        border-radius: 4px;
+        bottom: calc(100% + 7px);
+        box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
+        color: var(--vscode-foreground);
+        content: attr(data-tooltip);
+        left: 0;
+        max-width: min(360px, calc(100vw - 32px));
+        opacity: 0;
+        padding: 8px 10px;
+        pointer-events: none;
+        position: absolute;
+        text-align: left;
+        transform: translateY(3px);
+        transition: opacity 120ms ease, transform 120ms ease;
+        visibility: hidden;
+        white-space: pre-line;
+        width: max-content;
+        z-index: 6;
+      }
+
+      .context-chip[data-tooltip]:hover::after,
+      .context-chip[data-tooltip]:focus-visible::after {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+      }
+
       .attachment-list:empty {
         display: none;
       }
