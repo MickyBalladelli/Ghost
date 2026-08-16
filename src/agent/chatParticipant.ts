@@ -24,7 +24,7 @@ const SYSTEM_PROMPT = [
   'After receiving a tool result, continue the task and provide the final answer.'
 ].join(' ')
 
-const MAX_TOOL_ROUNDS = 8
+const MAX_TOOL_ROUNDS = 32
 const MAX_TOOL_RESULT_CHARACTERS = 16000
 
 function summarizeToolResult(value: string): string {
@@ -75,6 +75,7 @@ export interface GhostRequestOptions {
   showReasoning?: boolean
   customSystemInstructions?: string
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
+  confirmContinue?: (toolCallCount: number) => Promise<boolean>
 }
 
 export interface GhostToolApproval {
@@ -531,7 +532,8 @@ export function createChatParticipantHandler(
 
     try {
       response.progress('Preparing model request')
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+      let toolCallCount = 0
+      while (true) {
         const turn = await streamModelTurn(
           llmFactory,
           {
@@ -566,10 +568,22 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (round === MAX_TOOL_ROUNDS - 1) {
-          response.markdown('Ghost stopped after reaching the maximum tool-call limit.')
-          return
+        if (toolCallCount >= MAX_TOOL_ROUNDS) {
+          const shouldContinue = requestOptions.confirmContinue
+            ? await requestOptions.confirmContinue(toolCallCount)
+            : await vscode.window.showWarningMessage(
+                `Ghost reached ${MAX_TOOL_ROUNDS} tool calls. Continue working?`,
+                { modal: true, detail: 'Choose Continue to allow another batch of tool calls, or Stop to end this request.' },
+                'Continue',
+                'Stop'
+              ) === 'Continue'
+          if (!shouldContinue) {
+            response.markdown('Ghost stopped after reaching the tool-call limit.')
+            return
+          }
+          toolCallCount = 0
         }
+        toolCallCount += 1
 
         const toolArgumentError = getToolArgumentError(toolCall)
         if (toolArgumentError) {
@@ -636,7 +650,6 @@ export function createChatParticipantHandler(
         )
       }
 
-      response.markdown('Ghost stopped after reaching the maximum tool-call limit.')
     } catch (error) {
       if (!token.isCancellationRequested) {
         finalStatus = 'offline'

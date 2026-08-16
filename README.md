@@ -77,12 +77,10 @@ code --install-extension ./ghost.vsix
 The Ghost view contains the provider and model strip, message log, composer, and top-bar conversation history.
 
 - Press `Enter` to send a message. Press `Shift+Enter` for a new line.
-- Use **Context** to choose workspace, folders, active file, selection, open files, or tools.
-- Hover or focus the tools and open-files context chips to see their full lists.
+- Use **Context** to choose workspace, folders, active file, selection, open files, or tools. The popup also shows the available tool and open-file details.
 - Use **Attach** to add text files to the current request. Attachments are not saved in conversation history.
 - Use the **History** button at the top to search, select, rename, or delete previous conversations.
 - Use the **Settings** gear to change the model, workflow, context, appearance, persistence, and tool permissions.
-- Context chips are informational toggles. They control what Ghost includes in the prompt; they are not approval requests.
 - Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost stages proposed file changes in the real source editor and asks for approval before saving file edits or running terminal commands.
 - Use `@local` in the VS Code Chat view for the native local participant.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.

@@ -530,7 +530,6 @@ app.innerHTML = `
         <form class="composer" id="composer">
           <label class="screen-reader-only" for="prompt">Message Ghost</label>
           <div class="context-row">
-            <div class="context-chips" id="context-chips" aria-label="Prompt context"></div>
             <button type="button" class="context-button" id="context-preview" aria-haspopup="dialog" title="View prompt context and available tools">Context</button>
             <button type="button" class="context-button" id="attach">Attach</button>
             <input id="file-input" type="file" multiple hidden>
@@ -646,7 +645,6 @@ const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
 const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
-const contextChipsElement = document.getElementById('context-chips') as HTMLElement
 const attachmentListElement = document.getElementById('attachment-list') as HTMLElement
 const fileInputElement = document.getElementById('file-input') as HTMLInputElement
 const mentionMenuElement = document.getElementById('mention-menu') as HTMLElement
@@ -900,46 +898,6 @@ const renderControls = () => {
     : connection === 'offline'
       ? controls.networkAccess === 'external' ? 'Offline · external endpoint' : 'Offline'
       : 'Checking…'
-
-  contextChipsElement.textContent = ''
-  const chips: Array<{ key: keyof typeof contextEnabled; label: string }> = []
-  if (contextData.workspaceName) {
-    chips.push({ key: 'workspace', label: contextData.workspaceName })
-  }
-  if (contextData.folders.length > 0) {
-    chips.push({ key: 'folders', label: `${contextData.folders.length} folder${contextData.folders.length === 1 ? '' : 's'}` })
-  }
-  if (contextData.activeFile) {
-    chips.push({ key: 'activeFile', label: contextData.activeFile.name })
-    if (contextData.activeFile.hasSelection) {
-      chips.push({ key: 'selection', label: 'Selection' })
-    }
-  }
-  if (contextData.openFiles.length > 0) {
-    chips.push({ key: 'openFiles', label: `${contextData.openFiles.length} open file${contextData.openFiles.length === 1 ? '' : 's'}` })
-  }
-  if (contextData.tools.length > 0) {
-    chips.push({ key: 'tools', label: `${contextData.tools.length} tools` })
-  }
-  for (const chip of chips) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = `context-chip${contextEnabled[chip.key] ? '' : ' removed'}`
-    button.textContent = `${contextEnabled[chip.key] ? '✓ ' : '＋ '}${chip.label}`
-    const contextAction = contextEnabled[chip.key] ? `Remove ${chip.label} from prompt context` : `Add ${chip.label} to prompt context`
-    button.title = contextAction
-    if (chip.key === 'tools') {
-      const toolList = contextData.tools.map(tool => `• ${tool}`).join('\n')
-      button.dataset.tooltip = `Available tools:\n${toolList}`
-      button.setAttribute('aria-label', `${chip.label}. ${contextData.tools.join(', ')}`)
-    } else if (chip.key === 'openFiles') {
-      const openFileList = contextData.openFiles.map(file => `• ${file}`).join('\n')
-      button.dataset.tooltip = `Open files:\n${openFileList}`
-      button.setAttribute('aria-label', `${chip.label}. ${contextData.openFiles.join(', ')}`)
-    }
-    button.dataset.contextKey = chip.key
-    contextChipsElement.append(button)
-  }
 
   attachmentListElement.textContent = ''
   for (const attachment of attachments) {
@@ -2362,22 +2320,6 @@ messagesElement.addEventListener('click', event => {
   if (action?.dataset.action && action.dataset.messageId) {
     handleMessageAction(action.dataset.action, action.dataset.messageId)
   }
-})
-
-contextChipsElement.addEventListener('click', event => {
-  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-context-key]')
-  const key = target?.dataset.contextKey as keyof typeof contextEnabled | undefined
-  if (!key) {
-    return
-  }
-  contextEnabled[key] = !contextEnabled[key]
-  if (!contextEnabled[key]) {
-    post('remove-context', {
-      ...lifecycleEnvelope('remove-context'),
-      contextKey: key
-    })
-  }
-  renderControls()
 })
 
 contextPreviewElement.addEventListener('change', event => {

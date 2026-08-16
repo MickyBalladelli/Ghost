@@ -325,7 +325,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const requestOptions: GhostRequestOptions = {
       ...options,
       additionalContext: droppedContext || undefined,
-      approveTool: call => this.requestToolApproval(requestId, request, call)
+      approveTool: call => this.requestToolApproval(requestId, request, call),
+      confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount)
     }
 
     const timeout = setTimeout(() => {
@@ -454,6 +455,20 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private createToolCallId(): string {
     return `tool-${Date.now()}-${randomBytes(6).toString('hex')}`
+  }
+
+  private async confirmToolLimit(requestId: string, request: GhostRequestState, toolCallCount: number): Promise<boolean> {
+    this.postStreamEvent(requestId, request, {
+      type: 'warning',
+      message: `Ghost reached ${toolCallCount} tool calls. Choose Continue or Stop.`
+    })
+    const choice = await vscode.window.showWarningMessage(
+      `Ghost reached ${toolCallCount} tool calls. Continue working?`,
+      { modal: true, detail: 'Choose Continue to allow another batch of tool calls, or Stop to end this request.' },
+      'Continue',
+      'Stop'
+    )
+    return choice === 'Continue'
   }
 
   private requiresToolApproval(toolName: string): boolean {
