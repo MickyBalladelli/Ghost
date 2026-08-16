@@ -141,12 +141,15 @@ function parseLooseWriteFile(text: string): LocalToolCall | undefined {
   }
 
   const contentStart = contentMarker.index + contentMarker[0].length
-  const closingContent = /"\s*}\s*}\s*$/.exec(text.slice(contentStart))
-  if (!closingContent || closingContent.index === undefined) {
+  const remaining = text.slice(contentStart)
+  const closingMatches = [...remaining.matchAll(/"\s*}\s*}/g)]
+  const closingContent = closingMatches.at(-1)
+  const rawContent = closingContent?.index === undefined
+    ? remaining.replace(/\s*```[\s\S]*$/, '').trimEnd()
+    : remaining.slice(0, closingContent.index)
+  if (!rawContent) {
     return undefined
   }
-
-  const rawContent = text.slice(contentStart, contentStart + closingContent.index)
   const content = rawContent.includes('\n')
     ? rawContent
     : (() => {

@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.67 - 2026-08-16
+
+- Improved recovery of truncated or malformed Ollama file-write tool calls.
+- Instructed models to emit tool calls without planning text before them.
+
 ## 1.0.66 - 2026-08-16
 
 - Recovered malformed Ollama `ghost_write_file` JSON with raw multiline content so valid write requests execute instead of appearing as text.
