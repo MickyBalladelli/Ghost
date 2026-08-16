@@ -14,6 +14,13 @@ suite('Tool call parsing', () => {
     })
   })
 
+  test('accepts compact tool names emitted by local models', () => {
+    assert.deepEqual(parseLocalToolCall('{"tool":"ghostapplyedit","arguments":{"path":"/workspace/test.html","hunks":[]}}'), {
+      name: 'ghost_apply_edit',
+      arguments: { path: '/workspace/test.html', hunks: [] }
+    })
+  })
+
   test('skips malformed objects and rejects unknown tools', () => {
     assert.equal(parseLocalToolCall('{"tool":"not-a-real-tool","arguments":{}}'), undefined)
     assert.equal(parseLocalToolCall('{"tool":"ghost_read_file","arguments":"not json"}'), {

@@ -8,6 +8,14 @@ export const LOCAL_TOOL_NAMES = [
 
 export type LocalToolName = typeof LOCAL_TOOL_NAMES[number]
 
+const LOCAL_TOOL_ALIASES: Record<string, LocalToolName> = {
+  ghostreadfile: 'ghost_read_file',
+  ghostwritefile: 'ghost_write_file',
+  ghostapplyedit: 'ghost_apply_edit',
+  ghostrunterminalcommand: 'ghost_run_terminal_command',
+  ghostlistdirectory: 'ghost_list_directory'
+}
+
 export interface LocalToolCall {
   name: LocalToolName
   arguments: Record<string, unknown>
@@ -15,6 +23,14 @@ export interface LocalToolCall {
 
 function isLocalToolName(value: unknown): value is LocalToolName {
   return typeof value === 'string' && (LOCAL_TOOL_NAMES as readonly string[]).includes(value)
+}
+
+function normalizeLocalToolName(value: unknown): LocalToolName | undefined {
+  if (isLocalToolName(value)) {
+    return value
+  }
+
+  return typeof value === 'string' ? LOCAL_TOOL_ALIASES[value.toLowerCase()] : undefined
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -95,10 +111,10 @@ function parseCandidate(value: unknown): LocalToolCall | undefined {
       : isObject(value.function)
         ? value.function
         : value
-  const name = nested.name ?? nested.tool ?? nested.tool_name
+  const name = normalizeLocalToolName(nested.name ?? nested.tool ?? nested.tool_name)
   const args = nested.arguments ?? nested.parameters ?? nested.input
 
-  if (!isLocalToolName(name)) {
+  if (!name) {
     return undefined
   }
 
