@@ -119,6 +119,7 @@ interface Conversation {
   title: string
   messages: ChatMessage[]
   draft: string
+  promptHistory: string[]
   activeRequestId?: string
   createdAt: number
   updatedAt: number
@@ -291,9 +292,24 @@ const createConversation = (): Conversation => {
     title: 'New conversation',
     messages: [],
     draft: '',
+    promptHistory: [],
     createdAt: timestamp,
     updatedAt: timestamp
   }
+}
+
+const normalizePromptHistory = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 100)
+    : []
+)
+
+const addPromptToHistory = (history: readonly string[], prompt: string): string[] => {
+  const normalized = prompt.trim()
+  if (!normalized) {
+    return normalizePromptHistory(history)
+  }
+  return [normalized, ...history.filter(item => item !== normalized)].slice(0, 100)
 }
 
 const textPart = (text: string): MessagePart => ({ kind: 'text', text })
@@ -348,9 +364,18 @@ const normalizeConversation = (value: Partial<Conversation>): Conversation => {
     title: typeof value.title === 'string' ? value.title : 'New conversation',
     messages: Array.isArray(value.messages) ? value.messages.map(message => normalizeMessage(message)) : [],
     draft: typeof value.draft === 'string' ? value.draft : '',
+    promptHistory: normalizePromptHistory(value.promptHistory),
     ...(value.activeRequestId ? { activeRequestId: value.activeRequestId } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
+  }
+}
+
+const migrateLegacyPromptHistory = (conversations: Conversation[], activeConversationId: string | undefined, legacyHistory: unknown): void => {
+  const activeConversation = conversations.find(conversation => conversation.id === activeConversationId)
+  const history = normalizePromptHistory(legacyHistory)
+  if (activeConversation && activeConversation.promptHistory.length === 0 && history.length > 0) {
+    activeConversation.promptHistory = history
   }
 }
 
@@ -379,6 +404,7 @@ const getInitialState = (): GhostState => {
     const activeConversationId = conversations.some(conversation => conversation.id === stored.activeConversationId)
       ? stored.activeConversationId
       : conversations[0].id
+    migrateLegacyPromptHistory(conversations, activeConversationId, stored.promptHistory)
     return {
       schemaVersion: persistenceSchemaVersion,
       conversations,
@@ -543,6 +569,7 @@ app.innerHTML = `
           <div class="composer-footer">
             <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line</span>
             <span class="composer-count" id="composer-count">0 chars · ~0 tokens</span>
+            <span class="prompt-history-actions" aria-label="Prompt history"><button type="button" class="secondary prompt-history-button" id="previous-prompt" aria-label="Previous prompt" title="Previous prompt">↑</button><button type="button" class="secondary prompt-history-button" id="next-prompt" aria-label="Next prompt" title="Next prompt">↓</button></span>
             <button type="button" class="stop-button" id="stop" hidden>Stop</button>
             <button type="submit" id="send">Send</button>
           </div>
@@ -638,6 +665,8 @@ const promptElement = document.getElementById('prompt') as HTMLTextAreaElement
 const composerElement = document.getElementById('composer') as HTMLFormElement
 const sendElement = document.getElementById('send') as HTMLButtonElement
 const stopElement = document.getElementById('stop') as HTMLButtonElement
+const previousPromptElement = document.getElementById('previous-prompt') as HTMLButtonElement
+const nextPromptElement = document.getElementById('next-prompt') as HTMLButtonElement
 const statusTextElement = document.getElementById('status-text') as HTMLElement
 const statusFooterElement = document.getElementById('status-footer') as HTMLElement
 const screenReaderStatusElement = document.getElementById('screen-reader-status') as HTMLElement
@@ -721,7 +750,7 @@ const createPersistedState = () => ({
   schemaVersion: persistenceSchemaVersion,
   conversations: redactPersistedValue(state.conversations) as Conversation[],
   activeConversationId: state.activeConversationId,
-  promptHistory: (redactPersistedValue(state.promptHistory ?? []) as string[]),
+  promptHistory: (redactPersistedValue(promptHistory()) as string[]),
   presets: redactPersistedValue(state.presets ?? []) as PromptPreset[],
   showReasoning,
   preferences: {
@@ -791,7 +820,26 @@ const maxTokensForLength = (length: ResponseLength): number | undefined => {
   return undefined
 }
 
-const promptHistory = (): string[] => state.promptHistory ?? []
+const promptHistory = (): string[] => getActiveConversation().promptHistory
+
+const restorePromptHistoryEntry = (index: number): void => {
+  const entries = promptHistory()
+  historyIndex = Math.max(-1, Math.min(index, entries.length - 1))
+  promptElement.value = historyIndex >= 0 ? entries[historyIndex] : ''
+  promptElement.focus()
+  promptElement.setSelectionRange(promptElement.value.length, promptElement.value.length)
+  saveDraft()
+  updateComposer()
+}
+
+const browsePromptHistory = (direction: 'previous' | 'next'): void => {
+  const entries = promptHistory()
+  if (entries.length === 0) {
+    return
+  }
+  const nextIndex = direction === 'previous' ? historyIndex + 1 : historyIndex - 1
+  restorePromptHistoryEntry(nextIndex)
+}
 
 const presets = (): PromptPreset[] => state.presets ?? []
 
@@ -1101,7 +1149,8 @@ const saveDraft = (): void => {
 }
 
 const restoreDraft = (): void => {
-  promptElement.value = getActiveConversation().draft
+  const conversation = getActiveConversation()
+  promptElement.value = conversation.draft || conversation.promptHistory[0] || ''
   historyIndex = -1
   updateComposer()
 }
@@ -1522,6 +1571,9 @@ const updateComposer = () => {
   promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
   const busy = Boolean(activeRequest && !['completed', 'cancelled', 'failed'].includes(activeRequest.status))
   sendElement.disabled = busy || promptElement.value.trim().length === 0
+  const entries = promptHistory()
+  previousPromptElement.disabled = busy || entries.length === 0 || historyIndex >= entries.length - 1
+  nextPromptElement.disabled = busy || historyIndex < 0
   stopElement.hidden = !busy
   promptElement.disabled = busy
   composerElement.classList.toggle('busy', busy)
@@ -1684,7 +1736,8 @@ const submitPrompt = (rawPrompt: string) => {
   requests.set(requestId, activeRequest)
   startProgressTimer()
   notice = undefined
-  state.promptHistory = [prompt, ...promptHistory().filter(item => item !== prompt)].slice(0, 100)
+  conversation.promptHistory = addPromptToHistory(conversation.promptHistory, prompt)
+  state.promptHistory = conversation.promptHistory
   promptElement.value = ''
   const submittedAttachments = attachments
   attachments = []
@@ -1898,6 +1951,8 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
         showReasoning: message.state.showReasoning === true,
         preferences: message.state.preferences as Partial<ControlSettings> & Partial<UiPreferences> | undefined
       }
+      migrateLegacyPromptHistory(conversations, state.activeConversationId, message.state.promptHistory)
+      state.promptHistory = state.conversations.find(conversation => conversation.id === state.activeConversationId)?.promptHistory ?? []
       showReasoning = state.showReasoning === true
       const preferences = message.state.preferences ?? {}
       if (preferences.provider === 'ollama' || preferences.provider === 'mlx-vlm' || preferences.provider === 'openai-compatible') {
@@ -2676,24 +2731,18 @@ composerElement.addEventListener('drop', event => {
 
 promptElement.addEventListener('keyup', updateMentionMenu)
 promptElement.addEventListener('keydown', event => {
-  if (event.key === 'ArrowUp' && promptElement.selectionStart === 0 && !mentionMenu) {
-    const entries = promptHistory()
-    if (entries.length > 0) {
-      historyIndex = Math.min(historyIndex + 1, entries.length - 1)
-      promptElement.value = entries[historyIndex]
-      saveDraft()
-      updateComposer()
-      event.preventDefault()
-    }
+  const canBrowseHistory = !mentionMenu && (historyIndex >= 0 || !promptElement.value.trim())
+  if (event.key === 'ArrowUp' && canBrowseHistory) {
+    browsePromptHistory('previous')
+    event.preventDefault()
   } else if (event.key === 'ArrowDown' && historyIndex >= 0 && !mentionMenu) {
-    const entries = promptHistory()
-    historyIndex -= 1
-    promptElement.value = historyIndex >= 0 ? entries[historyIndex] : ''
-    saveDraft()
-    updateComposer()
+    browsePromptHistory('next')
     event.preventDefault()
   }
 })
+
+previousPromptElement.addEventListener('click', () => browsePromptHistory('previous'))
+nextPromptElement.addEventListener('click', () => browsePromptHistory('next'))
 
 document.getElementById('new-chat')?.addEventListener('click', startNewConversation)
 document.getElementById('import')?.addEventListener('click', () => post('import'))
@@ -2708,10 +2757,18 @@ stopElement.addEventListener('click', () => {
   }
 })
 promptElement.addEventListener('input', () => {
+  if (promptElement.value.trim()) {
+    historyIndex = -1
+  }
   saveDraft()
   updateComposer()
 })
 promptElement.addEventListener('keydown', event => {
+  if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    startNewConversation()
+    return
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     composerElement.requestSubmit()

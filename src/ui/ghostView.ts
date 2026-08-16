@@ -2573,6 +2573,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         white-space: nowrap;
       }
 
+      .prompt-history-actions {
+        display: flex;
+        gap: 2px;
+      }
+
+      .prompt-history-button {
+        font-size: 1em;
+        line-height: 1;
+        min-width: 22px;
+        padding: 2px 5px;
+      }
+
       .stop-button {
         background: transparent;
         border-color: var(--vscode-errorForeground);

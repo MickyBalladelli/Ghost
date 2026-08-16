@@ -88,6 +88,7 @@ export interface GhostConversation {
   title: string
   messages: GhostMessage[]
   draft: string
+  promptHistory: string[]
   activeRequestId?: string
   createdAt: number
   updatedAt: number

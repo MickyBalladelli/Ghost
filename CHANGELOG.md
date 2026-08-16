@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.65 - 2026-08-16
+
+- Added Ctrl-N for a new conversation and Up/Down prompt history navigation.
+- Saved prompt history per conversation, restored the latest prompt when reopening one, and added Previous/Next prompt buttons.
+
 ## 1.0.64 - 2026-08-16
 
 - Made approved staged edits verify and persist the real workspace file after the approval click.
