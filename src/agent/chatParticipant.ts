@@ -21,6 +21,7 @@ const SYSTEM_PROMPT = [
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
   'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
   'When using a tool, do not explain the plan first; emit the tool call as the complete response.',
+  'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, or ghost_write_file.',
   'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists.',
   'Available tools: ghost_read_file({"path":"absolute workspace path"}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After receiving a tool result, continue the task and provide the final answer.'
@@ -45,6 +46,22 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
     return undefined
   }
   if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
+    if (call.name !== 'ghost_run_terminal_command') {
+      return undefined
+    }
+
+    const command = call.arguments.command as string
+    const writesFiles = [
+      /(?:^|[;&|]\s*)(?:cat|tee|printf|echo)\b[\s\S]*(?:>>?|<<-?)/i,
+      /(?:>>?|<<-?)\s*["']?(?:\/|\.\/|[a-z]:[\\/])/i,
+      /\b(?:sed|perl)\b[^;&|]*\s-i(?:\s|$)/i,
+      /\b(?:python|python3|node|ruby|php)\b[\s\S]*(?:write_text|writeFile(?:Sync)?|open\s*\([^)]*["'][wa])/i
+    ].some(pattern => pattern.test(command))
+
+    if (writesFiles) {
+      return 'Terminal file writes are disabled for workspace edits. Retry with one ghost_read_file, ghost_apply_edit, or ghost_write_file call. Use ghost_run_terminal_command only for inspection, builds, tests, or commands explicitly requested by the user.'
+    }
+
     return undefined
   }
   return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
@@ -512,7 +529,7 @@ export function createChatParticipantHandler(
 
     const toolsEnabled = requestOptions.context?.tools !== false
     const workflowInstruction = requestOptions.mode === 'agent'
-      ? '\n\nAgent mode is active. When the user asks you to implement, fix, edit, or change code, do the work in the workspace. Inspect files with tools, use ghost_apply_edit or ghost_write_file to make changes, and use ghost_run_terminal_command for requested or useful verification. Do not only describe a hypothetical solution. Start with a tool call when a workspace change is needed, then continue until the task is complete.'
+      ? '\n\nAgent mode is active. When the user asks you to implement, fix, edit, or change code, do the work in the workspace. Inspect files with tools, use ghost_apply_edit or ghost_write_file to make changes, and use ghost_run_terminal_command only for requested or useful verification. Never use the terminal to create or edit files. Do not only describe a hypothetical solution. Start with a tool call when a workspace change is needed, then continue until the task is complete.'
       : requestOptions.mode === 'edit'
         ? '\n\nEdit mode is active. When the user asks for a code change, inspect the relevant files and propose the actual workspace edit with ghost_apply_edit or ghost_write_file. Do not only describe what could be changed.'
         : ''
