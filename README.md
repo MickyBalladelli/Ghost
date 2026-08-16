@@ -230,6 +230,5 @@ MIT. See [LICENSE](LICENSE).
 
 ## Links
 
-- [GitHub repository](https://github.com/MickyBalladelli/Ghost)
 - [Issues and feature requests](https://github.com/MickyBalladelli/Ghost/issues)
 - [Architecture guide](docs/architecture.md)
