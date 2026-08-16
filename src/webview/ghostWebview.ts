@@ -65,6 +65,14 @@ interface ContextData {
   tools: string[]
 }
 
+const toolDescriptions: Record<string, string> = {
+  ghost_read_file: 'Read a text file from the workspace.',
+  ghost_write_file: 'Create or replace a text file in the workspace.',
+  ghost_apply_edit: 'Apply reviewed, structured edits to a workspace file.',
+  ghost_run_terminal_command: 'Run a shell command in the workspace.',
+  ghost_list_directory: 'List files and folders in the workspace.'
+}
+
 interface ChatMessage {
   id: string
   role: MessageRole
@@ -527,7 +535,7 @@ app.innerHTML = `
           <label class="screen-reader-only" for="prompt">Message Ghost</label>
           <div class="context-row">
             <div class="context-chips" id="context-chips" aria-label="Prompt context"></div>
-            <button type="button" class="context-button" id="context-preview">Context</button>
+            <button type="button" class="context-button" id="context-preview" aria-haspopup="dialog" title="View prompt context and available tools">Context</button>
             <button type="button" class="context-button" id="attach">Attach</button>
             <input id="file-input" type="file" multiple hidden>
           </div>
@@ -937,6 +945,33 @@ const renderContextPreview = () => {
     label.append(checkbox, text)
     contextPreviewElement.append(label)
   }
+
+  const toolsSection = document.createElement('section')
+  toolsSection.className = 'tools-preview'
+  const toolsHeading = document.createElement('h3')
+  toolsHeading.textContent = `Available tools (${contextData.tools.length})`
+  toolsSection.append(toolsHeading)
+
+  if (contextData.tools.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'modal-description'
+    empty.textContent = 'No tools are available.'
+    toolsSection.append(empty)
+  } else {
+    const toolsList = document.createElement('ul')
+    for (const tool of contextData.tools) {
+      const toolItem = document.createElement('li')
+      const name = document.createElement('code')
+      name.textContent = tool
+      const description = document.createElement('small')
+      description.textContent = toolDescriptions[tool] ?? 'Workspace tool available to Ghost.'
+      toolItem.append(name, description)
+      toolsList.append(toolItem)
+    }
+    toolsSection.append(toolsList)
+  }
+
+  contextPreviewElement.append(toolsSection)
 }
 
 const renderHistory = () => {

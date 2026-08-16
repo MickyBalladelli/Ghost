@@ -1646,6 +1646,39 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-descriptionForeground);
       }
 
+      .tools-preview {
+        border-top: 1px solid var(--ghost-border);
+        margin-top: 12px;
+        padding-top: 12px;
+      }
+
+      .tools-preview h3 {
+        font-size: 0.9em;
+        margin: 0 0 8px;
+      }
+
+      .tools-preview ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .tools-preview li {
+        border-bottom: 1px solid var(--ghost-border);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 0;
+      }
+
+      .tools-preview li:last-child {
+        border-bottom: 0;
+      }
+
+      .tools-preview small {
+        color: var(--vscode-descriptionForeground);
+      }
+
       .history-list {
         max-height: 260px;
         overflow: auto;

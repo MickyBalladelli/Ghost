@@ -2,7 +2,7 @@
   "name": "ghost",
   "displayName": "Ghost",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.23",
+  "version": "1.0.25",
   "publisher": "ghost",
   "license": "MIT",
   "icon": "icon.png",
