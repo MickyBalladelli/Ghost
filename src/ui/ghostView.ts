@@ -125,7 +125,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.view = webviewView
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'out')]
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'out'), this.extensionUri]
     }
     webviewView.webview.html = this.getHtml(webviewView.webview)
 
