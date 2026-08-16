@@ -2112,7 +2112,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .composer::before {
-        background: conic-gradient(from 0deg, #ff5f6d, #ffc371, #64f38c, #4facfe, #c471ed, #ff5f6d);
+        background: conic-gradient(
+          from var(--ghost-border-angle),
+          #ff5f6d 0deg,
+          #ffc371 55deg,
+          #64f38c 110deg,
+          #4facfe 165deg,
+          #c471ed 220deg,
+          #ff5f6d 275deg,
+          var(--vscode-foreground) 330deg,
+          var(--vscode-foreground) 345deg,
+          #ff5f6d 360deg
+        );
         border-radius: inherit;
         content: '';
         inset: -1px;
@@ -2132,7 +2143,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .composer.busy::before {
-        animation: ghost-border-spin 2.2s linear infinite;
+        animation: ghost-border-blip 2.2s linear infinite;
         opacity: 1;
       }
 
@@ -2210,9 +2221,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         background: var(--vscode-testing-iconFailed, #f14c4c);
       }
 
-      @keyframes ghost-border-spin {
+      @property --ghost-border-angle {
+        syntax: '<angle>';
+        inherits: false;
+        initial-value: 0deg;
+      }
+
+      @keyframes ghost-border-blip {
         to {
-          transform: rotate(360deg);
+          --ghost-border-angle: 360deg;
         }
       }
 
