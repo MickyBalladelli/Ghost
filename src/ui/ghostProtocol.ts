@@ -52,6 +52,7 @@ export interface GhostSettingsUpdate {
   temperature?: number
   responseLength?: GhostResponseLength
   mode?: GhostMode
+  fileEditApproval?: 'confirm' | 'auto'
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
   ollamaUrl?: string
@@ -148,6 +149,7 @@ export type GhostExtensionMessage =
         temperature: number
         responseLength: GhostResponseLength
         mode: GhostMode
+        fileEditApproval: 'confirm' | 'auto'
         enableConversationPersistence: boolean
         ollamaUrl: string
         mlxUrl: string
@@ -238,6 +240,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.temperature === undefined || typeof value.temperature === 'number') &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
+    (value.fileEditApproval === undefined || ['confirm', 'auto'].includes(value.fileEditApproval as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
     (value.ollamaUrl === undefined || typeof value.ollamaUrl === 'string')

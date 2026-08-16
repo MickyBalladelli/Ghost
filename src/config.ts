@@ -5,6 +5,7 @@ export const GHOST_CONFIGURATION_SECTION = 'ghost'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+export type GhostFileEditApproval = 'confirm' | 'auto'
 
 export const GHOST_TOOL_NAMES = [
   'ghost_read_file',
@@ -26,6 +27,7 @@ export interface GhostSettings {
   temperature: number
   responseLength: GhostResponseLength
   mode: GhostMode
+  fileEditApproval: GhostFileEditApproval
   enableConversationPersistence: boolean
   enableDebugLogging: boolean
   toolAllowlist?: string[]
@@ -46,6 +48,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   temperature: 0.2,
   responseLength: 'balanced',
   mode: 'agent',
+  fileEditApproval: 'confirm',
   enableConversationPersistence: false,
   enableDebugLogging: false,
   toolAllowlist: [...GHOST_TOOL_NAMES],
@@ -76,6 +79,7 @@ export class GhostConfig {
       temperature: configuration.get('temperature', DEFAULT_GHOST_SETTINGS.temperature),
       responseLength: configuration.get('responseLength', DEFAULT_GHOST_SETTINGS.responseLength),
       mode: configuration.get('mode', DEFAULT_GHOST_SETTINGS.mode),
+      fileEditApproval: configuration.get('fileEditApproval', DEFAULT_GHOST_SETTINGS.fileEditApproval),
       enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOST_SETTINGS.enableConversationPersistence),
       enableDebugLogging: configuration.get('enableDebugLogging', DEFAULT_GHOST_SETTINGS.enableDebugLogging),
       toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOST_SETTINGS.toolAllowlist),

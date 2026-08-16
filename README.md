@@ -132,6 +132,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | --- | --- | --- |
 | `ghost.toolAllowlist` | All five tools | Tools Ghost may use in the workspace. |
 | `ghost.toolDenylist` | `[]` | Tools Ghost must never use in the workspace. Deny rules override allow rules. |
+| `ghost.fileEditApproval` | `confirm` | Ask before each file edit, or use `auto` to apply file edits automatically. |
 
 ### Persistence and diagnostics
 

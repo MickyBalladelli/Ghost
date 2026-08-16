@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.68",
+  "version": "1.0.69",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -182,6 +182,19 @@
           ],
           "default": "agent",
           "description": "Default workflow mode for the Ghost interface."
+        },
+        "ghost.fileEditApproval": {
+          "type": "string",
+          "enum": [
+            "confirm",
+            "auto"
+          ],
+          "enumDescriptions": [
+            "Ask before applying each file write or edit.",
+            "Apply file writes and edits without asking."
+          ],
+          "default": "confirm",
+          "description": "Default approval behavior for Ghost file writes and structured edits."
         },
         "ghost.enableConversationPersistence": {
           "type": "boolean",

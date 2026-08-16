@@ -39,6 +39,7 @@ interface ControlSettings {
   temperature: number
   responseLength: ResponseLength
   mode: GhostMode
+  fileEditApproval: 'confirm' | 'auto'
   enableConversationPersistence: boolean
 }
 
@@ -444,7 +445,8 @@ let controls: ControlSettings = {
   maxContextTokens: 8192,
   temperature: 0.2,
   responseLength: 'balanced',
-    mode: 'agent',
+  mode: 'agent',
+  fileEditApproval: 'confirm',
   enableConversationPersistence: false
 }
 let availableModels: string[] = [controls.chatModel]
@@ -594,6 +596,8 @@ app.innerHTML = `
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent — implement changes</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <label for="file-edit-approval">File edit approval</label>
+          <select id="file-edit-approval"><option value="confirm">Confirm each edit</option><option value="auto">Auto-accept edits</option></select>
           <label for="composer-height">Composer size</label>
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
           <label for="prompt-rows">Prompt rows</label>
@@ -690,6 +694,7 @@ const providerHelpElement = document.getElementById('provider-help') as HTMLElem
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
 const toolAllowlistElement = document.getElementById('tool-allowlist') as HTMLInputElement
 const toolDenylistElement = document.getElementById('tool-denylist') as HTMLInputElement
+const fileEditApprovalElement = document.getElementById('file-edit-approval') as HTMLSelectElement
 const assistantNameElement = document.getElementById('assistant-name') as HTMLInputElement
 const assistantAvatarElement = document.getElementById('assistant-avatar') as HTMLInputElement
 const accentColorElement = document.getElementById('accent-color') as HTMLInputElement
@@ -766,6 +771,7 @@ const createPersistedState = () => ({
     temperature: controls.temperature,
     responseLength: controls.responseLength,
     mode: controls.mode,
+    fileEditApproval: controls.fileEditApproval,
     enableConversationPersistence: controls.enableConversationPersistence,
     composerHeight,
     promptRows,
@@ -868,6 +874,7 @@ const sendSettingsUpdate = () => {
         temperature: controls.temperature,
         responseLength: controls.responseLength,
         mode: controls.mode,
+        fileEditApproval: controls.fileEditApproval,
         enableConversationPersistence: controls.enableConversationPersistence,
         workspaceOnly: uiPreferences.workspaceOnly,
         enableDebugLogging: controls.enableDebugLogging
@@ -914,6 +921,7 @@ const renderControls = () => {
   maxContextElement.value = String(controls.maxContextTokens)
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
+  fileEditApprovalElement.value = controls.fileEditApproval
   composerHeightElement.value = String(composerHeight)
   promptRowsElement.value = String(promptRows)
   promptElement.rows = promptRows
@@ -1485,7 +1493,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
-      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve for session</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">${part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit' ? 'Apply to all files' : 'Approve for session'}</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
     const selectedHunkAction = part.toolCall.status === 'requested' && part.toolCall.diffPreview?.hunks?.length
       ? `<button type="button" data-tool-action="approve-selected" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Apply selected hunks</button>`
@@ -1975,6 +1983,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       }
       if (preferences.mode === 'ask' || preferences.mode === 'edit' || preferences.mode === 'agent' || preferences.mode === 'explain' || preferences.mode === 'inline') {
         controls.mode = preferences.mode
+      }
+      if (preferences.fileEditApproval === 'confirm' || preferences.fileEditApproval === 'auto') {
+        controls.fileEditApproval = preferences.fileEditApproval
       }
       if (typeof preferences.enableConversationPersistence === 'boolean') {
         controls.enableConversationPersistence = preferences.enableConversationPersistence
@@ -2499,6 +2510,11 @@ responseLengthElement.addEventListener('change', () => {
 modeElement.addEventListener('change', () => {
   controls.mode = modeElement.value as GhostMode
   sendSettingsUpdate()
+})
+fileEditApprovalElement.addEventListener('change', () => {
+  controls.fileEditApproval = fileEditApprovalElement.value === 'auto' ? 'auto' : 'confirm'
+  sendSettingsUpdate()
+  saveState()
 })
 composerHeightElement.addEventListener('input', () => {
   composerHeight = Math.min(320, Math.max(80, Number(composerHeightElement.value) || 180))

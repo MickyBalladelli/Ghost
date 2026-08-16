@@ -103,6 +103,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
   private readonly recoveryRecords = new Map<string, RecoveryRecord>()
   private readonly sessionApprovedTools = new Set<string>()
+  private sessionApprovedFileEdits = false
   private readonly globalState?: vscode.Memento
   private readonly workspaceState?: vscode.Memento
   private static readonly globalStateKey = 'ghost.global.v2'
@@ -475,6 +476,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_run_terminal_command'
   }
 
+  private isFileEditTool(toolName: string): boolean {
+    return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit'
+  }
+
   private async getDiffPreview(call: LocalToolCall, approvalContext: Pick<StagedEdit, 'requestId' | 'conversationId' | 'toolCallId'>): Promise<GhostToolDiffPreview | undefined> {
     if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
@@ -741,9 +746,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const deniedTools = settings.toolDenylist ?? []
     const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
-    const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy
+    const isFileEditTool = this.isFileEditTool(call.name)
+    const autoAcceptedFileEdit = isFileEditTool && settings.fileEditApproval === 'auto' && !blockedByPolicy
+    const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
-    const needsInteractiveApproval = requiresApproval && !this.sessionApprovedTools.has(call.name)
+    const needsInteractiveApproval = requiresApproval && (isFileEditTool
+      ? !this.sessionApprovedFileEdits
+      : !this.sessionApprovedTools.has(call.name))
     const diffPreview = needsInteractiveApproval
       ? await this.getDiffPreview(call, {
           requestId,
@@ -761,6 +770,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...(diffPreview ? { diffPreview } : {}),
       detail: blockedByPolicy
         ? 'Blocked by workspace tool policy'
+        : autoAcceptedFileEdit ? 'Auto-accepting file edit'
         : requiresApproval ? 'Waiting for approval' : 'Running safe workspace tool',
       phase: 'tool'
     })
@@ -810,7 +820,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     if (approval.decision === 'session') {
-      this.sessionApprovedTools.add(pending.call.name)
+      if (this.isFileEditTool(pending.call.name)) {
+        this.sessionApprovedFileEdits = true
+      } else {
+        this.sessionApprovedTools.add(pending.call.name)
+      }
     }
     if (pending.call.name === 'ghost_write_file' || pending.call.name === 'ghost_apply_edit') {
       const staged = this.stagedEdits.get(toolCallId)
@@ -1161,6 +1175,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         temperature: settings.temperature,
         responseLength: settings.responseLength,
         mode: settings.mode,
+        fileEditApproval: settings.fileEditApproval,
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
@@ -1237,6 +1252,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (update.mode) {
       await ghostConfig.update('mode', update.mode, target)
     }
+    if (update.fileEditApproval) {
+      await ghostConfig.update('fileEditApproval', update.fileEditApproval, target)
+    }
     if (typeof update.enableConversationPersistence === 'boolean') {
       await ghostConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)
       if (!update.enableConversationPersistence) {
@@ -1308,6 +1326,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.stagedEdits.clear()
     this.recoveryRecords.clear()
     this.sessionApprovedTools.clear()
+    this.sessionApprovedFileEdits = false
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
     this.view = undefined

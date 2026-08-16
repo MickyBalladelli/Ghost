@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.68 - 2026-08-16
+
+- Added “Apply to all files” approval for the current session.
+- Added Confirm or Auto-accept as the default file-edit behavior.
+
 ## 1.0.67 - 2026-08-16
 
 - Improved recovery of truncated or malformed Ollama file-write tool calls.
