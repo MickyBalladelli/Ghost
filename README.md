@@ -7,8 +7,6 @@
 <p align="center">A privacy-first, local-first coding assistant for VS Code.</p>
 
 <p align="center">
-  <a href="https://github.com/MickyBalladelli/Ghost/stargazers"><img src="https://img.shields.io/github/stars/MickyBalladelli/Ghost?style=flat-square" alt="GitHub stars"></a>
-  <a href="https://github.com/MickyBalladelli/Ghost/issues"><img src="https://img.shields.io/github/issues/MickyBalladelli/Ghost?style=flat-square" alt="GitHub issues"></a>
   <a href="https://github.com/MickyBalladelli/Ghost/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MickyBalladelli/Ghost?style=flat-square" alt="MIT license"></a>
   <img src="https://img.shields.io/badge/VS%20Code-1.125%2B-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code 1.125 or newer">
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
