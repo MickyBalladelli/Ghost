@@ -1298,7 +1298,7 @@ const renderMarkdown = (markdown: string): string => {
   }
   flushParagraph()
   closeList()
-  return output.join('') || '<p class="message-placeholder">No response yet.</p>'
+  return output.join('') || '<p class="message-placeholder">Ghost is thinking…</p>'
 }
 
 const findMessage = (conversation: Conversation, messageId: string): ChatMessage | undefined => (
