@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.64 - 2026-08-16
+
+- Made approved staged edits verify and persist the real workspace file after the approval click.
+- Clarified file-tool approval button labels.
+
 ## 1.0.63 - 2026-08-16
 
 - Routed the Ollama provider through Ollama's native API so agent file edits execute reliably.

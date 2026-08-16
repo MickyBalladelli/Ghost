@@ -566,13 +566,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     try {
-      const document = await vscode.workspace.openTextDocument(staged.uri)
-      if (document.getText() !== staged.after) {
-        throw new Error('The source file changed while Ghost was waiting for edit approval.')
-      }
-      if (!await document.save()) {
-        throw new Error('Ghost could not save the accepted edit.')
-      }
+      await this.saveStagedEdit(staged)
       this.stagedEdits.delete(toolCallId)
       this.stagedEditChanges.fire()
       await this.finishAlreadyAppliedEdit(pending, {
@@ -847,13 +841,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     approval: GhostToolApproval
   ): Promise<void> {
     try {
-      const document = await vscode.workspace.openTextDocument(staged.uri)
-      if (document.getText() !== staged.after) {
-        throw new Error('The source file changed while Ghost was waiting for edit approval.')
-      }
-      if (!await document.save()) {
-        throw new Error('Ghost could not save the accepted edit.')
-      }
+      await this.saveStagedEdit(staged)
       this.stagedEdits.delete(staged.toolCallId)
       this.stagedEditChanges.fire()
       await this.finishAlreadyAppliedEdit(pending, {
@@ -864,6 +852,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
     } catch (error) {
       pending.resolve({ decision: 'reject', reason: error instanceof Error ? error.message : 'Ghost could not accept the edit.' })
+    }
+  }
+
+  private async saveStagedEdit(staged: StagedEdit): Promise<void> {
+    const document = await vscode.workspace.openTextDocument(staged.uri)
+    if (document.getText() !== staged.after) {
+      throw new Error('The source file changed while Ghost was waiting for edit approval.')
+    }
+
+    await document.save()
+    const savedContent = Buffer.from(await vscode.workspace.fs.readFile(staged.uri)).toString('utf8')
+    if (savedContent !== staged.after) {
+      await vscode.workspace.fs.writeFile(staged.uri, Buffer.from(staged.after, 'utf8'))
     }
   }
 
