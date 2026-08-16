@@ -45,7 +45,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   mlxUrl: 'http://localhost:8000',
   temperature: 0.2,
   responseLength: 'balanced',
-  mode: 'ask',
+  mode: 'agent',
   enableConversationPersistence: false,
   enableDebugLogging: false,
   toolAllowlist: [...GHOST_TOOL_NAMES],

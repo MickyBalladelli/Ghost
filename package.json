@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.47",
+  "version": "1.0.48",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -180,7 +180,7 @@
             "explain",
             "inline"
           ],
-          "default": "ask",
+          "default": "agent",
           "description": "Default workflow mode for the Ghost interface."
         },
         "ghost.enableConversationPersistence": {

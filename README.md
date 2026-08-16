@@ -125,7 +125,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.maxContextTokens` | `8192` | Maximum context budget sent to the model. |
 | `ghost.temperature` | `0.2` | Sampling temperature from `0` to `2`. Lower values are more predictable. |
 | `ghost.responseLength` | `balanced` | Choose `short`, `balanced`, `long`, or `unlimited`. |
-| `ghost.mode` | `ask` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. |
+| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. Agent implements approved code changes. |
 
 ### Agent permissions
 

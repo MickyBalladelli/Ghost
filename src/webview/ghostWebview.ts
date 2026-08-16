@@ -417,7 +417,7 @@ let controls: ControlSettings = {
   maxContextTokens: 8192,
   temperature: 0.2,
   responseLength: 'balanced',
-  mode: 'ask',
+    mode: 'agent',
   enableConversationPersistence: false
 }
 let availableModels: string[] = [controls.chatModel]

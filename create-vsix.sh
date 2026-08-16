@@ -16,5 +16,5 @@ npx vsce package --out "${VSIX_FILE}"
 echo "✓ VSIX package created: ${VSIX_FILE}"
 echo ""
 echo "Installing extension..."
-code --install-extension "./${VSIX_FILE}"
+code --install-extension "./${VSIX_FILE}" --force
 echo "✓ Extension installed"
