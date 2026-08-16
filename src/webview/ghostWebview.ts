@@ -503,6 +503,8 @@ app.innerHTML = `
         </div>
       </div>
       <div class="header-actions">
+        <button type="button" class="control-button" id="history" aria-haspopup="dialog">History</button>
+        <button type="button" class="icon-button" id="new-chat" aria-label="New conversation" title="New conversation">+</button>
         <button type="button" class="icon-button" id="import" aria-label="Import conversations" title="Import conversations">⇩</button>
         <button type="button" class="icon-button" id="export" aria-label="Export conversations" title="Export conversations">⇧</button>
         <button type="button" class="icon-button" id="reset" aria-label="Reset interface" title="Reset interface">↻</button>
@@ -521,13 +523,6 @@ app.innerHTML = `
       <button type="button" class="control-button" id="settings" aria-haspopup="dialog">Controls</button>
     </section>
     <div class="chat-layout">
-      <aside class="sidebar" aria-label="Conversations">
-        <div class="sidebar-header">
-          <span class="sidebar-title">Conversations</span>
-          <button type="button" class="icon-button" id="new-chat" aria-label="New conversation" title="New conversation">+</button>
-        </div>
-        <div class="conversation-list" id="conversation-list" role="list"></div>
-      </aside>
       <main class="chat-main">
         <section class="messages" id="messages" role="log" aria-label="Conversation messages" aria-live="polite"></section>
         <div class="screen-reader-status" id="screen-reader-status" role="status" aria-live="polite"></div>
@@ -547,7 +542,6 @@ app.innerHTML = `
           <div class="composer-footer">
             <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line</span>
             <span class="composer-count" id="composer-count">0 chars · ~0 tokens</span>
-            <button type="button" class="context-button" id="history" aria-haspopup="dialog">History</button>
             <button type="button" class="stop-button" id="stop" hidden>Stop</button>
             <button type="submit" id="send">Send</button>
           </div>
@@ -623,16 +617,17 @@ app.innerHTML = `
     </div>
     <div class="modal-backdrop" id="history-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
-        <div class="modal-header"><h2 id="history-title">Prompt history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close history">×</button></div>
-        <input id="history-search" type="search" placeholder="Search prompts" aria-label="Search prompt history">
+        <div class="modal-header"><h2 id="history-title">Conversation history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close conversation history">×</button></div>
+        <p class="modal-description">Choose a previous conversation to continue.</p>
+        <input id="history-search" type="search" placeholder="Search conversations" aria-label="Search conversation history">
         <div class="history-list" id="history-list"></div>
+        <div class="modal-footer"><button type="button" class="secondary" id="new-history-chat">New conversation</button><button type="button" class="secondary" data-close-modal="history-modal">Close</button></div>
       </section>
     </div>
   </div>
 `
 
 const messagesElement = document.getElementById('messages') as HTMLElement
-const conversationListElement = document.getElementById('conversation-list') as HTMLElement
 const promptElement = document.getElementById('prompt') as HTMLTextAreaElement
 const composerElement = document.getElementById('composer') as HTMLFormElement
 const sendElement = document.getElementById('send') as HTMLButtonElement
@@ -988,19 +983,47 @@ const renderContextPreview = () => {
 const renderHistory = () => {
   const query = historySearchElement.value.trim().toLowerCase()
   historyListElement.textContent = ''
-  const entries = promptHistory().filter(prompt => prompt.toLowerCase().includes(query))
+  const entries = state.conversations.filter(conversation => (
+    conversation.title.toLowerCase().includes(query) ||
+    conversation.messages.some(message => message.content.toLowerCase().includes(query))
+  ))
   if (entries.length === 0) {
-    historyListElement.innerHTML = '<p class="modal-description">No matching prompts.</p>'
+    historyListElement.innerHTML = '<p class="modal-description">No matching conversations.</p>'
     return
   }
-  for (const prompt of entries) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'history-item'
-    button.textContent = prompt
-    button.title = 'Use this prompt'
-    button.dataset.historyPrompt = prompt
-    historyListElement.append(button)
+  for (const conversation of entries) {
+    const item = document.createElement('div')
+    item.className = `conversation-item${conversation.id === state.activeConversationId ? ' active' : ''}`
+    const select = document.createElement('button')
+    select.type = 'button'
+    select.className = 'conversation-select'
+    select.textContent = conversation.title
+    select.title = `Open ${conversation.title}`
+    select.dataset.historyConversation = conversation.id
+    const meta = document.createElement('small')
+    meta.className = 'conversation-meta'
+    meta.textContent = `${conversation.messages.length} message${conversation.messages.length === 1 ? '' : 's'}`
+    const actions = document.createElement('span')
+    actions.className = 'conversation-actions'
+    const rename = document.createElement('button')
+    rename.type = 'button'
+    rename.className = 'conversation-action'
+    rename.textContent = '…'
+    rename.title = 'Rename conversation'
+    rename.setAttribute('aria-label', `Rename ${conversation.title}`)
+    rename.dataset.conversationAction = 'rename'
+    rename.dataset.conversationId = conversation.id
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'conversation-action'
+    remove.textContent = '×'
+    remove.title = 'Delete conversation'
+    remove.setAttribute('aria-label', `Delete ${conversation.title}`)
+    remove.dataset.conversationAction = 'delete'
+    remove.dataset.conversationId = conversation.id
+    actions.append(rename, remove)
+    item.append(select, meta, actions)
+    historyListElement.append(item)
   }
 }
 
@@ -1501,42 +1524,6 @@ const scrollMessages = (force: boolean) => {
   })
 }
 
-const renderConversationList = () => {
-  conversationListElement.textContent = ''
-  for (const conversation of state.conversations) {
-    const item = document.createElement('div')
-    item.className = `conversation-item${conversation.id === state.activeConversationId ? ' active' : ''}`
-    item.setAttribute('role', 'listitem')
-    const select = document.createElement('button')
-    select.type = 'button'
-    select.className = 'conversation-select'
-    select.textContent = conversation.title
-    select.title = conversation.title
-    select.dataset.conversationId = conversation.id
-    const actions = document.createElement('span')
-    actions.className = 'conversation-actions'
-    const rename = document.createElement('button')
-    rename.type = 'button'
-    rename.className = 'conversation-action'
-    rename.textContent = '…'
-    rename.title = 'Rename conversation'
-    rename.setAttribute('aria-label', `Rename ${conversation.title}`)
-    rename.dataset.conversationAction = 'rename'
-    rename.dataset.conversationId = conversation.id
-    const remove = document.createElement('button')
-    remove.type = 'button'
-    remove.className = 'conversation-action'
-    remove.textContent = '×'
-    remove.title = 'Delete conversation'
-    remove.setAttribute('aria-label', `Delete ${conversation.title}`)
-    remove.dataset.conversationAction = 'delete'
-    remove.dataset.conversationId = conversation.id
-    actions.append(rename, remove)
-    item.append(select, actions)
-    conversationListElement.append(item)
-  }
-}
-
 const updateComposer = () => {
   const length = promptElement.value.length
   composerCountElement.textContent = `${length} chars · ~${Math.ceil(length / 4)} tokens`
@@ -1614,7 +1601,6 @@ const updateStatus = () => {
 
 const render = (forceScroll = false) => {
   renderControls()
-  renderConversationList()
   renderMessages(forceScroll)
   updateStatus()
   saveState()
@@ -2428,23 +2414,6 @@ mentionMenuElement.addEventListener('click', event => {
   updateComposer()
 })
 
-conversationListElement.addEventListener('click', event => {
-  const target = event.target as HTMLElement
-  const action = target.closest<HTMLButtonElement>('[data-conversation-action]')
-  if (action?.dataset.conversationAction && action.dataset.conversationId) {
-    handleConversationAction(action.dataset.conversationAction, action.dataset.conversationId)
-    return
-  }
-  const select = target.closest<HTMLButtonElement>('[data-conversation-id]')
-  if (select?.dataset.conversationId) {
-    saveDraft()
-    state.activeConversationId = select.dataset.conversationId
-    notice = undefined
-    render(true)
-    restoreDraft()
-  }
-})
-
 providerElement.addEventListener('change', () => {
   controls.provider = providerElement.value as GhostProvider
   availableModels = []
@@ -2627,15 +2596,28 @@ document.addEventListener('keydown', event => {
 })
 historySearchElement.addEventListener('input', renderHistory)
 historyListElement.addEventListener('click', event => {
-  const item = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-history-prompt]')
-  if (!item?.dataset.historyPrompt) {
+  const target = event.target as HTMLElement
+  const action = target.closest<HTMLButtonElement>('[data-conversation-action]')
+  if (action?.dataset.conversationAction && action.dataset.conversationId) {
+    handleConversationAction(action.dataset.conversationAction, action.dataset.conversationId)
+    renderHistory()
     return
   }
-  promptElement.value = item.dataset.historyPrompt
+  const item = target.closest<HTMLButtonElement>('[data-history-conversation]')
+  if (!item?.dataset.historyConversation) {
+    return
+  }
   saveDraft()
+  state.activeConversationId = item.dataset.historyConversation
+  notice = undefined
   setModalVisibility(historyModalElement, false)
-  promptElement.focus()
-  updateComposer()
+  render(true)
+  restoreDraft()
+})
+
+document.getElementById('new-history-chat')?.addEventListener('click', () => {
+  setModalVisibility(historyModalElement, false)
+  startNewConversation()
 })
 
 document.getElementById('new-preset')?.addEventListener('click', () => {

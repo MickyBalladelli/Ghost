@@ -25,9 +25,9 @@ Ghost runs chat, agent tools, and inline completion against Ollama, MLX/VLM, or 
 - Five workspace tools with allowlists, denylists, approval prompts, and visible progress.
 - Diff previews for edits, selected-hunk approval, and restore actions for applied edits.
 - Ask, Edit, Agent, Explain, and Inline workflow modes.
-- Conversation sidebar, prompt history, presets, import/export, retry, regenerate, and cancellation.
+- Conversation history popup, prompt history, presets, import/export, retry, regenerate, and cancellation.
 - Configurable assistant name, avatar, accent color, layout, context, and response behavior.
-- Keyboard-friendly interface with visible focus, screen-reader status updates, high-contrast theme support, reduced motion, and narrow-sidebar layout support.
+- Keyboard-friendly interface with visible focus, screen-reader status updates, high-contrast theme support, reduced motion, and narrow-panel layout support.
 - No Ghost telemetry service. Provider requests go only to the configured endpoint.
 
 ## Requirements
@@ -74,13 +74,14 @@ code --install-extension ./ghost.vsix
 
 ## Using Ghost
 
-The Ghost view contains the provider and model strip, conversation sidebar, message log, and composer.
+The Ghost view contains the provider and model strip, message log, composer, and top-bar conversation history.
 
 - Press `Enter` to send a message. Press `Shift+Enter` for a new line.
 - Use **Context** to choose workspace, folders, active file, selection, open files, or tools.
 - Hover or focus the tools and open-files context chips to see their full lists.
 - Use **Attach** to add text files to the current request. Attachments are not saved in conversation history.
-- Open **Controls** to change the model, workflow, context, appearance, and tool permissions.
+- Use the **History** button at the top to search, select, rename, or delete previous conversations.
+- Use **Controls** to change the model, workflow, context, appearance, and tool permissions.
 - Use `@local` in the VS Code Chat view for the native local participant.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.
 - File writes, structured edits, and terminal commands require confirmation unless already approved for the current session.

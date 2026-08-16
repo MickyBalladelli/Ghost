@@ -1729,7 +1729,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .header-actions,
-      .sidebar-header,
       .composer-footer,
       .status-footer,
       .message-header,
@@ -1768,32 +1767,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         min-height: 0;
       }
 
-      .sidebar {
-        border-right: 1px solid var(--ghost-border);
-        display: flex;
-        flex: 0 0 166px;
-        flex-direction: column;
-        min-width: 0;
-      }
-
-      .sidebar-header {
-        border-bottom: 1px solid var(--ghost-border);
-        justify-content: space-between;
-        padding: 8px;
-      }
-
-      .sidebar-title {
-        color: var(--vscode-descriptionForeground);
-        font-size: 0.85em;
-        font-weight: 600;
-        text-transform: uppercase;
-      }
-
-      .conversation-list {
-        overflow: auto;
-        padding: 4px;
-      }
-
       .conversation-item {
         border-radius: 3px;
         gap: 2px;
@@ -1821,6 +1794,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .conversation-select:hover {
         background: transparent;
+      }
+
+      .conversation-meta {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.75em;
+        margin-right: 4px;
+        white-space: nowrap;
       }
 
       .conversation-actions {
@@ -2259,20 +2239,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       @media (max-width: 500px) {
-        .sidebar {
-          flex-basis: 132px;
-        }
-
         .composer-hint {
           display: none;
         }
       }
 
       @media (max-width: 360px) {
-        .sidebar {
-          flex-basis: 104px;
-        }
-
         .header .subtitle,
         .connection-indicator {
           display: none;
