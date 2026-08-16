@@ -82,6 +82,7 @@ The Ghost view contains the provider and model strip, message log, composer, and
 - Use **Attach** to add text files to the current request. Attachments are not saved in conversation history.
 - Use the **History** button at the top to search, select, rename, or delete previous conversations.
 - Use **Controls** to change the model, workflow, context, appearance, and tool permissions.
+- Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost asks for approval before file edits and terminal commands.
 - Use `@local` in the VS Code Chat view for the native local participant.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.
 - File writes, structured edits, and terminal commands require confirmation unless already approved for the current session.

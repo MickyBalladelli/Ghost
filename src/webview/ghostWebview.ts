@@ -565,7 +565,7 @@ app.innerHTML = `
           <label for="response-length">Response length</label>
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
-          <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent — implement changes</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
           <label for="composer-height">Composer size</label>
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
           <label for="prompt-rows">Prompt rows</label>

@@ -481,9 +481,15 @@ export function createChatParticipantHandler(
       return
     }
 
-    const baseSystemPrompt = requestOptions.context?.tools === false
+    const toolsEnabled = requestOptions.context?.tools !== false
+    const workflowInstruction = requestOptions.mode === 'agent'
+      ? '\n\nAgent mode is active. When the user asks you to implement, fix, edit, or change code, do the work in the workspace. Inspect files with tools, use ghost_apply_edit or ghost_write_file to make changes, and use ghost_run_terminal_command for requested or useful verification. Do not only describe a hypothetical solution. Start with a tool call when a workspace change is needed, then continue until the task is complete.'
+      : requestOptions.mode === 'edit'
+        ? '\n\nEdit mode is active. When the user asks for a code change, inspect the relevant files and propose the actual workspace edit with ghost_apply_edit or ghost_write_file. Do not only describe what could be changed.'
+        : ''
+    const baseSystemPrompt = !toolsEnabled
       ? 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
-      : SYSTEM_PROMPT
+      : `${SYSTEM_PROMPT}${workflowInstruction}`
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
       : baseSystemPrompt
