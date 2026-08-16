@@ -504,11 +504,11 @@ app.innerHTML = `
         </div>
       </div>
       <div class="header-actions">
-        <button type="button" class="control-button" id="history" aria-haspopup="dialog">History</button>
+        <button type="button" class="icon-button history-button" id="history" aria-haspopup="dialog" aria-label="History" title="History"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></button>
         <button type="button" class="icon-button" id="new-chat" aria-label="New conversation" title="New conversation">+</button>
         <button type="button" class="icon-button" id="import" aria-label="Import conversations" title="Import conversations">⇩</button>
         <button type="button" class="icon-button" id="export" aria-label="Export conversations" title="Export conversations">⇧</button>
-        <button type="button" class="icon-button danger-button" id="reset" aria-label="Delete all conversation history and preferences" title="Delete all conversation history and preferences"><span class="trash-icon" aria-hidden="true"></span></button>
+        <button type="button" class="icon-button danger-button" id="reset" aria-label="Delete all conversation history and preferences" title="Delete all conversation history and preferences"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13H7L6 7Zm3-3h6l1 2H8l1-2Zm-1 7v6m4-6v6m4-6v6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg></button>
       </div>
     </header>
     <section class="control-strip" aria-label="Prompt controls">
@@ -521,7 +521,7 @@ app.innerHTML = `
       <label class="control-label" for="model">Model</label>
       <select id="model" aria-label="Chat model"></select>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
-      <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings">⚙</button>
+      <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
     </section>
     <div class="chat-layout">
       <main class="chat-main">

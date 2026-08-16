@@ -1671,8 +1671,25 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .settings-button {
-        font-size: 1.1em;
-        line-height: 1;
+        min-height: 28px;
+        min-width: 32px;
+        padding: 3px 6px;
+      }
+
+      .ui-icon {
+        display: block;
+        height: 18px;
+        width: 18px;
+      }
+
+      .settings-button .ui-icon {
+        height: 20px;
+        width: 20px;
+      }
+
+      .history-button .ui-icon {
+        height: 18px;
+        width: 18px;
       }
 
       .context-row {
@@ -2046,39 +2063,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .danger-button:hover {
         background: color-mix(in srgb, var(--vscode-testing-iconFailed, #f14c4c) 18%, transparent);
         color: var(--vscode-testing-iconFailed, #f14c4c);
-      }
-
-      .trash-icon {
-        border: 1.5px solid currentColor;
-        border-top: 0;
-        border-radius: 0 0 2px 2px;
-        display: inline-block;
-        height: 12px;
-        position: relative;
-        width: 10px;
-      }
-
-      .trash-icon::before {
-        border: 1.5px solid currentColor;
-        border-bottom: 0;
-        border-radius: 2px 2px 0 0;
-        content: '';
-        height: 2px;
-        left: -3px;
-        position: absolute;
-        top: -5px;
-        width: 14px;
-      }
-
-      .trash-icon::after {
-        border-left: 1px solid currentColor;
-        border-right: 1px solid currentColor;
-        content: '';
-        height: 7px;
-        left: 3px;
-        position: absolute;
-        top: 2px;
-        width: 2px;
       }
 
       .chat-layout {
