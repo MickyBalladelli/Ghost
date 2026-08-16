@@ -586,6 +586,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request: GhostRequestState,
     call: LocalToolCall
   ): Promise<GhostToolApproval> {
+    const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
+    const requiredArgument = pathTools.has(call.name)
+      ? 'path'
+      : call.name === 'ghost_run_terminal_command'
+        ? 'command'
+        : undefined
+    if (requiredArgument && (typeof call.arguments[requiredArgument] !== 'string' || !call.arguments[requiredArgument].trim())) {
+      const reason = `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
+      const pending = { toolCallId: this.createToolCallId(), name: call.name }
+      request.pendingTool = pending
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-requested',
+        tool: call.name,
+        toolCallId: pending.toolCallId,
+        arguments: call.arguments,
+        requiresApproval: false,
+        detail: reason,
+        phase: 'tool'
+      })
+      return { decision: 'reject', reason }
+    }
+
     const pending = request.pendingTool?.name === call.name
       ? request.pendingTool
       : { toolCallId: this.createToolCallId(), name: call.name }
