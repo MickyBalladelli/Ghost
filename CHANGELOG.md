@@ -2,6 +2,16 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.58 - 2026-08-16
+
+- Reworked file edit previews to stage changes directly in the real source editor instead of opening temporary `Ghost edit:` documents.
+- Added `Accept Ghost edit` and `Reject Ghost edit` code lenses, safe save/reject handling, selected-hunk approval, and restore support.
+- Improved local tool-call parsing for compact names such as `ghostapplyedit` and buffered tool-enabled responses so explanatory text cannot leak tool calls into the result.
+- Added version-aware `publish.sh` VSIX publishing and documented the local build and publishing workflow.
+- Improved the Settings panel with fixed Save/Close controls, scrollable content, prompt preset saving, and clearer global/workspace settings behavior.
+- Refreshed the interface controls with Settings, History, and red delete icons, plus neutral context chips that do not resemble approval prompts.
+- Updated the README with current editing, settings, persistence, UI, and publishing documentation.
+
 ## 1.0.43 - 2026-08-16
 
 - Added Agent mode guidance so Ghost uses workspace tools to inspect files and implement requested changes instead of only describing them. File edits and terminal commands still require approval.

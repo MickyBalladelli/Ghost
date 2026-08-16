@@ -23,9 +23,9 @@ Ghost runs chat, agent tools, and inline completion against Ollama, MLX/VLM, or 
 - Workspace context from the workspace, folders, active editor, selection, and open files.
 - Text-file attachments for focused requests.
 - Five workspace tools with allowlists, denylists, approval prompts, and visible progress.
-- Diff previews for edits, selected-hunk approval, and restore actions for applied edits.
+- Source-editor edit previews with Accept/Reject controls, selected-hunk approval, and restore actions for applied edits.
 - Ask, Edit, Agent, Explain, and Inline workflow modes.
-- Conversation history popup, prompt history, presets, import/export, retry, regenerate, and cancellation.
+- Conversation history popup, prompt history, reusable presets, import/export, retry, regenerate, and cancellation.
 - Configurable assistant name, avatar, accent color, layout, context, and response behavior.
 - Keyboard-friendly interface with visible focus, screen-reader status updates, high-contrast theme support, reduced motion, and narrow-panel layout support.
 - No Ghost telemetry service. Provider requests go only to the configured endpoint.
@@ -81,12 +81,13 @@ The Ghost view contains the provider and model strip, message log, composer, and
 - Hover or focus the tools and open-files context chips to see their full lists.
 - Use **Attach** to add text files to the current request. Attachments are not saved in conversation history.
 - Use the **History** button at the top to search, select, rename, or delete previous conversations.
-- Use **Controls** to change the model, workflow, context, appearance, and tool permissions.
-- Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost asks for approval before file edits and terminal commands.
+- Use the **Settings** gear to change the model, workflow, context, appearance, persistence, and tool permissions.
+- Context chips are informational toggles. They control what Ghost includes in the prompt; they are not approval requests.
+- Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost stages proposed file changes in the real source editor and asks for approval before saving file edits or running terminal commands.
 - Use `@local` in the VS Code Chat view for the native local participant.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.
 - File writes, structured edits, and terminal commands require confirmation unless already approved for the current session.
-- Structured edits show a diff before applying. Approved file edits can be restored when the restore action is available.
+- Structured edits appear directly in the source editor. Use the `Accept Ghost edit` or `Reject Ghost edit` code lens at the top of the file, or use the approval controls in the Ghost view. Accepted edits are saved; rejected edits are restored. Selected hunks can be applied from the Ghost view.
 
 ## Workspace tools
 
@@ -100,11 +101,11 @@ Ghost exposes these tools to the agent:
 | `ghost_run_terminal_command` | Runs a shell command in the workspace. | Required |
 | `ghost_list_directory` | Lists files and folders under a workspace path. | Safe workspace tool |
 
-The **Context** popup shows the tools currently available to the request. The **Controls** panel and `ghost.toolAllowlist` / `ghost.toolDenylist` settings control which tools Ghost may use.
+The **Context** popup shows the tools currently available to the request. The **Settings** panel and `ghost.toolAllowlist` / `ghost.toolDenylist` settings control which tools Ghost may use.
 
 ## Settings
 
-All VS Code settings use the `ghost` prefix. Open **Settings** and search for `Ghost`, or use the **Controls** panel in the Ghost view.
+All VS Code settings use the `ghost` prefix. Open **Settings** and search for `Ghost`, or use the **Settings** gear in the Ghost view.
 
 ### Provider and model settings
 
@@ -141,7 +142,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.enableConversationPersistence` | `false` | Save conversations and preferences in VS Code storage. |
 | `ghost.enableDebugLogging` | `false` | Enable local, telemetry-free debug logging in the extension host. |
 
-The **Controls** panel also includes:
+The **Settings** panel also includes:
 
 - Automatic context collection
 - Workspace-specific settings
@@ -156,6 +157,8 @@ The **Controls** panel also includes:
 - Custom system instructions
 - Conversation persistence
 - Local debug logging
+
+The panel also manages prompt presets. Saving a preset closes the panel. When conversation persistence is enabled, presets are stored in VS Code extension storage rather than in the project. The **Use workspace-specific settings** option controls where Ghost configuration is written: enabled writes to the current workspace settings, while disabled writes to global VS Code user settings.
 
 ### Persistence and privacy
 
@@ -172,7 +175,7 @@ Run these from the Command Palette:
 - `Ghost: Check Ollama Connection`
 - `Ghost: Check Required Models`
 - `Ghost: Toggle Autocomplete`
-- `Ghost: Reset Interface`
+- `Ghost: Reset Interface` — delete all Ghost conversations and preferences after confirmation
 - `Ghost: Export Interface`
 - `Ghost: Clear Interface`
 
@@ -182,7 +185,7 @@ There are no default keyboard shortcuts. Add your own in **Keyboard Shortcuts** 
 
 ### Provider is offline
 
-Open **Controls**, confirm the provider URL, and use **Test provider connection**. For Ollama, confirm the service is running.
+Open the **Settings** gear, confirm the provider URL, and use **Test provider connection**. For Ollama, confirm the service is running.
 
 ### Model is missing
 
@@ -199,7 +202,7 @@ Lower `ghost.maxContextTokens`, disable automatic context, hide thinking and too
 
 ### A tool is blocked
 
-Check the tool allowlist and denylist in **Controls** or VS Code settings. File edits and terminal commands still need approval.
+Check the tool allowlist and denylist in **Settings** or VS Code settings. File edits and terminal commands still need approval.
 
 ### OpenAI-compatible endpoint fails
 
@@ -211,6 +214,20 @@ Check the API mode and endpoint suffix. Most OpenAI-compatible servers use `/v1`
 npm install
 npm run compile
 ```
+
+Create and install a local VSIX with:
+
+```bash
+./create-vsix.sh
+```
+
+The script increments the patch version, compiles Ghost, creates `ghost-${version}.vsix`, and installs it in VS Code. Publish an already-created matching VSIX with:
+
+```bash
+./publish.sh
+```
+
+`publish.sh` reads the version from `package.json`, requires `ghost-${version}.vsix`, and publishes that exact package through `vsce`.
 
 Run `npm test` in a VS Code-capable environment for the extension-host test suite. See [docs/architecture.md](docs/architecture.md) for the extension host, webview, providers, persistence, tools, and approval flow.
 
