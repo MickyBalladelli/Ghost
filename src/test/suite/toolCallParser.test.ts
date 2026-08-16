@@ -21,6 +21,20 @@ suite('Tool call parsing', () => {
     })
   })
 
+  test('recovers an Ollama write call with raw multiline content', () => {
+    const output = `Now I will edit the file. {"tool":"ghostwritefile","arguments":{"path":"/workspace/file.ts","content":"line one
+const value = "text"
+"}}`
+
+    assert.deepEqual(parseLocalToolCall(output), {
+      name: 'ghost_write_file',
+      arguments: {
+        path: '/workspace/file.ts',
+        content: 'line one\nconst value = "text"\n'
+      }
+    })
+  })
+
   test('skips malformed objects and rejects unknown tools', () => {
     assert.equal(parseLocalToolCall('{"tool":"not-a-real-tool","arguments":{}}'), undefined)
     assert.equal(parseLocalToolCall('{"tool":"ghost_read_file","arguments":"not json"}'), {

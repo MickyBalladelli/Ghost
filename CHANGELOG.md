@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.66 - 2026-08-16
+
+- Recovered malformed Ollama `ghost_write_file` JSON with raw multiline content so valid write requests execute instead of appearing as text.
+- Strengthened the tool-call prompt to require escaped JSON strings.
+
 ## 1.0.65 - 2026-08-16
 
 - Added Ctrl-N for a new conversation and Up/Down prompt history navigation.

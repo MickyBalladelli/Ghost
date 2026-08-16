@@ -124,6 +124,48 @@ function parseCandidate(value: unknown): LocalToolCall | undefined {
   }
 }
 
+function parseLooseToolName(text: string): LocalToolName | undefined {
+  const match = /["'](?:tool|name|tool_name)["']\s*:\s*["']?([A-Za-z0-9_-]+)/.exec(text)
+  return normalizeLocalToolName(match?.[1])
+}
+
+function parseLooseWriteFile(text: string): LocalToolCall | undefined {
+  if (parseLooseToolName(text) !== 'ghost_write_file') {
+    return undefined
+  }
+
+  const pathMatch = /["']path["']\s*:\s*"([^"]+)"/.exec(text)
+  const contentMarker = /["']content["']\s*:\s*"/.exec(text)
+  if (!pathMatch || !contentMarker || contentMarker.index === undefined) {
+    return undefined
+  }
+
+  const contentStart = contentMarker.index + contentMarker[0].length
+  const closingContent = /"\s*}\s*}\s*$/.exec(text.slice(contentStart))
+  if (!closingContent || closingContent.index === undefined) {
+    return undefined
+  }
+
+  const rawContent = text.slice(contentStart, contentStart + closingContent.index)
+  const content = rawContent.includes('\n')
+    ? rawContent
+    : (() => {
+        try {
+          return JSON.parse(`"${rawContent}"`) as string
+        } catch {
+          return rawContent.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+        }
+      })()
+
+  return {
+    name: 'ghost_write_file',
+    arguments: {
+      path: pathMatch[1],
+      content
+    }
+  }
+}
+
 export function parseLocalToolCall(text: string): LocalToolCall | undefined {
   for (const candidate of getJsonCandidates(text)) {
     try {
@@ -137,5 +179,5 @@ export function parseLocalToolCall(text: string): LocalToolCall | undefined {
     }
   }
 
-  return undefined
+  return parseLooseWriteFile(text)
 }
