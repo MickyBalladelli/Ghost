@@ -1710,16 +1710,38 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .context-chip,
       .attachment-chip {
-        background: var(--vscode-badge-background);
-        border: 0;
-        border-radius: 10px;
-        color: var(--vscode-badge-foreground);
+        background: var(--vscode-input-background, transparent);
+        border: 1px solid var(--ghost-border);
+        border-radius: 4px;
+        color: var(--vscode-descriptionForeground);
         font-size: 0.75em;
         max-width: 180px;
         overflow: hidden;
         padding: 3px 7px;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .context-chip {
+        cursor: pointer;
+      }
+
+      .context-chip:hover {
+        background: var(--vscode-toolbar-hoverBackground);
+        border-color: var(--vscode-focusBorder);
+        color: var(--vscode-foreground);
+      }
+
+      .context-chip:focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 1px;
+      }
+
+      .attachment-chip {
+        background: var(--vscode-badge-background);
+        border: 0;
+        border-radius: 10px;
+        color: var(--vscode-badge-foreground);
       }
 
       .context-chip.removed {
