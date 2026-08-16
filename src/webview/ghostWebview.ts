@@ -553,6 +553,7 @@ app.innerHTML = `
           </div>
         </form>
         <footer class="status-footer" id="status-footer">
+          <span class="thinking-ghost" aria-hidden="true">👻</span>
           <span class="status-dot" aria-hidden="true"></span>
           <span id="status-text">Ready</span>
         </footer>
@@ -1547,6 +1548,7 @@ const updateComposer = () => {
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   stopElement.hidden = !busy
   promptElement.disabled = busy
+  composerElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
 }

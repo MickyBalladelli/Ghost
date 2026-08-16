@@ -2,7 +2,7 @@
   "name": "ghost",
   "displayName": "Ghost",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "publisher": "ghost",
   "author": {
     "name": "Micky Balladelli"

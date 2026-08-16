@@ -2115,8 +2115,35 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .composer {
         border: 1px solid var(--ghost-border);
         border-radius: 4px;
+        isolation: isolate;
         margin: 0 12px 8px;
         padding: 8px;
+        position: relative;
+      }
+
+      .composer::before {
+        background: conic-gradient(from 0deg, #ff5f6d, #ffc371, #64f38c, #4facfe, #c471ed, #ff5f6d);
+        border-radius: inherit;
+        content: '';
+        inset: -1px;
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        padding: 1px;
+        pointer-events: none;
+        position: absolute;
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        z-index: -1;
+      }
+
+      .composer.busy {
+        border-color: transparent;
+      }
+
+      .composer.busy::before {
+        animation: ghost-border-spin 2.2s linear infinite;
+        opacity: 1;
       }
 
       .composer:focus-within {
@@ -2177,8 +2204,43 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         background: var(--ghost-accent);
       }
 
+      .thinking-ghost {
+        display: none;
+      }
+
+      .status-footer.busy .thinking-ghost {
+        animation: ghost-float 1.1s ease-in-out infinite, ghost-spin 2.4s linear infinite;
+        display: inline-block;
+        font-size: 1.05em;
+        line-height: 1;
+        transform-origin: center;
+      }
+
       .status-footer.offline .status-dot {
         background: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      @keyframes ghost-border-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes ghost-float {
+        0%,
+        100% {
+          translate: 0 0;
+        }
+
+        50% {
+          translate: 0 -3px;
+        }
+      }
+
+      @keyframes ghost-spin {
+        to {
+          rotate: 360deg;
+        }
       }
 
       .screen-reader-only,
@@ -2232,6 +2294,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         *,
         *::before,
         *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
           scroll-behavior: auto !important;
           transition-duration: 0.01ms !important;
         }
