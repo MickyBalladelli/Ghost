@@ -386,7 +386,7 @@ function createDefaultLlmFactory(configuration: GhostConfig): LlmFactory {
 
   return new LlmFactory(
     {
-      ollamaClient: new OllamaClient(settings.ollamaUrl),
+      ollamaClient: new OllamaClient(settings.ollamaUrl, 'ollama'),
       mlxClient: new MlxClient(settings.mlxUrl),
       openaiCompatibleClient: new OllamaClient(settings.openaiUrl, 'openai-compatible')
     },

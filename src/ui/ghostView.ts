@@ -1120,7 +1120,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         ? new MlxClient(settings.mlxUrl)
         : new OllamaClient(
             settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
           )
       const online = await client.checkHealth(1500)
       connection = online ? 'online' : 'offline'
@@ -1187,7 +1187,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ? new MlxClient(settings.mlxUrl)
       : new OllamaClient(
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
         )
     const online = await client.checkHealth(3000)
     if (online) {

@@ -2,6 +2,12 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.63 - 2026-08-16
+
+- Routed the Ollama provider through Ollama's native API so agent file edits execute reliably.
+- Kept OpenAI-compatible chat and completion requests on the explicit OpenAI API path.
+- Routed inline completion through the native Ollama API.
+
 ## 1.0.58 - 2026-08-16
 
 - Reworked file edit previews to stage changes directly in the real source editor instead of opening temporary `Ghost edit:` documents.

@@ -59,7 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
       ? new MlxClient(settings.mlxUrl)
       : new OllamaClient(
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
         )
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')

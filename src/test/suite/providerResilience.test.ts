@@ -17,6 +17,30 @@ async function collect(stream: AsyncIterable<string>): Promise<string[]> {
 }
 
 suite('Provider resilience', () => {
+  test('uses the native Ollama chat endpoint for the Ollama provider', async () => {
+    const requests: string[] = []
+    const request = (async (url: string) => {
+      requests.push(url)
+      return new Response('{"message":{"content":"{\\"tool\\":\\"ghost_apply_edit\\"}"},"done":true}\n', { status: 200 })
+    }) as unknown as typeof fetch
+    const client = new OllamaClient('http://127.0.0.1:11434', 'ollama', request)
+
+    assert.deepEqual(await collect(client.streamChatCompletion({ model: 'local-model', messages: [] })), ['{"tool":"ghost_apply_edit"}'])
+    assert.deepEqual(requests, ['http://127.0.0.1:11434/api/chat'])
+  })
+
+  test('uses the OpenAI-compatible chat endpoint for the OpenAI provider', async () => {
+    const requests: string[] = []
+    const request = (async (url: string) => {
+      requests.push(url)
+      return new Response('data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+    }) as unknown as typeof fetch
+    const client = new OllamaClient('http://127.0.0.1:8001/v1', 'openai-compatible', request)
+
+    assert.deepEqual(await collect(client.streamChatCompletion({ model: 'local-model', messages: [] })), ['done'])
+    assert.deepEqual(requests, ['http://127.0.0.1:8001/v1/chat/completions'])
+  })
+
   test('uses the configured endpoint and falls back between compatible APIs', async () => {
     const requests: string[] = []
     const request = (async (url: string) => {

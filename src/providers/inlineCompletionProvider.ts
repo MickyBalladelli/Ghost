@@ -114,12 +114,17 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     const cancellation = createCancellationSignal(token)
 
     try {
-      const completion = await this.fetchCompletion(settings.ollamaUrl, {
-        model: settings.autocompleteModel,
-        prefix,
-        suffix,
-        signal: cancellation.signal
-      })
+      const useOpenAiCompatible = settings.provider === 'openai-compatible'
+      const completion = await this.fetchCompletion(
+        useOpenAiCompatible ? settings.openaiUrl : settings.ollamaUrl,
+        {
+          model: settings.autocompleteModel,
+          prefix,
+          suffix,
+          mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
+          signal: cancellation.signal
+        }
+      )
 
       if (!completion || token.isCancellationRequested || requestId !== this.requestSequence) {
         return []
