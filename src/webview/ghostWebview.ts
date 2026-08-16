@@ -69,11 +69,19 @@ interface ChatMessage {
   role: MessageRole
   content: string
   parts: MessagePart[]
+  responseStats?: ResponseStats
   status?: 'streaming' | 'error'
   requestStatus?: RequestStatus
   requestId?: string
   createdAt: number
   updatedAt: number
+}
+
+interface ResponseStats {
+  elapsedMs: number
+  tokenCount: number
+  tokensPerSecond: number
+  model?: string
 }
 
 type MessagePart =
@@ -304,12 +312,16 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
       .filter((part): part is Extract<MessagePart, { kind: 'text' }> => part.kind === 'text')
       .map(part => part.text)
       .join('')
+  const responseStats = value.responseStats && typeof value.responseStats.elapsedMs === 'number' && typeof value.responseStats.tokenCount === 'number' && typeof value.responseStats.tokensPerSecond === 'number'
+    ? value.responseStats
+    : undefined
   const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
   return {
     id: typeof value.id === 'string' ? value.id : createId('message'),
     role: value.role === 'assistant' ? 'assistant' : 'user',
     content,
     parts,
+    ...(responseStats ? { responseStats } : {}),
     ...(value.status ? { status: value.status } : {}),
     ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
     ...(value.requestId ? { requestId: value.requestId } : {}),
@@ -1296,6 +1308,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
   article.dataset.messageId = message.id
   const partSummary = renderMessagePartSummary(message)
+  const responseStats = renderResponseStats(message)
   const messageState = message.status === 'streaming'
     ? 'Thinking...'
     : message.requestStatus === 'waiting-for-approval'
@@ -1303,8 +1316,9 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
       : ''
   article.innerHTML = `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
-    <div class="message-body">${renderMarkdown(message.content)}</div>
     ${partSummary}
+    <div class="message-body">${renderMarkdown(message.content)}</div>
+    ${responseStats}
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
@@ -1318,6 +1332,15 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     addAction(actions, 'Edit', 'edit', message.id)
   }
   return article
+}
+
+const renderResponseStats = (message: ChatMessage): string => {
+  if (message.role !== 'assistant' || !message.responseStats) {
+    return ''
+  }
+  const { elapsedMs, model, tokenCount, tokensPerSecond } = message.responseStats
+  const modelLabel = model ? ` · ${escapeHtml(model)}` : ''
+  return `<div class="message-response-stats">${formatElapsed(elapsedMs)} · ${tokenCount} tok · ${tokensPerSecond.toFixed(1)} tok/s${modelLabel}</div>`
 }
 
 const renderMessagePartSummary = (message: ChatMessage): string => {
@@ -1403,7 +1426,14 @@ const updateMessageElement = (message: ChatMessage) => {
   if (existingSummary) {
     existingSummary.outerHTML = summary || '<div class="message-part-summary" hidden></div>'
   } else if (summary) {
-    body?.insertAdjacentHTML('afterend', summary)
+    body?.insertAdjacentHTML('beforebegin', summary)
+  }
+  const existingStats = element.querySelector<HTMLElement>('.message-response-stats')
+  const stats = renderResponseStats(message)
+  if (existingStats) {
+    existingStats.outerHTML = stats || '<div class="message-response-stats" hidden></div>'
+  } else if (stats) {
+    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', stats)
   }
   element.classList.toggle('error', message.status === 'error')
 }
@@ -2031,6 +2061,14 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (typeof message.tokensPerSecond === 'number') {
     request.tokensPerSecond = message.tokensPerSecond
   }
+  if (typeof message.elapsedMs === 'number' && typeof message.tokenCount === 'number' && typeof message.tokensPerSecond === 'number') {
+    assistantMessage.responseStats = {
+      elapsedMs: message.elapsedMs,
+      tokenCount: message.tokenCount,
+      tokensPerSecond: message.tokensPerSecond,
+      ...(message.model ? { model: message.model } : {})
+    }
+  }
   if (typeof message.startedAt === 'number' && message.type === 'request-started') {
     request.startedAt = message.startedAt
   }
@@ -2107,17 +2145,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     }
     request.status = 'thinking'
     assistantMessage.requestStatus = request.status
-    if (assistantMessage.content) {
-      const nextAssistant = createMessage('assistant', '', message.requestId)
-      nextAssistant.status = 'streaming'
-      nextAssistant.requestStatus = request.status
-      conversation.messages.push(nextAssistant)
-      request.assistantMessageId = nextAssistant.id
-      assistantMessage = nextAssistant
-    }
+    assistantMessage.status = 'streaming'
     screenReaderStatusElement.textContent = message.detail ?? message.tool ?? 'Tool completed'
     updateMessageElement(assistantMessage)
-    renderMessages(false)
     updateStatus()
     return
   }

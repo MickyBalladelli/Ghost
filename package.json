@@ -2,7 +2,7 @@
   "name": "ghost",
   "displayName": "Ghost",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.18",
+  "version": "1.0.21",
   "publisher": "ghost",
   "license": "MIT",
   "icon": "icon.png",

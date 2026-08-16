@@ -1852,6 +1852,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         overflow-wrap: anywhere;
       }
 
+      .message-response-stats {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        margin-top: 8px;
+      }
+
       .message-part-summary {
         display: grid;
         gap: 4px;
