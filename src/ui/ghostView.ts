@@ -81,7 +81,7 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
-  private static readonly requestTimeoutMs = 120_000
+  private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
   private static readonly maxProviderAttempts = 3
 
   private view: vscode.WebviewView | undefined
