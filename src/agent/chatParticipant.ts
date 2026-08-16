@@ -542,7 +542,7 @@ export function createChatParticipantHandler(
           response,
           token,
           requestOptions.showReasoning === true,
-          toolsEnabled && (requestOptions.mode === 'agent' || requestOptions.mode === 'edit')
+          toolsEnabled
         )
 
         if (token.isCancellationRequested || turn.streamed) {
