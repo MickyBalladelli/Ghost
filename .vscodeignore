@@ -5,6 +5,10 @@ tsconfig.json
 *.map
 *.ts
 node_modules/**
+!node_modules/node-fetch/**
+!node_modules/whatwg-url/**
+!node_modules/tr46/**
+!node_modules/webidl-conversions/**
 .gitignore
 AGENTS.md
 TODO.md
