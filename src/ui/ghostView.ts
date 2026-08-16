@@ -2214,11 +2214,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         display: none;
       }
 
+      .thinking-ghost img {
+        display: block;
+        height: 18px;
+        object-fit: contain;
+        width: 18px;
+      }
+
       .status-footer.busy .thinking-ghost {
-        animation: ghost-float 1.1s ease-in-out infinite, ghost-spin 2.4s linear infinite;
+        animation: ghost-float 1.1s ease-in-out infinite, ghost-flip 2.4s linear infinite;
         display: inline-block;
-        font-size: 1.05em;
         line-height: 1;
+        perspective: 160px;
         transform-origin: center;
       }
 
@@ -2249,9 +2256,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         }
       }
 
-      @keyframes ghost-spin {
+      @keyframes ghost-flip {
         to {
-          rotate: 360deg;
+          transform: perspective(160px) rotateY(360deg);
         }
       }
 

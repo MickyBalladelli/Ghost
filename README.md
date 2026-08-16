@@ -4,7 +4,7 @@
 
 <h1 align="center">Ghost</h1>
 
-<p align="center">A privacy-first, local-first coding assistant for VS Code.</p>
+<p align="center">AI coding assistant for VS Code.</p>
 
 <p align="center">
   <a href="https://github.com/MickyBalladelli/Ghost/blob/main/LICENSE"><img src="https://img.shields.io/github/license/MickyBalladelli/Ghost?style=flat-square" alt="MIT license"></a>

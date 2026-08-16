@@ -500,7 +500,7 @@ app.innerHTML = `
         <span class="brand-mark" aria-hidden="true"><img src="${ghostIconUri}" alt=""></span>
         <div>
           <div class="title">Ghost</div>
-          <div class="subtitle">Local-first coding assistant</div>
+          <div class="subtitle">AI coding assistant</div>
         </div>
       </div>
       <div class="header-actions">
@@ -548,7 +548,7 @@ app.innerHTML = `
           </div>
         </form>
         <footer class="status-footer" id="status-footer">
-          <span class="thinking-ghost" aria-hidden="true">👻</span>
+          <span class="thinking-ghost" aria-hidden="true"><img src="${ghostIconUri}" alt=""></span>
           <span class="status-dot" aria-hidden="true"></span>
           <span id="status-text">Ready</span>
         </footer>
