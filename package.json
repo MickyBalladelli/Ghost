@@ -1,8 +1,8 @@
 {
   "name": "ghost",
   "displayName": "Ghost",
-  "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.21",
+  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
+  "version": "1.0.22",
   "publisher": "ghost",
   "license": "MIT",
   "icon": "icon.png",
