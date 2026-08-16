@@ -32,6 +32,22 @@ function summarizeToolResult(value: string): string {
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
 }
 
+function getToolArgumentError(call: LocalToolCall): string | undefined {
+  const pathToolNames = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
+  const requiredArgument = pathToolNames.has(call.name)
+    ? 'path'
+    : call.name === 'ghost_run_terminal_command'
+      ? 'command'
+      : undefined
+  if (!requiredArgument) {
+    return undefined
+  }
+  if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
+    return undefined
+  }
+  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
+}
+
 export interface ChatParticipantOptions {
   configuration?: GhostConfig
   llmFactory?: LlmFactory
@@ -551,6 +567,16 @@ export function createChatParticipantHandler(
         if (round === MAX_TOOL_ROUNDS - 1) {
           response.markdown('Ghost stopped after reaching the maximum tool-call limit.')
           return
+        }
+
+        const toolArgumentError = getToolArgumentError(toolCall)
+        if (toolArgumentError) {
+          response.progress(`Invalid tool call: ${toolArgumentError}`)
+          messages.push(
+            { role: 'assistant', content: generated },
+            { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolArgumentError}` }
+          )
+          continue
         }
 
         response.progress(`Running ${toolCall.name}`)

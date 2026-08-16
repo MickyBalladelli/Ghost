@@ -25,6 +25,22 @@ function requiredString(input: Record<string, unknown>, name: string): string {
   return value
 }
 
+function getMissingRequiredArgument(call: LocalToolCall): string | undefined {
+  const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
+  const requiredArgument = pathTools.has(call.name)
+    ? 'path'
+    : call.name === 'ghost_run_terminal_command'
+      ? 'command'
+      : undefined
+  if (!requiredArgument) {
+    return undefined
+  }
+  if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
+    return undefined
+  }
+  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
+}
+
 function resultText(result: vscode.LanguageModelToolResult): string {
   return result.content
     .filter(part => part instanceof vscode.LanguageModelTextPart)
@@ -59,6 +75,11 @@ export class LocalToolExecutor {
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
+    }
+
+    const missingArgument = getMissingRequiredArgument(call)
+    if (missingArgument) {
+      return missingArgument
     }
 
     switch (call.name) {

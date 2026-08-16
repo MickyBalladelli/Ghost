@@ -7,6 +7,8 @@ All notable changes to this extension are documented here.
 - Added Agent mode guidance so Ghost uses workspace tools to inspect files and implement requested changes instead of only describing them. File edits and terminal commands still require approval.
 - Buffered Agent and Edit model turns so explanatory text before a JSON tool call cannot prevent Ghost from applying the requested change.
 - Added validation and retry guidance for incomplete file and terminal tool calls, including missing paths and commands.
+- Added shared pre-execution validation so malformed tool calls cannot reach file or terminal executors.
+- Added executor-level fallback validation so missing tool arguments return a retryable result instead of a failed tool error.
 - Reworked conversation history into a top-bar popup with search, conversation selection, rename, delete, and new conversation actions.
 - Removed the conversation sidebar so the response area uses the full width.
 - Kept the composer and status area fixed while only the response area scrolls.
