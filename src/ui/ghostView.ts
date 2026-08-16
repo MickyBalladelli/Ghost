@@ -1479,6 +1479,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         outline-offset: 2px;
       }
 
+      #save-preset.pressed {
+        background: var(--vscode-button-secondaryBackground, var(--vscode-button-hoverBackground));
+        border-color: var(--vscode-focusBorder);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+        transform: translateY(1px);
+      }
+
       .app {
         display: flex;
         height: 100vh;
@@ -1663,6 +1670,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-foreground);
       }
 
+      .settings-button {
+        font-size: 1.1em;
+        line-height: 1;
+      }
+
       .context-row {
         align-items: center;
         display: flex;
@@ -1816,9 +1828,17 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         max-height: calc(100vh - 32px);
         max-height: calc(100dvh - 32px);
         max-width: 460px;
-        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         padding: 14px;
         width: 100%;
+      }
+
+      .modal-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
       }
 
       .modal-header,
@@ -1840,6 +1860,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .modal-footer {
         background: var(--vscode-quickInput-background, var(--ghost-surface));
         bottom: 0;
+        flex-shrink: 0;
+        justify-content: flex-end;
         padding-top: 10px;
         position: sticky;
       }
@@ -2015,6 +2037,48 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .conversation-action:hover {
         background: var(--vscode-toolbar-hoverBackground);
         color: var(--vscode-foreground);
+      }
+
+      .danger-button {
+        color: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      .danger-button:hover {
+        background: color-mix(in srgb, var(--vscode-testing-iconFailed, #f14c4c) 18%, transparent);
+        color: var(--vscode-testing-iconFailed, #f14c4c);
+      }
+
+      .trash-icon {
+        border: 1.5px solid currentColor;
+        border-top: 0;
+        border-radius: 0 0 2px 2px;
+        display: inline-block;
+        height: 12px;
+        position: relative;
+        width: 10px;
+      }
+
+      .trash-icon::before {
+        border: 1.5px solid currentColor;
+        border-bottom: 0;
+        border-radius: 2px 2px 0 0;
+        content: '';
+        height: 2px;
+        left: -3px;
+        position: absolute;
+        top: -5px;
+        width: 14px;
+      }
+
+      .trash-icon::after {
+        border-left: 1px solid currentColor;
+        border-right: 1px solid currentColor;
+        content: '';
+        height: 7px;
+        left: 3px;
+        position: absolute;
+        top: 2px;
+        width: 2px;
       }
 
       .chat-layout {

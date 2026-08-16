@@ -508,7 +508,7 @@ app.innerHTML = `
         <button type="button" class="icon-button" id="new-chat" aria-label="New conversation" title="New conversation">+</button>
         <button type="button" class="icon-button" id="import" aria-label="Import conversations" title="Import conversations">⇩</button>
         <button type="button" class="icon-button" id="export" aria-label="Export conversations" title="Export conversations">⇧</button>
-        <button type="button" class="icon-button" id="reset" aria-label="Reset interface" title="Reset interface">↻</button>
+        <button type="button" class="icon-button danger-button" id="reset" aria-label="Delete all conversation history and preferences" title="Delete all conversation history and preferences"><span class="trash-icon" aria-hidden="true"></span></button>
       </div>
     </header>
     <section class="control-strip" aria-label="Prompt controls">
@@ -521,7 +521,7 @@ app.innerHTML = `
       <label class="control-label" for="model">Model</label>
       <select id="model" aria-label="Chat model"></select>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
-      <button type="button" class="control-button" id="settings" aria-haspopup="dialog">Controls</button>
+      <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings">⚙</button>
     </section>
     <div class="chat-layout">
       <main class="chat-main">
@@ -557,7 +557,8 @@ app.innerHTML = `
     <div class="modal-backdrop" id="settings-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-header"><h2 id="settings-title">Composer controls</h2><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div>
-        <div class="settings-grid">
+        <div class="modal-scroll">
+          <div class="settings-grid">
           <label for="temperature">Temperature <output id="temperature-value">0.2</output></label>
           <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.2">
           <label for="max-context">Max context tokens</label>
@@ -597,31 +598,35 @@ app.innerHTML = `
           <textarea id="system-instructions" rows="4" maxlength="8000" placeholder="Optional instructions for Ghost"></textarea>
           <button type="button" class="secondary" id="reset-system-instructions">Reset system instructions</button>
           <p class="settings-help">These instructions are sent to the selected model. Do not put secrets here.</p>
-        </div>
-        <div class="preset-section">
+          </div>
+          <div class="preset-section">
           <div class="modal-subheader"><h3>Prompt presets</h3><button type="button" class="context-button" id="new-preset">New</button></div>
           <div class="preset-row"><select id="preset-select" aria-label="Prompt preset"><option value="">Choose a preset</option></select><button type="button" class="context-button" id="delete-preset">Delete</button></div>
           <input id="preset-name" type="text" placeholder="Preset name" aria-label="Preset name">
           <textarea id="preset-prompt" rows="3" placeholder="Reusable prompt text" aria-label="Preset prompt"></textarea>
-          <button type="button" id="save-preset">Save preset</button>
+          </div>
         </div>
-        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="settings-modal">Close</button></div>
+        <div class="modal-footer"><button type="button" id="save-preset">Save</button><button type="button" class="secondary" data-close-modal="settings-modal">Close</button></div>
       </section>
     </div>
     <div class="modal-backdrop" id="context-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="context-title">
         <div class="modal-header"><h2 id="context-title">Prompt context</h2><button type="button" class="icon-button" data-close-modal="context-modal" aria-label="Close context">×</button></div>
-        <p class="modal-description">Choose what Ghost may include when you submit this prompt.</p>
-        <div class="context-preview" id="context-preview-list"></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Choose what Ghost may include when you submit this prompt.</p>
+          <div class="context-preview" id="context-preview-list"></div>
+        </div>
         <div class="modal-footer"><button type="button" class="secondary" data-close-modal="context-modal">Done</button></div>
       </section>
     </div>
     <div class="modal-backdrop" id="history-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
         <div class="modal-header"><h2 id="history-title">Conversation history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close conversation history">×</button></div>
-        <p class="modal-description">Choose a previous conversation to continue.</p>
-        <input id="history-search" type="search" placeholder="Search conversations" aria-label="Search conversation history">
-        <div class="history-list" id="history-list"></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Choose a previous conversation to continue.</p>
+          <input id="history-search" type="search" placeholder="Search conversations" aria-label="Search conversation history">
+          <div class="history-list" id="history-list"></div>
+        </div>
         <div class="modal-footer"><button type="button" class="secondary" id="new-history-chat">New conversation</button><button type="button" class="secondary" data-close-modal="history-modal">Close</button></div>
       </section>
     </div>
@@ -680,6 +685,13 @@ const historyListElement = document.getElementById('history-list') as HTMLElemen
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
 const presetNameElement = document.getElementById('preset-name') as HTMLInputElement
 const presetPromptElement = document.getElementById('preset-prompt') as HTMLTextAreaElement
+const savePresetElement = document.getElementById('save-preset') as HTMLButtonElement
+
+const setPresetSaveState = (saved: boolean): void => {
+  savePresetElement.classList.toggle('pressed', saved)
+  savePresetElement.setAttribute('aria-pressed', String(saved))
+  savePresetElement.textContent = saved ? 'Saved' : 'Save'
+}
 
 const post = (type: string, details: Record<string, unknown> = {}) => {
   vscode.postMessage({
@@ -2625,10 +2637,12 @@ document.getElementById('new-preset')?.addEventListener('click', () => {
   presetSelectElement.value = ''
   presetNameElement.value = ''
   presetPromptElement.value = ''
+  setPresetSaveState(false)
 })
 presetSelectElement.addEventListener('change', () => {
   const preset = presets().find(item => item.id === presetSelectElement.value)
   if (!preset) {
+    setPresetSaveState(false)
     return
   }
   presetNameElement.value = preset.name
@@ -2637,10 +2651,11 @@ presetSelectElement.addEventListener('change', () => {
   controls.temperature = preset.temperature
   controls.maxContextTokens = preset.maxContextTokens
   controls.responseLength = preset.responseLength
+  setPresetSaveState(true)
   renderControls()
   sendSettingsUpdate()
 })
-document.getElementById('save-preset')?.addEventListener('click', () => {
+savePresetElement.addEventListener('click', () => {
   const name = presetNameElement.value.trim()
   if (!name) {
     return
@@ -2661,7 +2676,12 @@ document.getElementById('save-preset')?.addEventListener('click', () => {
   saveState()
   renderPresets()
   presetSelectElement.value = preset.id
+  setPresetSaveState(true)
+  setModalVisibility(settingsModalElement, false)
 })
+for (const element of [presetNameElement, presetPromptElement]) {
+  element.addEventListener('input', () => setPresetSaveState(false))
+}
 document.getElementById('delete-preset')?.addEventListener('click', () => {
   const id = presetSelectElement.value
   if (!id) {
