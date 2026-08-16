@@ -50,10 +50,10 @@ export class LlmFactory {
     return configuredProvider && isProvider(configuredProvider) ? configuredProvider : 'ollama'
   }
 
-  async resolve(): Promise<ResolvedLlmClient> {
-    const provider = this.getConfiguredProvider()
+  async resolve(providerOverride?: GhostProvider): Promise<ResolvedLlmClient> {
+    const provider = providerOverride ?? this.getConfiguredProvider()
 
-    if (provider !== 'mlx-vlm' && !this.mlxDetectionComplete) {
+    if (!providerOverride && provider !== 'mlx-vlm' && !this.mlxDetectionComplete) {
       this.mlxDetectionComplete = true
       await this.suggestMlxProvider()
     }
@@ -64,8 +64,8 @@ export class LlmFactory {
     }
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
-    const resolved = await this.resolve()
+  async *streamChatCompletion(options: MlxChatOptions & { provider?: GhostProvider }): AsyncGenerator<string> {
+    const resolved = await this.resolve(options.provider)
     const model = await this.selectAvailableModel(resolved.client, options.model, options.signal)
     yield* resolved.client.streamChatCompletion({ ...options, model })
   }

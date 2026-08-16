@@ -170,7 +170,7 @@ Run these from the Command Palette:
 
 - `Ghost: Open Interface`
 - `Ghost: Focus Interface`
-- `Ghost: Check Ollama Connection`
+- `Ghost: Check Provider Connection`
 - `Ghost: Check Required Models`
 - `Ghost: Toggle Autocomplete`
 - `Ghost: Reset Interface` — delete all Ghost conversations and preferences after confirmation

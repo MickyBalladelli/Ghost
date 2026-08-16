@@ -3,7 +3,7 @@ import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { redactSensitiveText } from '../privacy/redact'
-import { GhostConfig, ghostConfig } from '../config'
+import { GhostConfig, GhostProvider, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
@@ -65,6 +65,7 @@ export interface GhostContextSelection {
 }
 
 export interface GhostRequestOptions {
+  provider?: GhostProvider
   model?: string
   temperature?: number
   maxContextTokens?: number
@@ -537,6 +538,7 @@ export function createChatParticipantHandler(
         const turn = await streamModelTurn(
           llmFactory,
           {
+            provider: requestOptions.provider,
             model: requestOptions.model?.trim() || settings.chatModel,
             messages,
             temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),

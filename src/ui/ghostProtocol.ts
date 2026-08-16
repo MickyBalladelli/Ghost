@@ -33,6 +33,7 @@ export interface GhostAttachment {
 }
 
 export interface GhostWebviewRequestOptions {
+  provider?: GhostProvider
   model?: string
   temperature?: number
   maxContextTokens?: number
@@ -211,6 +212,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     return false
   }
   if (
+    (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) ||
     (value.model !== undefined && typeof value.model !== 'string') ||
     (value.temperature !== undefined && typeof value.temperature !== 'number') ||
     (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||

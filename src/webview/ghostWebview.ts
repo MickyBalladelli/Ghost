@@ -232,6 +232,7 @@ interface ModelMetadata {
 }
 
 interface WebviewRequestOptions {
+  provider: GhostProvider
   model: string
   temperature: number
   maxContextTokens: number
@@ -1039,6 +1040,7 @@ const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
 }
 
 const buildRequestOptions = (): WebviewRequestOptions => ({
+  provider: controls.provider,
   model: controls.chatModel,
   temperature: controls.temperature,
   maxContextTokens: controls.maxContextTokens,

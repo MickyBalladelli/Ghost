@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { createChatParticipant, createChatParticipantHandler } from './agent/chatParticipant'
 import { ghostConfig } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
+import { MlxClient } from './services/mlxClient'
 import { OllamaClient } from './services/ollamaClient'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
@@ -42,18 +43,42 @@ export function activate(context: vscode.ExtensionContext) {
     if (event.affectsConfiguration('ghost.enableInlineCompletions')) {
       updateInlineStatusBar()
     }
+    if (event.affectsConfiguration('ghost.provider')) {
+      statusBar.setProvider(settings.provider)
+    }
   })
   const checkOllamaCommand = vscode.commands.registerCommand('ghost.checkOllamaStatus', async () => {
     const settings = ghostConfig.getSettings()
-    const client = new OllamaClient(settings.ollamaUrl)
+    statusBar.setProvider(settings.provider)
+    const providerLabel = settings.provider === 'mlx-vlm'
+      ? 'MLX/VLM'
+      : settings.provider === 'openai-compatible'
+        ? 'OpenAI-compatible'
+        : 'Ollama'
+    const client = settings.provider === 'mlx-vlm'
+      ? new MlxClient(settings.mlxUrl)
+      : new OllamaClient(
+          settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'auto'
+        )
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')
     ghostView.setStatus(online ? 'ready' : 'offline')
 
     if (online) {
-      await vscode.window.showInformationMessage(`Ollama is online at ${settings.ollamaUrl}.`)
+      const endpoint = settings.provider === 'mlx-vlm'
+        ? settings.mlxUrl
+        : settings.provider === 'openai-compatible'
+          ? settings.openaiUrl
+          : settings.ollamaUrl
+      await vscode.window.showInformationMessage(`${providerLabel} is online at ${endpoint}.`)
     } else {
-      await vscode.window.showErrorMessage(`Ollama is offline at ${settings.ollamaUrl}.`)
+      const endpoint = settings.provider === 'mlx-vlm'
+        ? settings.mlxUrl
+        : settings.provider === 'openai-compatible'
+          ? settings.openaiUrl
+          : settings.ollamaUrl
+      await vscode.window.showErrorMessage(`${providerLabel} is offline at ${endpoint}.`)
     }
   })
   const checkModelsCommand = vscode.commands.registerCommand('ghost.checkModels', () => {
