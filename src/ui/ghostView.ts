@@ -61,6 +61,16 @@ interface RecoveryRecord {
   applied: boolean
 }
 
+interface StagedEdit {
+  requestId: string
+  conversationId: string
+  toolCallId: string
+  call: LocalToolCall
+  uri: vscode.Uri
+  before: string
+  after: string
+}
+
 interface StoredWorkspaceState {
   schemaVersion: number
   conversations?: unknown[]
@@ -89,6 +99,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly requests = new Map<string, GhostRequestState>()
   private readonly completedRequests = new Set<string>()
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
+  private readonly stagedEdits = new Map<string, StagedEdit>()
+  private readonly stagedEditChanges = new vscode.EventEmitter<void>()
   private readonly recoveryRecords = new Map<string, RecoveryRecord>()
   private readonly sessionApprovedTools = new Set<string>()
   private readonly globalState?: vscode.Memento
@@ -118,7 +130,31 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.debugLog('view provider created')
     this.disposables.push(ghostConfig.onDidChange(() => {
       void this.sendControlsState()
-    }))
+    }), this.stagedEditChanges)
+    this.disposables.push(
+      vscode.languages.registerCodeLensProvider({ scheme: 'file' }, {
+        onDidChangeCodeLenses: this.stagedEditChanges.event,
+        provideCodeLenses: document => [...this.stagedEdits.values()]
+          .filter(edit => edit.uri.toString() === document.uri.toString())
+          .flatMap(edit => {
+            const range = new vscode.Range(0, 0, 0, 0)
+            return [
+              new vscode.CodeLens(range, {
+                title: '$(check) Accept Ghost edit',
+                command: 'ghost.acceptEditPreview',
+                arguments: [edit.toolCallId]
+              }),
+              new vscode.CodeLens(range, {
+                title: '$(close) Reject Ghost edit',
+                command: 'ghost.rejectEditPreview',
+                arguments: [edit.toolCallId]
+              })
+            ]
+          })
+      }),
+      vscode.commands.registerCommand('ghost.acceptEditPreview', (toolCallId: string) => this.acceptStagedEdit(toolCallId)),
+      vscode.commands.registerCommand('ghost.rejectEditPreview', (toolCallId: string) => this.rejectStagedEdit(toolCallId))
+    )
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -424,18 +460,26 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_run_terminal_command'
   }
 
-  private async getDiffPreview(call: LocalToolCall): Promise<GhostToolDiffPreview | undefined> {
+  private async getDiffPreview(call: LocalToolCall, approvalContext: Pick<StagedEdit, 'requestId' | 'conversationId' | 'toolCallId'>): Promise<GhostToolDiffPreview | undefined> {
     if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
     }
     try {
       const uri = resolveWorkspacePath(call.arguments.path)
+      const existingStage = this.stagedEdits.get(approvalContext.toolCallId)
+      if (existingStage) {
+        await this.restoreStagedEdit(existingStage)
+      }
       let before = ''
       try {
-        const bytes = await vscode.workspace.fs.readFile(uri)
-        before = Buffer.from(bytes).toString('utf8')
+        before = (await vscode.workspace.openTextDocument(uri)).getText()
       } catch {
-        before = ''
+        try {
+          const bytes = await vscode.workspace.fs.readFile(uri)
+          before = Buffer.from(bytes).toString('utf8')
+        } catch {
+          before = ''
+        }
       }
       const parsedEdit = call.name === 'ghost_apply_edit' ? parseGhostEdit(call.arguments) : undefined
       const after = call.name === 'ghost_write_file'
@@ -453,20 +497,92 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         ...(parsedEdit ? { hunks: parsedEdit.hunks } : {})
       }
       try {
-        let beforeDocument: vscode.TextDocument
-        try {
-          beforeDocument = await vscode.workspace.openTextDocument(uri)
-        } catch {
-          beforeDocument = await vscode.workspace.openTextDocument({ content: before })
+        const document = await vscode.workspace.openTextDocument(uri)
+        if (document.getText() === before) {
+          const edit = new vscode.WorkspaceEdit()
+          edit.replace(uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), after)
+          if (await vscode.workspace.applyEdit(edit)) {
+            this.stagedEdits.set(approvalContext.toolCallId, {
+              ...approvalContext,
+              call,
+              uri,
+              before,
+              after
+            })
+            this.stagedEditChanges.fire()
+            const editor = await vscode.window.showTextDocument(document, { preview: false })
+            const line = parsedEdit?.hunks[0]?.startLine ?? 1
+            const position = new vscode.Position(Math.max(0, line - 1), 0)
+            editor.selection = new vscode.Selection(position, position)
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter)
+          }
         }
-        const afterDocument = await vscode.workspace.openTextDocument({ language: beforeDocument.languageId, content: after })
-        await vscode.commands.executeCommand('vscode.diff', beforeDocument.uri, afterDocument.uri, `Ghost edit: ${uri.fsPath}`)
       } catch {
-        // The inline preview remains available when the diff editor cannot open.
+        // The webview preview remains available when the source file cannot be staged.
       }
       return preview
     } catch {
       return undefined
+    }
+  }
+
+  private async restoreStagedEdit(staged: StagedEdit): Promise<void> {
+    try {
+      const document = await vscode.workspace.openTextDocument(staged.uri)
+      if (document.getText() !== staged.after) {
+        throw new Error('The source file changed while Ghost was waiting for edit approval.')
+      }
+      const edit = new vscode.WorkspaceEdit()
+      edit.replace(staged.uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), staged.before)
+      if (!await vscode.workspace.applyEdit(edit)) {
+        throw new Error('Ghost could not restore the source file.')
+      }
+      await document.save()
+    } finally {
+      this.stagedEdits.delete(staged.toolCallId)
+      this.stagedEditChanges.fire()
+    }
+  }
+
+  private async acceptStagedEdit(toolCallId: string): Promise<void> {
+    const staged = this.stagedEdits.get(toolCallId)
+    const pending = this.pendingApprovals.get(toolCallId)
+    if (!staged || !pending) {
+      return
+    }
+    try {
+      const document = await vscode.workspace.openTextDocument(staged.uri)
+      if (document.getText() !== staged.after) {
+        throw new Error('The source file changed while Ghost was waiting for edit approval.')
+      }
+      if (!await document.save()) {
+        throw new Error('Ghost could not save the accepted edit.')
+      }
+      this.stagedEdits.delete(toolCallId)
+      this.stagedEditChanges.fire()
+      await this.finishAlreadyAppliedEdit(pending, {
+        decision: 'once',
+        alreadyApplied: true,
+        appliedContent: staged.after,
+        expectedContent: staged.before
+      })
+    } catch (error) {
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not accept the edit.')
+    }
+  }
+
+  private async rejectStagedEdit(toolCallId: string): Promise<void> {
+    const staged = this.stagedEdits.get(toolCallId)
+    const pending = this.pendingApprovals.get(toolCallId)
+    if (!staged || !pending) {
+      return
+    }
+    try {
+      await this.restoreStagedEdit(staged)
+      this.pendingApprovals.delete(toolCallId)
+      pending.resolve({ decision: 'reject', reason: 'User rejected the edit in the source file.' })
+    } catch (error) {
+      await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not reject the edit.')
     }
   }
 
@@ -618,7 +734,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
     const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy
     const argumentsPayload = call.arguments as GhostToolArguments
-    const diffPreview = requiresApproval ? await this.getDiffPreview(call) : undefined
+    const needsInteractiveApproval = requiresApproval && !this.sessionApprovedTools.has(call.name)
+    const diffPreview = needsInteractiveApproval
+      ? await this.getDiffPreview(call, {
+          requestId,
+          conversationId: request.conversationId,
+          toolCallId: pending.toolCallId
+        })
+      : undefined
     const expectedContent = requiresApproval ? await this.getExpectedFileContent(call) : undefined
     this.postStreamEvent(requestId, request, {
       type: 'tool-requested',
@@ -636,7 +759,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (blockedByPolicy) {
       return { decision: 'reject', reason: 'Tool blocked by workspace policy.' }
     }
-    if (!requiresApproval || this.sessionApprovedTools.has(call.name)) {
+    if (!needsInteractiveApproval) {
       await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedContent)
       return { decision: 'once', expectedContent }
     }
@@ -658,6 +781,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       if (pending.requestId !== requestId) {
         continue
       }
+      const staged = this.stagedEdits.get(toolCallId)
+      if (staged) {
+        void this.restoreStagedEdit(staged)
+      }
       this.pendingApprovals.delete(toolCallId)
       pending.resolve(approval)
     }
@@ -677,11 +804,79 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.sessionApprovedTools.add(pending.call.name)
     }
     if (pending.call.name === 'ghost_write_file' || pending.call.name === 'ghost_apply_edit') {
+      const staged = this.stagedEdits.get(toolCallId)
+      if (staged) {
+        if (approval.decision === 'reject') {
+          void this.rejectStagedEdit(toolCallId)
+          return
+        }
+        if (approval.selectedHunkIndexes) {
+          void this.restoreStagedEdit(staged).then(() => this.verifyExternalEdit(pending, approval)).catch(error => {
+            pending.resolve({ decision: 'reject', reason: error instanceof Error ? error.message : 'Ghost could not prepare the selected hunks.' })
+          })
+          return
+        }
+        void this.acceptStagedApproval(pending, staged, approval)
+        return
+      }
       void this.verifyExternalEdit(pending, approval)
       return
     }
     this.pendingApprovals.delete(toolCallId)
     pending.resolve(approval)
+  }
+
+  private async acceptStagedApproval(
+    pending: PendingToolApproval,
+    staged: StagedEdit,
+    approval: GhostToolApproval
+  ): Promise<void> {
+    try {
+      const document = await vscode.workspace.openTextDocument(staged.uri)
+      if (document.getText() !== staged.after) {
+        throw new Error('The source file changed while Ghost was waiting for edit approval.')
+      }
+      if (!await document.save()) {
+        throw new Error('Ghost could not save the accepted edit.')
+      }
+      this.stagedEdits.delete(staged.toolCallId)
+      this.stagedEditChanges.fire()
+      await this.finishAlreadyAppliedEdit(pending, {
+        ...approval,
+        alreadyApplied: true,
+        appliedContent: staged.after,
+        expectedContent: staged.before
+      })
+    } catch (error) {
+      pending.resolve({ decision: 'reject', reason: error instanceof Error ? error.message : 'Ghost could not accept the edit.' })
+    }
+  }
+
+  private async finishAlreadyAppliedEdit(pending: PendingToolApproval, approval: GhostToolApproval): Promise<void> {
+    this.pendingApprovals.delete(pending.toolCallId)
+    if (typeof pending.call.arguments.path !== 'string' || approval.appliedContent === undefined) {
+      pending.resolve(approval)
+      return
+    }
+    try {
+      const uri = resolveWorkspacePath(pending.call.arguments.path)
+      const current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
+      if (current !== approval.appliedContent) {
+        pending.resolve({ decision: 'reject', reason: 'The accepted edit changed before Ghost could finish the request.' })
+        return
+      }
+      await this.rememberRecovery(
+        pending.requestId,
+        pending.conversationId,
+        pending.toolCallId,
+        pending.call,
+        approval.expectedContent,
+        approval.selectedHunkIndexes
+      )
+      pending.resolve(approval)
+    } catch {
+      pending.resolve({ decision: 'reject', reason: 'Ghost could not verify the accepted edit.' })
+    }
   }
 
   private async verifyExternalEdit(pending: PendingToolApproval, approval: GhostToolApproval): Promise<void> {
@@ -757,7 +952,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (!request) {
       return
     }
-    const diffPreview = await this.getDiffPreview(pending.call)
+    const diffPreview = await this.getDiffPreview(pending.call, pending)
     this.postStreamEvent(requestId, request, {
       type: 'tool-requested',
       tool: pending.call.name,
@@ -1091,6 +1286,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.requests.clear()
     this.pendingApprovals.clear()
+    for (const staged of this.stagedEdits.values()) {
+      void this.restoreStagedEdit(staged)
+    }
+    this.stagedEdits.clear()
     this.recoveryRecords.clear()
     this.sessionApprovedTools.clear()
     vscode.Disposable.from(...this.disposables).dispose()

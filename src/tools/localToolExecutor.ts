@@ -72,7 +72,7 @@ export class LocalToolExecutor {
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
 
-  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
+  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
     }
@@ -108,6 +108,14 @@ export class LocalToolExecutor {
           return 'User denied the file write.'
         }
 
+        if (options.alreadyApplied) {
+          const current = await readCurrentFile(input.path)
+          if (options.appliedContent !== undefined && current !== options.appliedContent) {
+            throw new Error('The accepted edit changed before Ghost could finish the request')
+          }
+          return `${input.path}: file already updated.\nApplied successfully.`
+        }
+
         if (options.expectedContent !== undefined) {
           const current = await readCurrentFile(input.path)
           if (current !== options.expectedContent) {
@@ -126,6 +134,15 @@ export class LocalToolExecutor {
         if (!allowed) {
           return 'User denied the file edit.'
         }
+
+        if (options.alreadyApplied) {
+          const current = await readCurrentFile(edit.path)
+          if (options.appliedContent !== undefined && current !== options.appliedContent) {
+            throw new Error('The accepted edit changed before Ghost could finish the request')
+          }
+          return `${summarizeGhostEdit(edit)}\nApplied successfully.`
+        }
+
         const current = await readCurrentFile(edit.path)
         if (options.expectedContent !== undefined && current !== options.expectedContent) {
           throw new Error('File changed externally since the edit was proposed')

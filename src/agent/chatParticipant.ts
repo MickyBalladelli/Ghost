@@ -81,6 +81,8 @@ export interface GhostToolApproval {
   decision: 'once' | 'session' | 'reject'
   arguments?: Record<string, unknown>
   expectedContent?: string
+  alreadyApplied?: boolean
+  appliedContent?: string
   selectedHunkIndexes?: number[]
   reason?: string
 }
@@ -613,6 +615,8 @@ export function createChatParticipantHandler(
           toolResult = await toolExecutor.execute(toolCall, token, {
             approved: Boolean(requestOptions.approveTool),
             expectedContent: approval.expectedContent,
+            alreadyApplied: approval.alreadyApplied,
+            appliedContent: approval.appliedContent,
             selectedHunkIndexes: approval.selectedHunkIndexes
           })
         } catch (error) {
