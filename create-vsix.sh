@@ -2,7 +2,10 @@
 
 set -e
 
-# Read version from package.json
+# Bump the patch version before building
+npm version patch --no-git-tag-version --ignore-scripts
+
+# Read the new version from package.json
 VERSION=$(jq -r '.version' package.json)
 VSIX_FILE="ghost-${VERSION}.vsix"
 

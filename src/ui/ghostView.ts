@@ -1507,6 +1507,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         display: flex;
         inset: 0;
         justify-content: center;
+        overflow-y: auto;
         padding: 16px;
         position: fixed;
         z-index: 5;
@@ -1517,7 +1518,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         border: 1px solid var(--ghost-border);
         border-radius: 5px;
         box-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
-        max-height: 90vh;
+        max-height: calc(100vh - 32px);
+        max-height: calc(100dvh - 32px);
         max-width: 460px;
         overflow: auto;
         padding: 14px;
@@ -1538,6 +1540,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .modal-subheader h3 {
         font-size: 1em;
         margin: 0;
+      }
+
+      .modal-footer {
+        background: var(--vscode-quickInput-background, var(--ghost-surface));
+        bottom: 0;
+        padding-top: 10px;
+        position: sticky;
       }
 
       .settings-grid {

@@ -2,7 +2,7 @@
   "name": "ghost",
   "displayName": "Ghost",
   "description": "Local, offline Copilot & Codex alternative powered by Ollama/vLLM",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "publisher": "ghost",
   "license": "MIT",
   "icon": "icon.png",
@@ -313,18 +313,33 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "startLine": { "type": "integer", "minimum": 1 },
-                  "endLine": { "type": "integer", "minimum": 1 },
-                  "replacement": { "type": "string" }
+                  "startLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "replacement": {
+                    "type": "string"
+                  }
                 },
-                "required": ["startLine", "endLine", "replacement"],
+                "required": [
+                  "startLine",
+                  "endLine",
+                  "replacement"
+                ],
                 "additionalProperties": false
               },
               "minItems": 1,
               "maxItems": 50
             }
           },
-          "required": ["path", "hunks"],
+          "required": [
+            "path",
+            "hunks"
+          ],
           "additionalProperties": false
         }
       },
