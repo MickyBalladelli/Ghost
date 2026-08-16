@@ -1511,13 +1511,50 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .brand-mark {
         display: inline-flex;
         height: 24px;
+        position: relative;
         width: 24px;
       }
 
-      .brand-mark img {
+      .ghost-face {
+        --ghost-eye-x: 0px;
+        --ghost-eye-y: 0px;
+        overflow: hidden;
+      }
+
+      .ghost-face img {
         display: block;
         height: 100%;
+        position: absolute;
         width: 100%;
+      }
+
+      .ghost-eye {
+        background: #fff;
+        border-radius: 50%;
+        height: 23%;
+        overflow: hidden;
+        position: absolute;
+        top: 30%;
+        width: 23%;
+      }
+
+      .ghost-eye-left {
+        left: 29.5%;
+      }
+
+      .ghost-eye-right {
+        left: 64%;
+      }
+
+      .ghost-pupil {
+        background: #0d468e;
+        border-radius: 50%;
+        height: 46%;
+        left: 50%;
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%) translate(var(--ghost-eye-x), var(--ghost-eye-y));
+        width: 46%;
       }
 
       .title {
@@ -1695,17 +1732,31 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .context-row {
         align-items: center;
         display: flex;
-        gap: 5px;
-        min-height: 25px;
+        flex-wrap: wrap;
+        gap: 3px;
+        min-height: 22px;
       }
 
-      .context-chips,
+      .context-chips {
+        display: flex;
+        flex: 1 1 120px;
+        flex-wrap: wrap;
+        gap: 2px;
+        min-width: 0;
+      }
+
       .attachment-list {
         display: flex;
         flex: 1;
         flex-wrap: wrap;
         gap: 4px;
         min-width: 0;
+      }
+
+      .context-row .context-button {
+        flex: 0 0 auto;
+        font-size: 0.72em;
+        padding: 2px 5px;
       }
 
       .context-chip,
@@ -1724,6 +1775,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .context-chip {
         cursor: pointer;
+        font-size: 0.7em;
+        padding: 2px 5px;
       }
 
       .context-chip:hover {
@@ -2525,21 +2578,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .thinking-ghost {
         display: none;
+        position: relative;
       }
 
-      .thinking-ghost img {
-        display: block;
+      .thinking-ghost {
         height: 18px;
-        object-fit: contain;
         width: 18px;
       }
 
       .status-footer.busy .thinking-ghost {
-        animation: ghost-float 1.1s ease-in-out infinite, ghost-flip 2.4s linear infinite;
+        animation: ghost-float 1.1s ease-in-out infinite;
         display: inline-block;
         line-height: 1;
-        perspective: 160px;
-        transform-origin: center;
       }
 
       .status-footer.offline .status-dot {
@@ -2566,12 +2616,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
         50% {
           translate: 0 -3px;
-        }
-      }
-
-      @keyframes ghost-flip {
-        to {
-          transform: perspective(160px) rotateY(360deg);
         }
       }
 
@@ -2622,6 +2666,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           animation-iteration-count: 1 !important;
           scroll-behavior: auto !important;
           transition-duration: 0.01ms !important;
+        }
+
+        .ghost-pupil {
+          transform: translate(-50%, -50%) !important;
         }
       }
     </style>
