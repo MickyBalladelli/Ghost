@@ -37,7 +37,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Replace the global `MAX_TOOL_RESULT_CHARACTERS` cap with per-tool limits and structured truncation. Return `head`, `tail`, byte count, and a continuation hint.
 - [x] Add a first-class search tool using ripgrep. Return structured file, line, and match data so the model does not use terminal commands for ordinary searching.
 - [x] Add read modes for `head`, `tail`, line range, byte range, symbol range, and matching lines. Include encoding, line endings, size, and content hash.
-- [ ] Detect binary, generated, vendored, ignored, and very large files before reading. Explain the reason and offer a safe alternative.
+- [x] Detect binary, generated, vendored, ignored, and very large files before reading. Explain the reason and offer a safe alternative.
 - [ ] Add directory pagination and depth/entry limits instead of returning one large text listing.
 - [ ] Add a diagnostics tool for compiler errors, Problems panel errors, and diagnostics for a selected file.
 - [ ] Add optional Git context: status, diff, staged diff, branch, and recent file history. Never include unrelated or ignored files by default.

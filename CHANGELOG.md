@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.87 - 2026-08-17
 
+- Blocked binary, generated, vendored, ignored, and over-1 MiB files before model reads, with safe search or bounded-read alternatives.
 - Added safe read modes for head, tail, line, byte, symbol, and matching-line views with UTF-8 metadata, line endings, size, line count, and SHA-256 content hashes.
 
 ## 1.0.86 - 2026-08-17

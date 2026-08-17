@@ -108,6 +108,7 @@ export class LocalToolExecutor {
       case 'ghost_read_file': {
         const input: ReadFileInput = {
           path: requiredString(call.arguments, 'path'),
+          ...(call.arguments.allowSpecialFile === true ? { allowSpecialFile: true } : {}),
           ...(typeof call.arguments.mode === 'string' ? { mode: call.arguments.mode as ReadFileInput['mode'] } : {}),
           ...(typeof call.arguments.startLine === 'number' ? { startLine: call.arguments.startLine } : {}),
           ...(typeof call.arguments.endLine === 'number' ? { endLine: call.arguments.endLine } : {}),

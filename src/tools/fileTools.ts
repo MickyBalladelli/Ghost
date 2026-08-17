@@ -12,6 +12,7 @@ import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summa
 
 export interface ReadFileInput {
   path: string
+  allowSpecialFile?: boolean
   mode?: 'head' | 'tail' | 'lines' | 'bytes' | 'symbol' | 'matches'
   startLine?: number
   endLine?: number
@@ -73,6 +74,124 @@ function assertNotCancelled(token: vscode.CancellationToken): void {
 const MAX_READ_LINES = 400
 const MAX_READ_CHARACTERS = 12000
 const MAX_READ_BYTES = 12000
+const MAX_SAFE_READ_BYTES = 1_048_576
+
+const VENDORED_DIRECTORY_NAMES = new Set([
+  '.git',
+  'node_modules',
+  'vendor',
+  'vendors',
+  'third_party',
+  'third-party',
+  'bower_components',
+  'pods'
+])
+
+const GENERATED_DIRECTORY_NAMES = new Set([
+  'build',
+  'dist',
+  'out',
+  'coverage',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  'target',
+  '__pycache__'
+])
+
+function normalizedWorkspaceRelativePath(uri: vscode.Uri): string {
+  return path.relative(getWorkspaceRoot().fsPath, uri.fsPath).split(path.sep).join('/')
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let source = ''
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index]
+    if (character === '*') {
+      if (pattern[index + 1] === '*') {
+        source += '.*'
+        index += 1
+      } else {
+        source += '[^/]*'
+      }
+    } else if (character === '?') {
+      source += '[^/]'
+    } else {
+      source += escapeRegExp(character)
+    }
+  }
+  return new RegExp(`^${source}$`, 'i')
+}
+
+function matchesGitignorePattern(relativePath: string, rawPattern: string): boolean {
+  let pattern = rawPattern.trim()
+  if (!pattern || pattern.startsWith('#')) {
+    return false
+  }
+  if (pattern.startsWith('\\')) {
+    pattern = pattern.slice(1)
+  }
+  const directoryOnly = pattern.endsWith('/')
+  pattern = pattern.replace(/^\/+/, '').replace(/\/$/, '')
+  const patternMatcher = globToRegExp(pattern)
+  if (pattern.includes('/')) {
+    const candidates = pattern.startsWith('/') ? [relativePath] : [relativePath, ...relativePath.split('/').map((_, index, parts) => parts.slice(index + 1).join('/'))]
+    return candidates.some(candidate => patternMatcher.test(candidate)) || (directoryOnly && relativePath.startsWith(`${pattern}/`))
+  }
+  const segments = relativePath.split('/')
+  return segments.some(segment => patternMatcher.test(segment)) || (directoryOnly && segments.includes(pattern))
+}
+
+async function isGitIgnored(uri: vscode.Uri): Promise<boolean> {
+  const relativePath = normalizedWorkspaceRelativePath(uri)
+  if (!relativePath || relativePath.startsWith('..')) {
+    return false
+  }
+  try {
+    const ignoreFile = vscode.Uri.joinPath(getWorkspaceRoot(), '.gitignore')
+    const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await vscode.workspace.fs.readFile(ignoreFile))
+    let ignored = false
+    for (const rawPattern of ignoreContent.split(/\r\n|\n|\r/)) {
+      const pattern = rawPattern.trim()
+      if (!pattern || pattern.startsWith('#')) {
+        continue
+      }
+      const negated = pattern.startsWith('!')
+      const candidate = negated ? pattern.slice(1) : pattern
+      if (matchesGitignorePattern(relativePath, candidate)) {
+        ignored = !negated
+      }
+    }
+    return ignored
+  } catch {
+    return false
+  }
+}
+
+function pathCategoryReasons(uri: vscode.Uri): string[] {
+  const relativePath = normalizedWorkspaceRelativePath(uri)
+  const segments = relativePath.toLowerCase().split('/')
+  const fileName = segments.at(-1) ?? ''
+  const reasons: string[] = []
+  if (segments.some(segment => VENDORED_DIRECTORY_NAMES.has(segment))) {
+    reasons.push('vendored/dependency path')
+  }
+  if (segments.some(segment => GENERATED_DIRECTORY_NAMES.has(segment))
+    || /(?:\.min\.|\.bundle\.|\.generated\.|-generated\.)/.test(fileName)
+    || fileName.endsWith('.map')) {
+    reasons.push('generated/build artifact')
+  }
+  return reasons
+}
+
+function blockedReadResult(filePath: string, reasons: string[], safeAlternative: string): vscode.LanguageModelToolResult {
+  return textResult([
+    `Read blocked before model content was loaded: ${filePath}`,
+    `Reason: ${reasons.join('; ')}.`,
+    `Safe alternative: ${safeAlternative}`,
+    'If the user explicitly asks to inspect this special file, retry with allowSpecialFile=true and a bounded read mode.'
+  ].join('\n'))
+}
 
 interface FileMetadata {
   encoding: 'utf-8'
@@ -267,8 +386,41 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
+    const stat = await vscode.workspace.fs.stat(uri)
+    if ((stat.type & vscode.FileType.Directory) !== 0) {
+      throw new Error('The path points to a directory. Use ghost_list_directory instead.')
+    }
+
+    const reasons = pathCategoryReasons(uri)
+    if (await isGitIgnored(uri)) {
+      reasons.push('matched .gitignore')
+    }
+    if (stat.size > MAX_SAFE_READ_BYTES) {
+      return blockedReadResult(
+        uri.fsPath,
+        [...reasons, `very large file (${stat.size} bytes)`],
+        'Use ghost_search_workspace for exact text matches or ask for a smaller generated artifact. The text reader will not load files over 1 MiB.'
+      )
+    }
+    if (reasons.length > 0 && !options.input.allowSpecialFile) {
+      return blockedReadResult(
+        uri.fsPath,
+        reasons,
+        'Use ghost_search_workspace for text matches, or ask for a bounded read of a specific file section.'
+      )
+    }
+
     const bytes = await vscode.workspace.fs.readFile(uri)
-    const content = decodeText(bytes)
+    let content: string
+    try {
+      content = decodeText(bytes)
+    } catch {
+      return blockedReadResult(
+        uri.fsPath,
+        ['binary or non-UTF-8 content'],
+        'Use ghost_search_workspace for text matches or an external binary-aware inspection tool. The text reader will not expose binary bytes to the model.'
+      )
+    }
     return textResult(readFileWindow(content, bytes, options.input, uri.fsPath))
   }
 

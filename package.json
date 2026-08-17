@@ -411,6 +411,11 @@
               "minLength": 1,
               "description": "Absolute path of the text file to read. The path must be inside the current workspace."
             },
+            "allowSpecialFile": {
+              "type": "boolean",
+              "default": false,
+              "description": "Set true only when the user explicitly asks to inspect a generated, vendored, or ignored file. Large and binary files remain blocked."
+            },
             "mode": {
               "type": "string",
               "enum": [
