@@ -286,7 +286,7 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
 
     return undefined
   }
-  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
+  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using a path inside the workspace.`
 }
 
 export interface ChatParticipantOptions {

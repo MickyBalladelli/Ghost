@@ -10,6 +10,12 @@ export const LOCAL_TOOL_NAMES = [
 export type LocalToolName = typeof LOCAL_TOOL_NAMES[number]
 
 const LOCAL_TOOL_ALIASES: Record<string, LocalToolName> = {
+  read_file: 'ghost_read_file',
+  write_file: 'ghost_write_file',
+  apply_edit: 'ghost_apply_edit',
+  apply_transaction: 'ghost_apply_transaction',
+  run_terminal_command: 'ghost_run_terminal_command',
+  list_directory: 'ghost_list_directory',
   ghostreadfile: 'ghost_read_file',
   ghostwritefile: 'ghost_write_file',
   ghostapplyedit: 'ghost_apply_edit',
@@ -101,6 +107,27 @@ function parseArguments(value: unknown): Record<string, unknown> | undefined {
   }
 }
 
+function normalizeToolArguments(name: LocalToolName, value: Record<string, unknown>): Record<string, unknown> {
+  const argumentsCopy = { ...value }
+  const aliases: Record<string, string[]> = {
+    path: ['filePath', 'file_path', 'filename', 'file'],
+    content: ['contents', 'text', 'body', 'code'],
+    command: ['cmd']
+  }
+
+  for (const [key, candidates] of Object.entries(aliases)) {
+    if (argumentsCopy[key] !== undefined) {
+      continue
+    }
+    const alias = candidates.find(candidate => argumentsCopy[candidate] !== undefined)
+    if (alias) {
+      argumentsCopy[key] = argumentsCopy[alias]
+    }
+  }
+
+  return argumentsCopy
+}
+
 function parseCandidate(value: unknown): LocalToolCall | undefined {
   if (!isObject(value)) {
     return undefined
@@ -114,7 +141,7 @@ function parseCandidate(value: unknown): LocalToolCall | undefined {
         ? value.function
         : value
   const name = normalizeLocalToolName(nested.name ?? nested.tool ?? nested.tool_name)
-  const args = nested.arguments ?? nested.parameters ?? nested.input
+  const rawArguments = nested.arguments ?? nested.parameters ?? nested.input
 
   if (!name) {
     return undefined
@@ -122,7 +149,12 @@ function parseCandidate(value: unknown): LocalToolCall | undefined {
 
   return {
     name,
-    arguments: parseArguments(args) ?? {}
+    arguments: normalizeToolArguments(
+      name,
+      parseArguments(rawArguments) ?? Object.fromEntries(
+        Object.entries(nested).filter(([key]) => !['name', 'tool', 'tool_name'].includes(key))
+      )
+    )
   }
 }
 

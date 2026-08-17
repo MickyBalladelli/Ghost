@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Added password-prompted provider API keys in VS Code SecretStorage for Ollama, MLX/VLM, and OpenAI-compatible requests.
 - Kept provider credentials out of settings, webviews, URLs, logs, exports, and persisted conversations.
 - Expanded secret redaction for model context, webview messages, diagnostics, persistence, and exports, including URLs, headers, cookies, cloud keys, JWTs, and private keys.
+- Accepted common top-level and aliased tool arguments, and safely resolved relative workspace paths for simple file-creation requests.
 
 ## 1.0.84 - 2026-08-17
 

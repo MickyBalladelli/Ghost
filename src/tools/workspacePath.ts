@@ -50,11 +50,10 @@ function canonicalWorkspaceRoot(root: string): string | undefined {
 }
 
 export function resolveWorkspacePath(input: string): vscode.Uri {
-  if (!path.isAbsolute(input)) {
-    throw new Error('Path must be absolute and inside the current workspace')
-  }
-
-  const candidate = path.resolve(input)
+  const workspaceRoot = getWorkspaceRoot().fsPath
+  const candidate = path.isAbsolute(input)
+    ? path.resolve(input)
+    : path.resolve(workspaceRoot, input)
   const canonicalCandidate = canonicalWorkspacePath(candidate)
   const workspaceFolder = vscode.workspace.workspaceFolders?.find(folder => {
     const root = canonicalWorkspaceRoot(folder.uri.fsPath)
