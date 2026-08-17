@@ -10,6 +10,7 @@ import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
+import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
@@ -23,9 +24,9 @@ const SYSTEM_PROMPT = [
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
   'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
   'When using a tool, do not explain the plan first; emit the tool call as the complete response. Keep each ghost_apply_edit hunk small: do not put an entire large component into one replacement. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against nearby file content. Split large work into several focused tool calls and inspect the file between them.',
-  'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, or ghost_write_file.',
+  'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, ghost_write_file, or ghost_apply_transaction.',
   'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
-  'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"absolute workspace path","content":"full text"},{"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
@@ -79,13 +80,25 @@ function describesWorkspaceChange(value: string): boolean {
 }
 
 function isFileEditTool(name: LocalToolCall['name']): boolean {
-  return name === 'ghost_write_file' || name === 'ghost_apply_edit'
+  return name === 'ghost_write_file' || name === 'ghost_apply_edit' || name === 'ghost_apply_transaction'
 }
 
 function getEditPath(call: LocalToolCall): string | undefined {
   return isFileEditTool(call.name) && typeof call.arguments.path === 'string'
     ? call.arguments.path
     : undefined
+}
+
+function getEditPaths(call: LocalToolCall): string[] {
+  if (call.name !== 'ghost_apply_transaction') {
+    const path = getEditPath(call)
+    return path ? [path] : []
+  }
+  try {
+    return parseFileTransaction(call.arguments).edits.map(edit => edit.path)
+  } catch {
+    return []
+  }
 }
 
 function getEditRecord(call: LocalToolCall): EditRecord | undefined {
@@ -123,6 +136,25 @@ function getEditRecord(call: LocalToolCall): EditRecord | undefined {
 }
 
 function getEditCost(call: LocalToolCall, selectedHunkIndexes?: number[]): EditCost | undefined {
+  if (call.name === 'ghost_apply_transaction') {
+    try {
+      const transaction = parseFileTransaction(call.arguments)
+      return transaction.edits.reduce((cost, edit) => {
+        if (edit.content !== undefined) {
+          return {
+            changedLines: cost.changedLines + Math.max(1, edit.content.split('\n').length),
+            changedBytes: cost.changedBytes + Math.max(1, Buffer.byteLength(edit.content, 'utf8'))
+          }
+        }
+        return edit.hunks?.reduce((hunkCost, hunk) => ({
+          changedLines: hunkCost.changedLines + Math.max(1, hunk.endLine - hunk.startLine + 1, hunk.replacement.split('\n').length),
+          changedBytes: hunkCost.changedBytes + Math.max(1, Buffer.byteLength(hunk.oldText ?? '', 'utf8'), Buffer.byteLength(hunk.replacement, 'utf8'))
+        }), cost) ?? cost
+      }, { changedLines: 0, changedBytes: 0 })
+    } catch {
+      return undefined
+    }
+  }
   if (call.name === 'ghost_write_file') {
     const content = typeof call.arguments.content === 'string' ? call.arguments.content : ''
     return {
@@ -169,12 +201,13 @@ function getBudgetStopReason(budget: RequestBudget, call?: LocalToolCall, select
   if (call.name === 'ghost_run_terminal_command' && budget.commands >= REQUEST_BUDGET_LIMITS.commands) {
     return `commands (${budget.commands} used of ${REQUEST_BUDGET_LIMITS.commands})`
   }
-  const path = getEditPath(call)
+  const paths = getEditPaths(call)
   const cost = getEditCost(call, selectedHunkIndexes)
-  if (!path || !cost) {
+  if (paths.length === 0 || !cost) {
     return undefined
   }
-  if (!budget.files.has(path) && budget.files.size >= REQUEST_BUDGET_LIMITS.files) {
+  const newFiles = paths.filter(path => !budget.files.has(path)).length
+  if (budget.files.size + newFiles > REQUEST_BUDGET_LIMITS.files) {
     return `files (${budget.files.size} used of ${REQUEST_BUDGET_LIMITS.files})`
   }
   if (budget.changedLines + cost.changedLines > REQUEST_BUDGET_LIMITS.changedLines) {
@@ -231,6 +264,9 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
       ? 'command'
       : undefined
   if (!requiredArgument) {
+    if (call.name === 'ghost_apply_transaction' && (!Array.isArray(call.arguments.edits) || call.arguments.edits.length < 2)) {
+      return 'Tool call rejected: ghost_apply_transaction requires at least two file edits. Retry with one JSON tool call containing an edits array.'
+    }
     return undefined
   }
   if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
@@ -296,6 +332,7 @@ export interface GhostToolApproval {
   arguments?: Record<string, unknown>
   expectedContent?: string
   expectedFileExists?: boolean
+  expectedFiles?: Record<string, { exists: boolean; content: string }>
   alreadyApplied?: boolean
   appliedContent?: string
   selectedHunkIndexes?: number[]
@@ -903,7 +940,8 @@ export function createChatParticipantHandler(
           )
           continue
         }
-        const editPath = getEditPath(toolCall)
+        const editPaths = getEditPaths(toolCall)
+        const editPath = editPaths.length === 1 ? editPaths[0] : undefined
         const editRecord = getEditRecord(toolCall)
         const editSignature = editRecord?.signature
         const editState = editPath
@@ -944,6 +982,7 @@ export function createChatParticipantHandler(
             approved: Boolean(requestOptions.approveTool),
             expectedContent: approval.expectedContent,
             expectedFileExists: approval.expectedFileExists,
+            expectedFiles: approval.expectedFiles,
             alreadyApplied: approval.alreadyApplied,
             appliedContent: approval.appliedContent,
             selectedHunkIndexes: approval.selectedHunkIndexes
@@ -965,7 +1004,8 @@ export function createChatParticipantHandler(
         )
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
-        if (editPath && /no changes needed/i.test(toolResult)) {
+        const editNoOp = /no changes needed/i.test(toolResult)
+        if (editPath && editNoOp) {
           response.markdown(`Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`)
           return
         }
@@ -973,9 +1013,13 @@ export function createChatParticipantHandler(
           editState.signatures.add(editSignature)
           editState.history.push(editRecord)
           fileEditStates.set(editPath, editState)
+        }
+        if (editPaths.length > 0 && !editFailed && !editNoOp) {
           const cost = getEditCost(toolCall, approval.selectedHunkIndexes)
           if (cost) {
-            budget.files.add(editPath)
+            for (const path of editPaths) {
+              budget.files.add(path)
+            }
             budget.changedLines += cost.changedLines
             budget.changedBytes += cost.changedBytes
           }

@@ -7,6 +7,7 @@ import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { atomicWriteFile } from './atomicFile'
 import { readWorkspaceFile } from './workspaceFile'
+import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 
 export interface ReadFileInput {
   path: string
@@ -182,6 +183,29 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
   }
 }
 
+export class ApplyTransactionTool implements vscode.LanguageModelTool<FileTransactionInput> {
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<FileTransactionInput>,
+    token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    assertNotCancelled(token)
+    const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
+    const applied = await applyFileTransaction(transaction)
+    return textResult(`${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`)
+  }
+
+  prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<FileTransactionInput>): vscode.PreparedToolInvocation {
+    const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
+    return {
+      invocationMessage: `Applying ${transaction.edits.length} files as one transaction`,
+      confirmationMessages: {
+        title: 'Allow Ghost to apply this file transaction?',
+        message: new vscode.MarkdownString(`Apply and verify **${transaction.edits.length} files** together?`)
+      }
+    }
+  }
+}
+
 async function collectDirectoryEntries(
   directory: vscode.Uri,
   relativePrefix: string,
@@ -254,6 +278,7 @@ export function registerFileTools(context: vscode.ExtensionContext): void {
     vscode.lm.registerTool('ghost_read_file', new ReadFileTool()),
     vscode.lm.registerTool('ghost_write_file', new WriteFileTool()),
     vscode.lm.registerTool('ghost_apply_edit', new ApplyEditTool()),
+    vscode.lm.registerTool('ghost_apply_transaction', new ApplyTransactionTool()),
     vscode.lm.registerTool('ghost_list_directory', new ListDirectoryTool())
   )
 }

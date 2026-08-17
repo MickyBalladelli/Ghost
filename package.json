@@ -36,6 +36,7 @@
     "onLanguageModelTool:ghost_read_file",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
+    "onLanguageModelTool:ghost_apply_transaction",
     "onLanguageModelTool:ghost_run_terminal_command",
     "onLanguageModelTool:ghost_list_directory"
   ],
@@ -248,6 +249,7 @@
               "ghost_read_file",
               "ghost_write_file",
               "ghost_apply_edit",
+              "ghost_apply_transaction",
               "ghost_run_terminal_command",
               "ghost_list_directory"
             ]
@@ -256,6 +258,7 @@
             "ghost_read_file",
             "ghost_write_file",
             "ghost_apply_edit",
+            "ghost_apply_transaction",
             "ghost_run_terminal_command",
             "ghost_list_directory"
           ],
@@ -269,6 +272,7 @@
               "ghost_read_file",
               "ghost_write_file",
               "ghost_apply_edit",
+              "ghost_apply_transaction",
               "ghost_run_terminal_command",
               "ghost_list_directory"
             ]
@@ -426,6 +430,77 @@
             "path",
             "hunks"
           ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghost_apply_transaction",
+        "displayName": "Ghost Apply Transaction",
+        "toolReferenceName": "ghost_apply_transaction",
+        "userDescription": "Apply and verify multiple workspace file edits as one transaction.",
+        "modelDescription": "Applies 2 to 50 workspace file edits together. Include one content or hunks edit per unique absolute path. Ghost previews the combined change, verifies every baseline, applies all files, verifies all results, and rolls the group back if any file fails.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "edits": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 50,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Absolute workspace file path."
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Complete replacement content. Use this or hunks, not both."
+                  },
+                  "expectedContent": {
+                    "type": "string",
+                    "description": "Optional exact content expected before applying this file edit."
+                  },
+                  "hunks": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "startLine": { "type": "integer", "minimum": 1 },
+                        "endLine": { "type": "integer", "minimum": 1 },
+                        "replacement": { "type": "string" },
+                        "oldText": { "type": "string" },
+                        "oldHash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+                        "beforeContext": { "type": "string" },
+                        "afterContext": { "type": "string" }
+                      },
+                      "required": ["startLine", "endLine", "replacement"],
+                      "anyOf": [
+                        { "required": ["oldText"] },
+                        { "required": ["oldHash"] },
+                        { "required": ["beforeContext"] },
+                        { "required": ["afterContext"] }
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["path"],
+                "anyOf": [
+                  { "required": ["content"] },
+                  { "required": ["hunks"] }
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["edits"],
           "additionalProperties": false
         }
       },

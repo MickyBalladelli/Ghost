@@ -13,6 +13,7 @@ import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkfl
 import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
 import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -30,10 +31,15 @@ function getMissingRequiredArgument(call: LocalToolCall): string | undefined {
   const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
   const requiredArgument = pathTools.has(call.name)
     ? 'path'
+    : call.name === 'ghost_apply_transaction'
+      ? 'edits'
     : call.name === 'ghost_run_terminal_command'
       ? 'command'
       : undefined
   if (!requiredArgument) {
+    return undefined
+  }
+  if (requiredArgument === 'edits' && Array.isArray(call.arguments.edits) && call.arguments.edits.length > 1) {
     return undefined
   }
   if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
@@ -84,7 +90,7 @@ export class LocalToolExecutor {
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
 
-  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
+  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
     }
@@ -173,6 +179,18 @@ export class LocalToolExecutor {
         }
         await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current)
         return `${summarizeGhostEdit(edit)}\nApplied successfully.`
+      }
+      case 'ghost_apply_transaction': {
+        const transactionInput: FileTransactionInput = parseFileTransaction(call.arguments)
+        const allowed = options.approved ?? await confirmAction(
+          'Allow Ghost to apply a file transaction?',
+          `Apply and verify ${transactionInput.edits.length} files together?`
+        )
+        if (!allowed) {
+          return 'User denied the file transaction.'
+        }
+        const applied = await applyFileTransaction(transactionInput, options.expectedFiles)
+        return `${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`
       }
       case 'ghost_run_terminal_command': {
         const input: RunTerminalCommandInput = {

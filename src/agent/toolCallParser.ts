@@ -2,6 +2,7 @@ export const LOCAL_TOOL_NAMES = [
   'ghost_read_file',
   'ghost_write_file',
   'ghost_apply_edit',
+  'ghost_apply_transaction',
   'ghost_run_terminal_command',
   'ghost_list_directory'
 ] as const
@@ -12,6 +13,7 @@ const LOCAL_TOOL_ALIASES: Record<string, LocalToolName> = {
   ghostreadfile: 'ghost_read_file',
   ghostwritefile: 'ghost_write_file',
   ghostapplyedit: 'ghost_apply_edit',
+  ghostapplytransaction: 'ghost_apply_transaction',
   ghostrunterminalcommand: 'ghost_run_terminal_command',
   ghostlistdirectory: 'ghost_list_directory'
 }

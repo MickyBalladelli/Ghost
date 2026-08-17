@@ -76,6 +76,7 @@ const toolDescriptions: Record<string, string> = {
   ghost_read_file: 'Read a text file from the workspace.',
   ghost_write_file: 'Create or replace a text file in the workspace.',
   ghost_apply_edit: 'Apply reviewed, structured edits to a workspace file.',
+  ghost_apply_transaction: 'Apply and verify multiple workspace edits as one transaction.',
   ghost_run_terminal_command: 'Run a shell command in the workspace.',
   ghost_list_directory: 'List files and folders in the workspace.'
 }
@@ -1541,6 +1542,8 @@ const toolActionText = (toolCall: ToolCall): string => {
       ? `I'm writing file${displayedTarget ? ` ${displayedTarget}` : ''}`
       : toolCall.name === 'ghost_apply_edit'
         ? `I'm editing file${displayedTarget ? ` ${displayedTarget}` : ''}`
+        : toolCall.name === 'ghost_apply_transaction'
+          ? `I'm applying a file transaction${displayedTarget ? `: ${displayedTarget}` : ''}`
         : toolCall.name === 'ghost_run_terminal_command'
           ? `I'm executing command${displayedTarget ? `: ${displayedTarget}` : ''}`
           : toolCall.name === 'ghost_list_directory'
@@ -1588,7 +1591,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
-      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">${part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit' ? 'Apply to all files' : 'Approve for session'}</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">${part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit' || part.toolCall.name === 'ghost_apply_transaction' ? 'Apply to all files' : 'Approve for session'}</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
     const selectedHunkAction = part.toolCall.status === 'requested' && part.toolCall.diffPreview?.hunks?.length
       ? `<button type="button" data-tool-action="approve-selected" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Apply selected hunks</button>`

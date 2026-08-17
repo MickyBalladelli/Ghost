@@ -11,6 +11,7 @@ All notable changes to this extension are documented here.
 - Stopped no-op, repeated, undo/reapply, alternating, and overlapping edit loops per file.
 - Replaced the per-file edit cap with request budgets for files, changed lines, bytes, commands, time, and estimated model tokens.
 - Reported the budget category and usage when Ghost stops.
+- Added `ghost_apply_transaction` for combined multi-file previews, baseline checks, verification, and group rollback on failure.
 
 ## 1.0.83 - 2026-08-17
 

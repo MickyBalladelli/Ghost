@@ -11,6 +11,7 @@ export const GHOST_TOOL_NAMES = [
   'ghost_read_file',
   'ghost_write_file',
   'ghost_apply_edit',
+  'ghost_apply_transaction',
   'ghost_run_terminal_command',
   'ghost_list_directory'
 ] as const
