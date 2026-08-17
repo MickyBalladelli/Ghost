@@ -60,6 +60,14 @@
         "title": "Ghost: Check Required Models"
       },
       {
+        "command": "ghost.setProviderApiKey",
+        "title": "Ghost: Set Provider API Key"
+      },
+      {
+        "command": "ghost.clearProviderApiKey",
+        "title": "Ghost: Clear Provider API Key"
+      },
+      {
         "command": "ghost.open",
         "title": "Ghost: Open Interface"
       },

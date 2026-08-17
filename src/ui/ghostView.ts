@@ -5,7 +5,7 @@ import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
-import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings } from '../config'
+import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostProvider } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
@@ -122,6 +122,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private sessionApprovedFileEdits = false
   private readonly globalState?: vscode.Memento
   private readonly workspaceState?: vscode.Memento
+  private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
   private pendingMessages: GhostExtensionMessage[] = []
@@ -139,10 +140,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento } = {}
+    options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento; providerApiKey?: (provider: GhostProvider) => string | undefined } = {}
   ) {
     this.globalState = options.globalState
     this.workspaceState = options.workspaceState
+    this.providerApiKey = options.providerApiKey
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
     this.disposables.push(ghostConfig.onDidChange(() => {
@@ -1423,10 +1425,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     try {
       const client = settings.provider === 'mlx-vlm'
-        ? new MlxClient(settings.mlxUrl)
+        ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
         : new OllamaClient(
             settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
+            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
+            undefined,
+            () => this.providerApiKey?.(settings.provider)
           )
       const online = await client.checkHealth(1500)
       connection = online ? 'online' : 'offline'
@@ -1496,11 +1500,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async testProvider(): Promise<void> {
     const settings = getGhostSettings()
-    const client = settings.provider === 'mlx-vlm'
-      ? new MlxClient(settings.mlxUrl)
+      const client = settings.provider === 'mlx-vlm'
+      ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
       : new OllamaClient(
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
+          undefined,
+          () => this.providerApiKey?.(settings.provider)
         )
     const online = await client.checkHealth(3000)
     if (online) {

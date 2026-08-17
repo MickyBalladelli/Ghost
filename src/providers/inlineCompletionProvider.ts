@@ -73,17 +73,20 @@ function getDocumentPrefixAndSuffix(document: vscode.TextDocument, position: vsc
 export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
   private readonly configuration: GhostConfig
   private readonly fetchCompletion: FimCompletionFetcher
+  private readonly apiKeyProvider?: () => string | undefined
   private readonly debounceMs: number
   private requestSequence = 0
 
   constructor(
     configuration: GhostConfig = ghostConfig,
     fetchCompletion: FimCompletionFetcher = fetchFimCompletion,
-    debounceMs = DEFAULT_DEBOUNCE_MS
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+    apiKeyProvider?: () => string | undefined
   ) {
     this.configuration = configuration
     this.fetchCompletion = fetchCompletion
     this.debounceMs = debounceMs
+    this.apiKeyProvider = apiKeyProvider
   }
 
   async provideInlineCompletionItems(
@@ -128,6 +131,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
           presencePenalty: settings.presencePenalty,
           repeatPenalty: settings.repeatPenalty,
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
+          ...(useOpenAiCompatible && this.apiKeyProvider?.() ? { apiKey: this.apiKeyProvider() } : {}),
           signal: cancellation.signal
         }
       )
@@ -148,7 +152,8 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 export function createInlineCompletionProvider(
   configuration?: GhostConfig,
   fetchCompletion?: FimCompletionFetcher,
-  debounceMs?: number
+  debounceMs?: number,
+  apiKeyProvider?: () => string | undefined
 ): InlineCompletionProvider {
-  return new InlineCompletionProvider(configuration, fetchCompletion, debounceMs)
+  return new InlineCompletionProvider(configuration, fetchCompletion, debounceMs, apiKeyProvider)
 }

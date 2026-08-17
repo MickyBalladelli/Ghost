@@ -294,6 +294,7 @@ export interface ChatParticipantOptions {
   llmFactory?: LlmFactory
   toolExecutor?: LocalToolExecutor
   statusBar?: GhostStatusBar
+  providerApiKey?: (provider: GhostProvider) => string | undefined
 }
 
 export interface GhostContextSelection {
@@ -630,14 +631,14 @@ function getRequestOptions(request: vscode.ChatRequest): GhostRequestOptions {
   return value ?? {}
 }
 
-function createDefaultLlmFactory(configuration: GhostConfig): LlmFactory {
+function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (provider: GhostProvider) => string | undefined): LlmFactory {
   const settings = configuration.getSettings()
 
   return new LlmFactory(
     {
-      ollamaClient: new OllamaClient(settings.ollamaUrl, 'ollama'),
-      mlxClient: new MlxClient(settings.mlxUrl),
-      openaiCompatibleClient: new OllamaClient(settings.openaiUrl, 'openai-compatible')
+      ollamaClient: new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => providerApiKey?.('ollama')),
+      mlxClient: new MlxClient(settings.mlxUrl, undefined, () => providerApiKey?.('mlx-vlm')),
+      openaiCompatibleClient: new OllamaClient(settings.openaiUrl, 'openai-compatible', undefined, () => providerApiKey?.('openai-compatible'))
     },
     {
       configuration: vscode.workspace.getConfiguration('ghost')
@@ -737,7 +738,7 @@ export function createChatParticipantHandler(
   options: ChatParticipantOptions = {}
 ): vscode.ChatRequestHandler {
   const configuration = options.configuration ?? ghostConfig
-  const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration)
+  const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration, options.providerApiKey)
   const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
   const statusBar = options.statusBar
 

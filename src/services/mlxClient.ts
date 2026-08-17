@@ -234,16 +234,24 @@ export async function* streamSseTokens(body: NodeJS.ReadableStream): AsyncGenera
 export class MlxClient {
   private readonly apiUrl: string
   private readonly request: FetchLike
+  private readonly apiKeyProvider?: () => string | undefined
 
-  constructor(baseUrl = DEFAULT_MLX_URL, request: FetchLike = fetch) {
+  constructor(baseUrl = DEFAULT_MLX_URL, request: FetchLike = fetch, apiKeyProvider?: () => string | undefined) {
     this.apiUrl = normalizeMlxApiUrl(baseUrl)
     this.request = request
+    this.apiKeyProvider = apiKeyProvider
+  }
+
+  private authorizationHeaders(): Record<string, string> {
+    const apiKey = this.apiKeyProvider?.()
+    return apiKey ? { authorization: `Bearer ${apiKey}` } : {}
   }
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
       const response = await this.request(`${this.apiUrl}/models`, {
         method: 'GET',
+        headers: this.authorizationHeaders(),
         signal: withTimeout(undefined, timeoutMs)
       })
 
@@ -256,6 +264,7 @@ export class MlxClient {
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const response = await this.request(`${this.apiUrl}/models`, {
       method: 'GET',
+      headers: this.authorizationHeaders(),
       signal
     })
     await throwForHttpError(response)
@@ -278,7 +287,8 @@ export class MlxClient {
       method: 'POST',
       headers: {
         accept: 'text/event-stream',
-        'content-type': 'application/json'
+        'content-type': 'application/json',
+        ...this.authorizationHeaders()
       },
       body,
       signal: options.signal

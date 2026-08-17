@@ -16,6 +16,7 @@ export interface OllamaChatOptions extends MlxChatOptions {
   systemPrompt?: string
   stream?: boolean
   mode?: OllamaApiMode
+  apiKey?: string
 }
 
 export interface FimCompletionOptions {
@@ -31,6 +32,7 @@ export interface FimCompletionOptions {
   maxTokens?: number
   signal?: AbortSignal
   mode?: OllamaApiMode
+  apiKey?: string
 }
 
 interface OpenAiModelsResponse {
@@ -230,11 +232,17 @@ export class OllamaClient {
   private readonly baseUrl: string
   private readonly request: FetchLike
   private readonly mode: OllamaApiMode
+  private readonly apiKeyProvider?: () => string | undefined
 
-  constructor(baseUrl = DEFAULT_OLLAMA_URL, mode: OllamaApiMode = 'auto', request: FetchLike = fetch) {
+  constructor(baseUrl = DEFAULT_OLLAMA_URL, mode: OllamaApiMode = 'auto', request: FetchLike = fetch, apiKeyProvider?: () => string | undefined) {
     this.baseUrl = normalizeBaseUrl(baseUrl)
     this.mode = mode
     this.request = request
+    this.apiKeyProvider = apiKeyProvider
+  }
+
+  private authorizationHeaders(apiKey = this.apiKeyProvider?.()): Record<string, string> {
+    return apiKey ? { authorization: `Bearer ${apiKey}` } : {}
   }
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
@@ -244,6 +252,7 @@ export class OllamaClient {
       try {
         const response = await this.request(endpoint, {
           method: 'GET',
+          headers: this.authorizationHeaders(),
           signal: withTimeout(timeoutMs)
         })
 
@@ -263,7 +272,7 @@ export class OllamaClient {
 
     for (const endpoint of this.getModelEndpoints()) {
       try {
-        const response = await this.request(endpoint, { method: 'GET', signal })
+        const response = await this.request(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal })
 
         if (!response.ok) {
           lastError = await httpError(response)
@@ -412,7 +421,7 @@ export class OllamaClient {
     if (kind === 'ollama') {
       return {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...this.authorizationHeaders(options.apiKey) },
         signal: options.signal,
         body: JSON.stringify({
           model: options.model,
@@ -435,7 +444,8 @@ export class OllamaClient {
       method: 'POST',
       headers: {
         accept: stream ? 'text/event-stream' : 'application/json',
-        'content-type': 'application/json'
+        'content-type': 'application/json',
+        ...this.authorizationHeaders(options.apiKey)
       },
       signal: options.signal,
       body: JSON.stringify({
@@ -472,7 +482,7 @@ export class OllamaClient {
     if (kind === 'ollama') {
       return {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...this.authorizationHeaders(options.apiKey) },
         signal: options.signal,
         body: JSON.stringify({
           model: options.model,
@@ -495,7 +505,8 @@ export class OllamaClient {
       method: 'POST',
       headers: {
         accept: 'application/json',
-        'content-type': 'application/json'
+        'content-type': 'application/json',
+        ...this.authorizationHeaders(options.apiKey)
       },
       signal: options.signal,
       body: JSON.stringify({

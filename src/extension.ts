@@ -1,20 +1,24 @@
 import * as vscode from 'vscode'
 
 import { createChatParticipant, createChatParticipantHandler } from './agent/chatParticipant'
-import { ghostConfig } from './config'
+import { ghostConfig, GhostProvider } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { MlxClient } from './services/mlxClient'
 import { OllamaClient } from './services/ollamaClient'
+import { ProviderSecrets } from './services/providerSecrets'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
 import { GhostStatusBar } from './ui/statusBar'
 import { registerLanguageModelTools } from './tools/registerTools'
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+  const providerSecrets = new ProviderSecrets(context.secrets)
+  await providerSecrets.initialize()
+  const providerApiKey = (provider: GhostProvider): string | undefined => providerSecrets.get(provider)
   const helloWorldCommand = vscode.commands.registerCommand('ghost.helloWorld', () => {
     vscode.window.showInformationMessage('Ghost is ready.')
   })
-  const inlineProvider = createInlineCompletionProvider()
+  const inlineProvider = createInlineCompletionProvider(ghostConfig, undefined, undefined, () => providerApiKey('openai-compatible'))
   const inlineProviderRegistration = vscode.languages.registerInlineCompletionItemProvider(
     { pattern: '**' },
     inlineProvider
@@ -56,10 +60,12 @@ export function activate(context: vscode.ExtensionContext) {
         ? 'OpenAI-compatible'
         : 'Ollama'
     const client = settings.provider === 'mlx-vlm'
-      ? new MlxClient(settings.mlxUrl)
+      ? new MlxClient(settings.mlxUrl, undefined, () => providerApiKey('mlx-vlm'))
       : new OllamaClient(
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama'
+          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
+          undefined,
+          () => providerApiKey(settings.provider)
         )
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')
@@ -82,10 +88,30 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
   const checkModelsCommand = vscode.commands.registerCommand('ghost.checkModels', () => {
-    return checkRequiredOllamaModels()
+    return checkRequiredOllamaModels(ghostConfig, () => providerApiKey('ollama'))
+  })
+  const setProviderApiKeyCommand = vscode.commands.registerCommand('ghost.setProviderApiKey', async () => {
+    const provider = ghostConfig.getSettings().provider
+    const value = await vscode.window.showInputBox({
+      prompt: `Enter the ${provider} API key`,
+      password: true,
+      ignoreFocusOut: true,
+      placeHolder: 'Stored in VS Code SecretStorage'
+    })
+    if (value === undefined) {
+      return
+    }
+    await providerSecrets.set(provider, value)
+    await vscode.window.showInformationMessage(`${provider} API key stored securely.`)
+  })
+  const clearProviderApiKeyCommand = vscode.commands.registerCommand('ghost.clearProviderApiKey', async () => {
+    const provider = ghostConfig.getSettings().provider
+    await providerSecrets.clear(provider)
+    await vscode.window.showInformationMessage(`${provider} API key removed.`)
   })
   const ghostView = new GhostViewProvider(context.extensionUri, {
-    chatHandler: createChatParticipantHandler({ statusBar }),
+    chatHandler: createChatParticipantHandler({ statusBar, providerApiKey }),
+    providerApiKey,
     globalState: context.globalState,
     workspaceState: context.workspaceState
   })
@@ -108,7 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
     await openGhostView()
     ghostView.clear()
   })
-  const chatParticipant = createChatParticipant({ statusBar })
+  const chatParticipant = createChatParticipant({ statusBar, providerApiKey })
   registerLanguageModelTools(context)
 
   updateInlineStatusBar()
@@ -118,6 +144,8 @@ export function activate(context: vscode.ExtensionContext) {
     toggleInlineCommand,
     checkOllamaCommand,
     checkModelsCommand,
+    setProviderApiKeyCommand,
+    clearProviderApiKeyCommand,
     ghostView,
     ghostViewRegistration,
     openViewCommand,

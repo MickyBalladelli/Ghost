@@ -9,10 +9,11 @@ export const REQUIRED_OLLAMA_MODELS = [
 ]
 
 export async function checkRequiredOllamaModels(
-  configuration: GhostConfig = ghostConfig
+  configuration: GhostConfig = ghostConfig,
+  apiKeyProvider?: () => string | undefined
 ): Promise<void> {
   const settings = configuration.getSettings()
-  const client = new OllamaClient(settings.ollamaUrl)
+  const client = new OllamaClient(settings.ollamaUrl, 'ollama', undefined, apiKeyProvider)
 
   if (!(await client.checkHealth())) {
     await vscode.window.showErrorMessage(
