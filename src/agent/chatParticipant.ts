@@ -820,7 +820,7 @@ async function streamModelTurn(
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean; modelTokens: number }> {
+): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean }> {
   let generated = ''
   let modelCharacters = 0
   let decided = false
@@ -866,16 +866,17 @@ async function streamModelTurn(
   for await (const chunk of llmFactory.streamChatCompletion(options)) {
     modelCharacters += chunk.length
     if (token.isCancellationRequested) {
-      return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4) }
+      return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4), splitSuggested: false }
     }
 
     if (bufferingToolCall) {
       const update = toolCallAssembler.append(chunk)
-      if (update.complete || update.overflowed) {
+      if (update.complete || update.overflowed || update.splitSuggested) {
         return {
           generated: toolCallAssembler.getText(),
           streamed: false,
-          modelTokens: Math.ceil(modelCharacters / 4)
+          modelTokens: Math.ceil(modelCharacters / 4),
+          splitSuggested: update.splitSuggested
         }
       }
       continue
@@ -896,11 +897,12 @@ async function streamModelTurn(
         bufferingToolCall = true
         const update = toolCallAssembler.append(generated)
         generated = ''
-        if (update.complete || update.overflowed) {
+        if (update.complete || update.overflowed || update.splitSuggested) {
           return {
             generated: toolCallAssembler.getText(),
             streamed: false,
-            modelTokens: Math.ceil(modelCharacters / 4)
+            modelTokens: Math.ceil(modelCharacters / 4),
+            splitSuggested: update.splitSuggested
           }
         }
       } else if (firstContent) {
@@ -914,7 +916,8 @@ async function streamModelTurn(
   return {
     generated: generated.trim(),
     streamed: decided && !bufferingToolCall,
-    modelTokens: Math.ceil(modelCharacters / 4)
+    modelTokens: Math.ceil(modelCharacters / 4),
+    splitSuggested: false
   }
 }
 
@@ -993,6 +996,7 @@ export function createChatParticipantHandler(
       const staleEditRecoveryPaths = new Set<string>()
       let successfulWorkspaceChange = false
       let emptyProviderRetries = 0
+      let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const budget: RequestBudget = {
         startedAt: requestStartedAt,
@@ -1046,6 +1050,25 @@ export function createChatParticipantHandler(
         }
 
         const generated = turn.generated
+
+        if (turn.splitSuggested) {
+          if (splitEditRetries < GHOST_RETRY_POLICIES.splitEdit.maxRetries) {
+            splitEditRetries += 1
+            response.progress('Tool call approached the safe output limit. Asking Ghost to split the edit into smaller pieces.')
+            messages.push(
+              { role: 'assistant', content: generated },
+              {
+                role: 'user',
+                content: 'Your previous tool call was too large and was stopped before execution. Do not repeat the large JSON or emit partial JSON. Split the work into safe pieces: use one ghost_apply_edit call with a few focused hunks for one file, or handle one file at a time. Read the current file first, preserve existing changes, and emit exactly one complete valid JSON tool call now.'
+              }
+            )
+            continue
+          }
+          const message = 'Ghost stopped because the edit tool call was too large. Retry with smaller hunks or one file at a time.'
+          requestOptions.onStop?.('invalid-model-response', message)
+          response.markdown(message)
+          return
+        }
 
         if (!generated) {
           if (emptyProviderRetries < GHOST_RETRY_POLICIES.emptyProvider.maxRetries) {

@@ -53,20 +53,32 @@ export interface LocalToolParseResult {
 }
 
 const MAX_STREAMED_TOOL_ARGUMENTS = 200000
+const SPLIT_TOOL_ARGUMENT_THRESHOLD = 160000
+
+export interface LocalToolCallStreamUpdate {
+  complete: boolean
+  overflowed: boolean
+  splitSuggested: boolean
+}
 
 export class LocalToolCallStreamAssembler {
   private value = ''
   private complete = false
   private overflowed = false
+  private splitSuggested = false
 
-  append(chunk: string): { complete: boolean; overflowed: boolean } {
+  append(chunk: string): LocalToolCallStreamUpdate {
     if (this.complete || this.overflowed) {
-      return { complete: this.complete, overflowed: this.overflowed }
+      return { complete: this.complete, overflowed: this.overflowed, splitSuggested: this.splitSuggested }
     }
     this.value += chunk
     if (this.value.length > MAX_STREAMED_TOOL_ARGUMENTS) {
       this.overflowed = true
-      return { complete: false, overflowed: true }
+      return { complete: false, overflowed: true, splitSuggested: true }
+    }
+    if (this.value.length >= SPLIT_TOOL_ARGUMENT_THRESHOLD) {
+      this.splitSuggested = true
+      return { complete: false, overflowed: false, splitSuggested: true }
     }
     const trimmed = this.value.trimStart()
     if (/<tool_call>/i.test(trimmed)) {
@@ -74,7 +86,7 @@ export class LocalToolCallStreamAssembler {
     } else if (trimmed.startsWith('{')) {
       this.complete = hasCompleteJsonObject(trimmed)
     }
-    return { complete: this.complete, overflowed: this.overflowed }
+    return { complete: this.complete, overflowed: this.overflowed, splitSuggested: this.splitSuggested }
   }
 
   getText(): string {
