@@ -27,6 +27,17 @@ export function sameWorkspaceFile(left: WorkspaceFileSnapshot, right: WorkspaceF
   return left.exists === right.exists && left.content === right.content
 }
 
+export function hasUnsavedEditorChanges(uri: vscode.Uri): boolean {
+  return vscode.workspace.textDocuments.some(document => document.uri.toString() === uri.toString() && document.isDirty)
+}
+
+export function assertNoUnsavedEditorChanges(uris: vscode.Uri[]): void {
+  const dirtyPaths = [...new Set(uris.filter(uri => hasUnsavedEditorChanges(uri)).map(uri => uri.fsPath))]
+  if (dirtyPaths.length > 0) {
+    throw new Error(`Unsaved editor changes block this file edit: ${dirtyPaths.join(', ')}. Save or discard the editor changes before editing the disk file.`)
+  }
+}
+
 export async function verifyWorkspaceFile(uri: vscode.Uri, expected: WorkspaceFileSnapshot): Promise<void> {
   const actual = await readWorkspaceFile(uri)
   if (!sameWorkspaceFile(actual, expected)) {

@@ -12,6 +12,7 @@ import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summa
 
 export interface ReadFileInput {
   path: string
+  source?: 'editor' | 'disk'
   allowSpecialFile?: boolean
   mode?: 'head' | 'tail' | 'lines' | 'bytes' | 'symbol' | 'matches'
   startLine?: number
@@ -389,6 +390,32 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
+    if (options.input.source !== undefined && !['editor', 'disk'].includes(options.input.source)) {
+      throw new Error("source must be 'editor' or 'disk'")
+    }
+    const openDocument = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString())
+    if (openDocument?.isDirty && options.input.source === undefined) {
+      return textResult(`Read paused: ${uri.fsPath} has unsaved editor changes. Retry with ghost_read_file({"path":"${uri.fsPath}","source":"editor"}) to read the buffer, or source:"disk" to read the saved disk version. Save or discard the editor changes before asking Ghost to edit this file.`)
+    }
+
+    if (options.input.source === 'editor') {
+      if (!openDocument) {
+        return textResult(`No open editor buffer exists for ${uri.fsPath}. Retry with source:"disk" or open the file in the editor first.`)
+      }
+      const bytes = Buffer.from(openDocument.getText(), 'utf8')
+      const reasons = pathCategoryReasons(uri)
+      if (await isGitIgnored(uri)) {
+        reasons.push('matched .gitignore')
+      }
+      if (bytes.length > MAX_SAFE_READ_BYTES) {
+        return blockedReadResult(uri.fsPath, [...reasons, `very large editor buffer (${bytes.length} bytes)`], 'Read a smaller editor selection or use ghost_search_workspace for exact text matches.')
+      }
+      if (reasons.length > 0 && !options.input.allowSpecialFile) {
+        return blockedReadResult(uri.fsPath, reasons, 'Use ghost_search_workspace for text matches, or ask for a bounded explicit editor-buffer read.')
+      }
+      return textResult(`Source: editor buffer (unsaved changes included)\n${readFileWindow(openDocument.getText(), bytes, options.input, uri.fsPath)}`)
+    }
+
     const stat = await vscode.workspace.fs.stat(uri)
     if ((stat.type & vscode.FileType.Directory) !== 0) {
       throw new Error('The path points to a directory. Use ghost_list_directory instead.')
@@ -424,7 +451,8 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
         'Use ghost_search_workspace for text matches or an external binary-aware inspection tool. The text reader will not expose binary bytes to the model.'
       )
     }
-    return textResult(readFileWindow(content, bytes, options.input, uri.fsPath))
+    const sourceNote = openDocument?.isDirty ? 'Source: disk (unsaved editor changes not included)\n' : 'Source: disk\n'
+    return textResult(`${sourceNote}${readFileWindow(content, bytes, options.input, uri.fsPath)}`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileInput>): vscode.PreparedToolInvocation {

@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.91 - 2026-08-17
 
+- Added explicit editor-buffer or disk read sources, paused ambiguous dirty-file reads, and blocked file edits that could overwrite unsaved editor changes.
 - Added read-only `ghost_git_context` for non-ignored workspace status, selected-file diffs, staged diffs, branch details, and recent file history.
 - Added `ghost_get_diagnostics` for workspace, active-file, and selected-file Problems-panel diagnostics with severity filters and bounded results.
 - Added bounded directory pages with continuation cursors, recursive depth limits, and entry limits for large workspace trees.

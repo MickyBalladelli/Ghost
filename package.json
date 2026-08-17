@@ -500,6 +500,14 @@
               "minLength": 1,
               "description": "Absolute path of the text file to read. The path must be inside the current workspace."
             },
+            "source": {
+              "type": "string",
+              "enum": [
+                "editor",
+                "disk"
+              ],
+              "description": "Read the open editor buffer, including unsaved changes, or the saved disk version. Required when the editor has unsaved changes."
+            },
             "allowSpecialFile": {
               "type": "boolean",
               "default": false,

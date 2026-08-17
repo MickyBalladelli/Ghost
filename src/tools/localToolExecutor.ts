@@ -15,7 +15,7 @@ import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, Run
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
-import { readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+import { assertNoUnsavedEditorChanges, readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 
 const ALLOW_ACTION = 'Allow'
@@ -112,6 +112,7 @@ export class LocalToolExecutor {
       case 'ghost_read_file': {
         const input: ReadFileInput = {
           path: requiredString(call.arguments, 'path'),
+          ...(typeof call.arguments.source === 'string' ? { source: call.arguments.source as ReadFileInput['source'] } : {}),
           ...(call.arguments.allowSpecialFile === true ? { allowSpecialFile: true } : {}),
           ...(typeof call.arguments.mode === 'string' ? { mode: call.arguments.mode as ReadFileInput['mode'] } : {}),
           ...(typeof call.arguments.startLine === 'number' ? { startLine: call.arguments.startLine } : {}),
@@ -167,6 +168,7 @@ export class LocalToolExecutor {
           path: requiredString(call.arguments, 'path'),
           content: typeof call.arguments.content === 'string' ? call.arguments.content : ''
         }
+        assertNoUnsavedEditorChanges([resolveWorkspacePath(input.path)])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to write a file?',
           `Replace the complete contents of ${input.path}?`
@@ -197,6 +199,7 @@ export class LocalToolExecutor {
       }
       case 'ghost_apply_edit': {
         const edit = parseGhostEdit(call.arguments)
+        assertNoUnsavedEditorChanges([resolveWorkspacePath(edit.path)])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply an edit?',
           summarizeGhostEdit(edit)
@@ -230,6 +233,7 @@ export class LocalToolExecutor {
       }
       case 'ghost_apply_transaction': {
         const transactionInput: FileTransactionInput = parseFileTransaction(call.arguments)
+        assertNoUnsavedEditorChanges(transactionInput.edits.map(edit => resolveWorkspacePath(edit.path)))
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply a file transaction?',
           `Apply and verify ${transactionInput.edits.length} files together?`

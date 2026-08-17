@@ -41,7 +41,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add directory pagination and depth/entry limits instead of returning one large text listing.
 - [x] Add a diagnostics tool for compiler errors, Problems panel errors, and diagnostics for a selected file.
 - [x] Add optional Git context: status, diff, staged diff, branch, and recent file history. Never include unrelated or ignored files by default.
-- [ ] Detect unsaved editor changes and let the model read the editor buffer or disk explicitly. Prevent disk edits from silently clobbering unsaved text.
+- [x] Detect unsaved editor changes and let the model read the editor buffer or disk explicitly. Prevent disk edits from silently clobbering unsaved text.
 - [ ] Add a task plan object with checked steps, current step, blocked reason, and completion evidence. Persist it in the conversation.
 - [ ] Require the model to answer a final structured completion record: changed files, checks run, failures, and remaining work.
 - [ ] Add a “continue from last state” action that sends the last failed tool, current file state, and remaining plan without replaying the whole conversation.

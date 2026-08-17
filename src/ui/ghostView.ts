@@ -846,6 +846,32 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
+  private getUnsavedEditorWarning(call: LocalToolCall): string | undefined {
+    let paths: string[] = []
+    try {
+      paths = call.name === 'ghost_apply_transaction'
+        ? parseFileTransaction(call.arguments).edits.map(edit => edit.path)
+        : typeof call.arguments.path === 'string' ? [call.arguments.path] : []
+    } catch {
+      return undefined
+    }
+    const dirtyPaths = paths.flatMap(filePath => {
+      try {
+        const uri = resolveWorkspacePath(filePath)
+        return vscode.workspace.textDocuments.some(document => document.uri.toString() === uri.toString() && document.isDirty)
+          ? [uri.fsPath]
+          : []
+      } catch {
+        return []
+      }
+    })
+    const uniquePaths = [...new Set(dirtyPaths)]
+    if (uniquePaths.length === 0) {
+      return undefined
+    }
+    return `Edit blocked: ${uniquePaths.join(', ')} has unsaved editor changes. Read the buffer with ghost_read_file source:"editor", then ask the user to save or discard those changes before editing the disk file.`
+  }
+
   private async rememberRecovery(
     requestId: string,
     conversationId: string,
@@ -1033,6 +1059,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const deniedTools = settings.toolDenylist ?? []
     const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
     const isFileEditTool = this.isFileEditTool(call.name)
+    const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
+    if (unsavedEditorWarning) {
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-requested',
+        tool: call.name,
+        toolCallId: pending.toolCallId,
+        arguments: call.arguments as GhostToolArguments,
+        requiresApproval: false,
+        detail: unsavedEditorWarning,
+        phase: 'tool'
+      })
+      return { decision: 'reject', reason: unsavedEditorWarning }
+    }
     const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
     const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
