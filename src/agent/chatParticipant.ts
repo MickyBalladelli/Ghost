@@ -35,6 +35,7 @@ const SYSTEM_PROMPT = [
 const MAX_TOOL_ROUNDS = 128
 const MIN_TOOL_CALL_TOKENS = 4096
 const MAX_MISSING_TOOL_RETRIES = 2
+const MAX_STALE_EDIT_RETRIES = 1
 const MAX_EMPTY_PROVIDER_RETRIES = 2
 const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
   ghost_read_file: 16000,
@@ -243,6 +244,10 @@ function limitToolResult(toolName: LocalToolCall['name'], value: string): string
 
 function describesWorkspaceChange(value: string): boolean {
   return /\b(?:fix|edit|change|update|implement|create|write|remove|delete|add|replace|apply|modify|wire|refactor)\b/i.test(value)
+}
+
+function isStaleEditConflict(value: string): boolean {
+  return /old text does not match|content hash does not match|preceding context does not match|following context does not match|file changed externally|edit expected different file content|refresh and rebase/i.test(value)
 }
 
 function isFileEditTool(name: LocalToolCall['name']): boolean {
@@ -971,6 +976,7 @@ export function createChatParticipantHandler(
       let toolCallCount = 0
       let missingToolRetries = 0
       let invalidToolRetries = 0
+      let staleEditRetries = 0
       let emptyProviderRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const budget: RequestBudget = {
@@ -1207,6 +1213,15 @@ export function createChatParticipantHandler(
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)
+        if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < MAX_STALE_EDIT_RETRIES) {
+          staleEditRetries += 1
+          response.progress('Edit was stale. Asking Ghost to refresh the file and rebase the change.')
+          messages.push({
+            role: 'user',
+            content: 'The edit is stale. Do not retry the same hunk. Use ghost_read_file on the current file, then create a fresh small ghost_apply_edit with new oldText, oldHash, beforeContext, or afterContext. Preserve the user’s existing changes.'
+          })
+          continue
+        }
         if (editFailed) {
           requestOptions.onStop?.('failed-tool', toolResult)
           response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
