@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.84",
+  "version": "1.0.85",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -435,10 +435,26 @@
                   }
                 },
                 "anyOf": [
-                  { "required": ["oldText"] },
-                  { "required": ["oldHash"] },
-                  { "required": ["beforeContext"] },
-                  { "required": ["afterContext"] }
+                  {
+                    "required": [
+                      "oldText"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "oldHash"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "beforeContext"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "afterContext"
+                    ]
+                  }
                 ],
                 "required": [
                   "startLine",
@@ -497,35 +513,84 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "startLine": { "type": "integer", "minimum": 1 },
-                        "endLine": { "type": "integer", "minimum": 1 },
-                        "replacement": { "type": "string" },
-                        "oldText": { "type": "string" },
-                        "oldHash": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
-                        "beforeContext": { "type": "string" },
-                        "afterContext": { "type": "string" }
+                        "startLine": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "endLine": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "replacement": {
+                          "type": "string"
+                        },
+                        "oldText": {
+                          "type": "string"
+                        },
+                        "oldHash": {
+                          "type": "string",
+                          "pattern": "^[a-fA-F0-9]{64}$"
+                        },
+                        "beforeContext": {
+                          "type": "string"
+                        },
+                        "afterContext": {
+                          "type": "string"
+                        }
                       },
-                      "required": ["startLine", "endLine", "replacement"],
+                      "required": [
+                        "startLine",
+                        "endLine",
+                        "replacement"
+                      ],
                       "anyOf": [
-                        { "required": ["oldText"] },
-                        { "required": ["oldHash"] },
-                        { "required": ["beforeContext"] },
-                        { "required": ["afterContext"] }
+                        {
+                          "required": [
+                            "oldText"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "oldHash"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "beforeContext"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "afterContext"
+                          ]
+                        }
                       ],
                       "additionalProperties": false
                     }
                   }
                 },
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "anyOf": [
-                  { "required": ["content"] },
-                  { "required": ["hunks"] }
+                  {
+                    "required": [
+                      "content"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "hunks"
+                    ]
+                  }
                 ],
                 "additionalProperties": false
               }
             }
           },
-          "required": ["edits"],
+          "required": [
+            "edits"
+          ],
           "additionalProperties": false
         }
       },
