@@ -36,6 +36,7 @@
     "onLanguageModelTool:ghost_read_file",
     "onLanguageModelTool:ghost_search_workspace",
     "onLanguageModelTool:ghost_get_diagnostics",
+    "onLanguageModelTool:ghost_git_context",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
     "onLanguageModelTool:ghost_apply_transaction",
@@ -282,6 +283,7 @@
               "ghost_read_file",
               "ghost_search_workspace",
               "ghost_get_diagnostics",
+              "ghost_git_context",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -293,6 +295,7 @@
             "ghost_read_file",
             "ghost_search_workspace",
             "ghost_get_diagnostics",
+            "ghost_git_context",
             "ghost_write_file",
             "ghost_apply_edit",
             "ghost_apply_transaction",
@@ -309,6 +312,7 @@
               "ghost_read_file",
               "ghost_search_workspace",
               "ghost_get_diagnostics",
+              "ghost_git_context",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -433,6 +437,49 @@
               "description": "Maximum diagnostics to return."
             }
           },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghost_git_context",
+        "displayName": "Ghost Git Context",
+        "toolReferenceName": "ghost_git_context",
+        "userDescription": "Read safe Git context for the workspace.",
+        "modelDescription": "Reads non-ignored Git status for the current workspace, a selected-file diff or staged diff, the current branch, or recent history for one file. Use an absolute workspace path for diff, stagedDiff, and history when no file is active.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(git-branch)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "status",
+                "diff",
+                "stagedDiff",
+                "branch",
+                "history"
+              ],
+              "default": "status",
+              "description": "Git context operation."
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional absolute workspace file or directory path."
+            },
+            "maxEntries": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "description": "Maximum status or history entries."
+            }
+          },
+          "required": [
+            "operation"
+          ],
           "additionalProperties": false
         }
       },
