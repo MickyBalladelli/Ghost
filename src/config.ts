@@ -13,6 +13,7 @@ export const GHOST_TOOL_NAMES = [
   'ghost_search_workspace',
   'ghost_get_diagnostics',
   'ghost_git_context',
+  'ghost_update_task_plan',
   'ghost_write_file',
   'ghost_apply_edit',
   'ghost_apply_transaction',

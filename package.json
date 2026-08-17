@@ -37,6 +37,7 @@
     "onLanguageModelTool:ghost_search_workspace",
     "onLanguageModelTool:ghost_get_diagnostics",
     "onLanguageModelTool:ghost_git_context",
+    "onLanguageModelTool:ghost_update_task_plan",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
     "onLanguageModelTool:ghost_apply_transaction",
@@ -284,6 +285,7 @@
               "ghost_search_workspace",
               "ghost_get_diagnostics",
               "ghost_git_context",
+              "ghost_update_task_plan",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -296,6 +298,7 @@
             "ghost_search_workspace",
             "ghost_get_diagnostics",
             "ghost_git_context",
+            "ghost_update_task_plan",
             "ghost_write_file",
             "ghost_apply_edit",
             "ghost_apply_transaction",
@@ -313,6 +316,7 @@
               "ghost_search_workspace",
               "ghost_get_diagnostics",
               "ghost_git_context",
+              "ghost_update_task_plan",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -480,6 +484,46 @@
           "required": [
             "operation"
           ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghost_update_task_plan",
+        "displayName": "Ghost Update Task Plan",
+        "toolReferenceName": "ghost_update_task_plan",
+        "userDescription": "Persist the current task plan for this conversation.",
+        "modelDescription": "Stores a bounded task plan in the conversation. Use for multi-step work. Keep checked true only for finished steps, set currentStep while working, and include blockers or completion evidence when relevant.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(checklist)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string", "minLength": 1, "maxLength": 100 },
+                  "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+                  "checked": { "type": "boolean" },
+                  "evidence": { "type": "string", "maxLength": 1000 }
+                },
+                "required": ["id", "title", "checked"],
+                "additionalProperties": false
+              }
+            },
+            "currentStep": { "type": "string", "maxLength": 100 },
+            "blockedReason": { "type": "string", "maxLength": 1000 },
+            "completionEvidence": {
+              "type": "array",
+              "maxItems": 10,
+              "items": { "type": "string", "maxLength": 1000 }
+            }
+          },
+          "required": ["steps"],
           "additionalProperties": false
         }
       },

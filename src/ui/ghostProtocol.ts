@@ -35,6 +35,14 @@ export interface GhostAttachment {
   mimeType?: string
 }
 
+export interface GhostTaskPlan {
+  steps: Array<{ id: string; title: string; checked: boolean; evidence?: string }>
+  currentStep?: string
+  blockedReason?: string
+  completionEvidence: string[]
+  updatedAt: number
+}
+
 export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
@@ -135,6 +143,7 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; diffPreview?: GhostToolDiffPreview; detail?: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string; resultStatus?: 'completed' | 'rejected' | 'failed' })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'task-plan'; sequence: number; plan: GhostTaskPlan })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string; stopReason?: GhostStopReason })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string })
@@ -343,7 +352,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
   if (value.type === 'retry-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 &&
-      ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
+      ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
       isRecord(value.arguments)
   }
   if (value.type === 'approve-tool') {

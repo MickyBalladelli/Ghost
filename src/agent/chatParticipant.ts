@@ -32,6 +32,7 @@ const SYSTEM_PROMPT = [
   'Diagnostics tool: ghost_get_diagnostics({"path":"optional absolute workspace file path","severity":"error|warning|information|hint","maxResults":100}) reads compiler and Problems-panel diagnostics. Omit path for the active file or workspace.',
   'Read source rule: ghost_read_file needs source:"editor" for an open unsaved buffer or source:"disk" for the saved file. If the file is dirty and source is omitted, the tool pauses and asks you to choose. Never edit a file while its editor buffer has unsaved changes; ask the user to save or discard them first.',
   'Git tool: ghost_git_context({"operation":"status|diff|stagedDiff|branch|history","path":"optional absolute workspace file path","maxEntries":100}) reads non-ignored workspace Git status, selected-file diffs, branch, or selected-file history. Use a path for diff, stagedDiff, and history when no active file is selected.',
+  'Task plan tool: ghost_update_task_plan({"steps":[{"id":"step-1","title":"Do the work","checked":false}],"currentStep":"step-1","blockedReason":"optional","completionEvidence":["optional"]}) persists a bounded plan in the conversation. Use it for multi-step work and update checked steps as work finishes.',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
@@ -45,6 +46,7 @@ const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
   ghost_search_workspace: 16000,
   ghost_get_diagnostics: 12000,
   ghost_git_context: 24000,
+  ghost_update_task_plan: 12000,
   ghost_write_file: 8000,
   ghost_apply_edit: 12000,
   ghost_apply_transaction: 16000,

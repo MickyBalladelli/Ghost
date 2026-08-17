@@ -31,6 +31,7 @@ import {
 import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
+import { parseTaskPlanMarker } from '../agent/taskPlan'
 
 interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -302,6 +303,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
           if (pendingTool && result) {
             this.markRecoveryApplied(pendingTool.toolCallId, result[2])
+            const taskPlan = parseTaskPlanMarker(result[2])
+            if (taskPlan) {
+              this.postStreamEvent(requestId, request, {
+                type: 'task-plan',
+                plan: taskPlan,
+                phase: 'tool'
+              })
+            }
             const resultStatus = /rejected|denied/i.test(result[2])
               ? 'rejected'
               : /error|failed|cancelled/i.test(result[2])
@@ -314,7 +323,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
               type: 'tool-result',
               tool: pendingTool.name,
               toolCallId: pendingTool.toolCallId,
-              detail: result[2],
+              detail: taskPlan ? 'Task plan updated.' : result[2],
               resultStatus,
               phase: 'tool'
             })

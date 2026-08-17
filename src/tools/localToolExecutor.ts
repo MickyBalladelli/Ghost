@@ -11,6 +11,7 @@ import {
 import { SearchWorkspaceInput, SearchWorkspaceTool } from './searchTool'
 import { DiagnosticsInput, DiagnosticsTool } from './diagnosticsTool'
 import { GitContextInput, GitContextTool } from './gitContextTool'
+import { TaskPlanInput, TaskPlanTool } from '../agent/taskPlan'
 import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
@@ -97,6 +98,7 @@ export class LocalToolExecutor {
   private readonly searchTool = new SearchWorkspaceTool()
   private readonly diagnosticsTool = new DiagnosticsTool()
   private readonly gitContextTool = new GitContextTool()
+  private readonly taskPlanTool = new TaskPlanTool()
 
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
@@ -162,6 +164,9 @@ export class LocalToolExecutor {
           ...(typeof call.arguments.maxEntries === 'number' ? { maxEntries: call.arguments.maxEntries } : {})
         }
         return resultText(await this.gitContextTool.invoke({ input, toolInvocationToken: undefined }, token))
+      }
+      case 'ghost_update_task_plan': {
+        return resultText(await this.taskPlanTool.invoke({ input: call.arguments as unknown as TaskPlanInput, toolInvocationToken: undefined }, token))
       }
       case 'ghost_write_file': {
         const input: WriteFileInput = {

@@ -80,6 +80,7 @@ const toolDescriptions: Record<string, string> = {
   ghost_search_workspace: 'Search workspace text with ripgrep and return file, line, column, and match data.',
   ghost_get_diagnostics: 'Read compiler and Problems-panel diagnostics.',
   ghost_git_context: 'Read safe Git status, diffs, branch, and file history.',
+  ghost_update_task_plan: 'Persist the current multi-step task plan.',
   ghost_write_file: 'Create or replace a text file in the workspace.',
   ghost_apply_edit: 'Apply reviewed, structured edits to a workspace file.',
   ghost_apply_transaction: 'Apply and verify multiple workspace edits as one transaction.',
@@ -129,12 +130,21 @@ interface ToolCall {
   completedAt?: number
 }
 
+interface TaskPlan {
+  steps: Array<{ id: string; title: string; checked: boolean; evidence?: string }>
+  currentStep?: string
+  blockedReason?: string
+  completionEvidence: string[]
+  updatedAt: number
+}
+
 interface Conversation {
   id: string
   title: string
   messages: ChatMessage[]
   draft: string
   promptHistory: string[]
+  taskPlan?: TaskPlan
   activeRequestId?: string
   createdAt: number
   updatedAt: number
@@ -196,7 +206,7 @@ type GhostExtensionMessage =
   | {
       source: 'ghost-extension'
       version: 1
-      type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'warning' | 'error' | 'request-completed'
+      type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'task-plan' | 'warning' | 'error' | 'request-completed'
       requestId: string
       conversationId: string
       sequence: number
@@ -216,6 +226,7 @@ type GhostExtensionMessage =
       diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
       message?: string
       resultStatus?: 'completed' | 'rejected' | 'failed'
+      plan?: TaskPlan
       status?: 'completed' | 'cancelled' | 'failed'
       stopReason?: StopReason
     }
@@ -395,6 +406,7 @@ const normalizeConversation = (value: Partial<Conversation>): Conversation => {
     messages: Array.isArray(value.messages) ? value.messages.map(message => normalizeMessage(message)) : [],
     draft: typeof value.draft === 'string' ? value.draft : '',
     promptHistory: normalizePromptHistory(value.promptHistory),
+    ...(value.taskPlan && Array.isArray(value.taskPlan.steps) ? { taskPlan: value.taskPlan } : {}),
     ...(value.activeRequestId ? { activeRequestId: value.activeRequestId } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
@@ -1771,10 +1783,41 @@ const updateComposer = () => {
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
 }
 
+const createTaskPlanElement = (plan: TaskPlan): HTMLElement => {
+  const element = document.createElement('section')
+  element.className = 'task-plan'
+  const heading = document.createElement('strong')
+  heading.textContent = 'Task plan'
+  element.append(heading)
+  const list = document.createElement('ol')
+  for (const step of plan.steps) {
+    const item = document.createElement('li')
+    item.textContent = `${step.checked ? '✓' : '○'} ${step.title}`
+    if (step.id === plan.currentStep) item.className = 'current'
+    if (step.evidence) item.title = step.evidence
+    list.append(item)
+  }
+  element.append(list)
+  if (plan.blockedReason) {
+    const blocked = document.createElement('div')
+    blocked.textContent = `Blocked: ${plan.blockedReason}`
+    element.append(blocked)
+  }
+  if (plan.completionEvidence.length > 0) {
+    const evidence = document.createElement('div')
+    evidence.textContent = `Evidence: ${plan.completionEvidence.join(' · ')}`
+    element.append(evidence)
+  }
+  return element
+}
+
 const renderMessages = (forceScroll: boolean) => {
   const conversation = getActiveConversation()
   const previousScrollTop = messagesElement.scrollTop
   messagesElement.textContent = ''
+  if (conversation.taskPlan) {
+    messagesElement.append(createTaskPlanElement(conversation.taskPlan))
+  }
   if (conversation.messages.length === 0) {
     messagesElement.innerHTML = stateCard()
   } else {
@@ -2011,7 +2054,7 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
     setNotice('error', 'Ghost cannot retry this tool because its saved arguments are not a JSON object.')
     return
   }
-  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
+  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
   if (!retryableTools.includes(found.toolCall.name)) {
     setNotice('error', 'Ghost cannot retry this unknown tool.')
     return
@@ -2499,6 +2542,24 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     updateStatus()
     return
   }
+  if (message.type === 'task-plan') {
+    const plan = message.plan
+    if (plan && Array.isArray(plan.steps)) {
+      conversation.taskPlan = {
+        steps: plan.steps
+          .filter(step => step && typeof step.id === 'string' && typeof step.title === 'string')
+          .slice(0, 50)
+          .map(step => ({ id: step.id.slice(0, 100), title: step.title.slice(0, 500), checked: step.checked === true, ...(step.evidence ? { evidence: step.evidence.slice(0, 1000) } : {}) })),
+        ...(typeof plan.currentStep === 'string' ? { currentStep: plan.currentStep.slice(0, 100) } : {}),
+        ...(typeof plan.blockedReason === 'string' ? { blockedReason: plan.blockedReason.slice(0, 1000) } : {}),
+        completionEvidence: Array.isArray(plan.completionEvidence) ? plan.completionEvidence.filter(item => typeof item === 'string').slice(0, 10).map(item => item.slice(0, 1000)) : [],
+        updatedAt: typeof plan.updatedAt === 'number' ? plan.updatedAt : Date.now()
+      }
+      conversation.updatedAt = Date.now()
+      render(false)
+    }
+    return
+  }
   if (message.type === 'tool-result') {
     const toolPart = [...assistantMessage.parts]
       .reverse()
@@ -2620,7 +2681,7 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
   if (message.type === 'file-picked') {
     return Array.isArray(message.attachments)
   }
-  if (!['request-started', 'thinking', 'text-delta', 'code-delta', 'tool-requested', 'tool-result', 'warning', 'error', 'request-completed'].includes(message.type)) {
+  if (!['request-started', 'thinking', 'text-delta', 'code-delta', 'tool-requested', 'tool-result', 'task-plan', 'warning', 'error', 'request-completed'].includes(message.type)) {
     return false
   }
   return (
@@ -2637,7 +2698,8 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
     (message.tokenCount === undefined || typeof message.tokenCount === 'number') &&
     (message.tokensPerSecond === undefined || typeof message.tokensPerSecond === 'number') &&
     (message.startedAt === undefined || typeof message.startedAt === 'number') &&
-    (message.stopReason === undefined || ['failed-tool', 'invalid-model-response', 'cancelled', 'timeout', 'approval-rejected', 'context-limit', 'budget-limit', 'provider-failure'].includes(message.stopReason as string))
+    (message.stopReason === undefined || ['failed-tool', 'invalid-model-response', 'cancelled', 'timeout', 'approval-rejected', 'context-limit', 'budget-limit', 'provider-failure'].includes(message.stopReason as string)) &&
+    (message.type !== 'task-plan' || Boolean(message.plan && typeof message.plan === 'object' && Array.isArray((message.plan as { steps?: unknown }).steps)))
   )
 }
 
