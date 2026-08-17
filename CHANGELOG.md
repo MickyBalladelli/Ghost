@@ -18,6 +18,7 @@ All notable changes to this extension are documented here.
 - Added a Retry tool action that reuses the last valid tool arguments through a fresh approval flow.
 - Added shared terminal command auditing for file writes, destructive actions, network access, package installs, and privilege changes.
 - Blocked terminal file-writing commands and showed audit classifications before other terminal commands run.
+- Hardened terminal timeout, output-limit, cancellation, and cross-platform process-tree cleanup.
 
 ## 1.0.83 - 2026-08-17
 

@@ -20,6 +20,30 @@ export interface TerminalCommandAudit {
 
 const COMMAND_TIMEOUT_MS = 120000
 const MAX_OUTPUT_CHARS = 200000
+const PROCESS_TERMINATION_GRACE_MS = 500
+
+type TerminationReason = 'timeout' | 'cancelled' | 'output-limit'
+
+function terminateProcessTree(child: ReturnType<typeof spawn>, force: boolean): void {
+  if (!child.pid) {
+    child.kill(force ? 'SIGKILL' : 'SIGTERM')
+    return
+  }
+  if (process.platform === 'win32') {
+    const args = ['/pid', String(child.pid), '/t']
+    if (force) {
+      args.push('/f')
+    }
+    const taskkill = spawn('taskkill', args, { windowsHide: true, stdio: 'ignore' })
+    taskkill.on('error', () => child.kill(force ? 'SIGKILL' : 'SIGTERM'))
+    return
+  }
+  try {
+    process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM')
+  } catch {
+    child.kill(force ? 'SIGKILL' : 'SIGTERM')
+  }
+}
 
 export function auditTerminalCommand(command: string): TerminalCommandAudit {
   const normalized = command.trim().toLowerCase()
@@ -88,22 +112,41 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
     const child = spawn(invocation.shell, invocation.args, {
       cwd,
       env: process.env,
+      detached: process.platform !== 'win32',
       windowsHide: true
     })
     let output = ''
     let timedOut = false
+    let outputLimitReached = false
+    let terminationReason: TerminationReason | undefined
     let settled = false
     let cancellationSubscription: vscode.Disposable | undefined
+    let forceTerminationTimer: NodeJS.Timeout | undefined
+
+    const terminate = (reason: TerminationReason): void => {
+      if (settled || terminationReason) {
+        return
+      }
+      terminationReason = reason
+      terminateProcessTree(child, false)
+      forceTerminationTimer = setTimeout(() => terminateProcessTree(child, true), PROCESS_TERMINATION_GRACE_MS)
+    }
 
     const append = (chunk: string) => {
-      if (output.length < MAX_OUTPUT_CHARS) {
-        output += chunk.slice(0, MAX_OUTPUT_CHARS - output.length)
+      if (output.length >= MAX_OUTPUT_CHARS) {
+        terminate('output-limit')
+        return
+      }
+      output += chunk.slice(0, MAX_OUTPUT_CHARS - output.length)
+      if (output.length >= MAX_OUTPUT_CHARS) {
+        outputLimitReached = true
+        terminate('output-limit')
       }
     }
 
     const timeout = setTimeout(() => {
       timedOut = true
-      child.kill()
+      terminate('timeout')
     }, COMMAND_TIMEOUT_MS)
 
     const finish = (callback: () => void) => {
@@ -113,6 +156,9 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
 
       settled = true
       clearTimeout(timeout)
+      if (forceTerminationTimer) {
+        clearTimeout(forceTerminationTimer)
+      }
       cancellationSubscription?.dispose()
       callback()
     }
@@ -123,20 +169,27 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
     child.stderr.on('data', (chunk: string) => append(`\n${chunk}`))
     child.on('error', error => finish(() => reject(error)))
     child.on('close', code => {
-      const truncated = output.length >= MAX_OUTPUT_CHARS ? '\n[Output truncated]' : ''
-      const timeoutMessage = timedOut ? `\n[Command timed out after ${COMMAND_TIMEOUT_MS / 1000} seconds]` : ''
+      const outputMessage = outputLimitReached ? '\n[Output limit reached; process stopped]' : ''
+      const timeoutMessage = timedOut ? `\n[Command timed out after ${COMMAND_TIMEOUT_MS / 1000} seconds; process tree stopped]` : ''
       const exitMessage = `\n[Exit code: ${code ?? 'unknown'}]`
-      finish(() => resolve(`${output}${truncated}${timeoutMessage}${exitMessage}`))
+      const result = `${output}${outputMessage}${timeoutMessage}${exitMessage}`
+      if (terminationReason === 'cancelled') {
+        finish(() => reject(new Error(`Terminal command cancelled; process tree stopped.\n${result}`)))
+        return
+      }
+      if (terminationReason === 'timeout') {
+        finish(() => reject(new Error(result)))
+        return
+      }
+      finish(() => resolve(result))
     })
 
     cancellationSubscription = token.onCancellationRequested(() => {
-      child.kill()
-      finish(() => reject(new Error('Terminal command cancelled')))
+      terminate('cancelled')
     })
 
     if (token.isCancellationRequested) {
-      child.kill()
-      finish(() => reject(new Error('Terminal command cancelled')))
+      terminate('cancelled')
     }
   })
 }
