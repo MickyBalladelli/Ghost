@@ -279,6 +279,31 @@
           },
           "default": [],
           "description": "Tools Ghost must never use in this workspace."
+        },
+        "ghost.terminalEnvironmentAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "default": [
+            "PATH",
+            "HOME",
+            "USER",
+            "USERNAME",
+            "SHELL",
+            "ComSpec",
+            "SystemRoot",
+            "TMPDIR",
+            "TMP",
+            "TEMP",
+            "LANG",
+            "LC_ALL",
+            "TERM",
+            "CI",
+            "PWD"
+          ],
+          "description": "Environment variable names allowed in Ghost terminal processes. Secret-looking names are always excluded."
         }
       }
     },

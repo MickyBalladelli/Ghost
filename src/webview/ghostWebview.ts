@@ -32,6 +32,7 @@ interface ControlSettings {
   openaiUrl: string
   toolAllowlist: string[]
   toolDenylist: string[]
+  terminalEnvironmentAllowlist: string[]
   enableDebugLogging: boolean
   networkAccess: 'local' | 'external'
   chatModel: string
@@ -470,7 +471,8 @@ let controls: ControlSettings = {
   responseLength: 'balanced',
   mode: 'agent',
   fileEditApproval: 'confirm',
-  enableConversationPersistence: false
+  enableConversationPersistence: false,
+  terminalEnvironmentAllowlist: ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
 }
 let availableModels: string[] = [controls.chatModel]
 let availableModelMetadata: ModelMetadata[] = [{
@@ -643,6 +645,9 @@ app.innerHTML = `
           <input id="tool-allowlist" type="text" placeholder="ghost_read_file, ghost_apply_edit">
           <label for="tool-denylist">Denied tools</label>
           <input id="tool-denylist" type="text" placeholder="ghost_run_terminal_command">
+          <label for="terminal-environment-allowlist">Terminal environment allowlist</label>
+          <input id="terminal-environment-allowlist" type="text" placeholder="PATH, HOME, LANG">
+          <p class="settings-help">Names only. Secret-looking variables are always blocked and values are masked before Ghost sees command output.</p>
           <label for="assistant-name">Assistant name</label>
           <input id="assistant-name" type="text" maxlength="40" value="Ghost">
           <label for="assistant-avatar">Assistant avatar</label>
@@ -732,6 +737,7 @@ const providerHelpElement = document.getElementById('provider-help') as HTMLElem
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
 const toolAllowlistElement = document.getElementById('tool-allowlist') as HTMLInputElement
 const toolDenylistElement = document.getElementById('tool-denylist') as HTMLInputElement
+const terminalEnvironmentAllowlistElement = document.getElementById('terminal-environment-allowlist') as HTMLInputElement
 const fileEditApprovalElement = document.getElementById('file-edit-approval') as HTMLSelectElement
 const assistantNameElement = document.getElementById('assistant-name') as HTMLInputElement
 const assistantAvatarElement = document.getElementById('assistant-avatar') as HTMLInputElement
@@ -803,6 +809,7 @@ const createPersistedState = () => ({
     openaiUrl: controls.openaiUrl,
     toolAllowlist: controls.toolAllowlist,
     toolDenylist: controls.toolDenylist,
+    terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
     chatModel: controls.chatModel,
     autocompleteModel: controls.autocompleteModel,
     maxContextTokens: controls.maxContextTokens,
@@ -912,6 +919,7 @@ const sendSettingsUpdate = () => {
         openaiUrl: controls.openaiUrl,
         toolAllowlist: controls.toolAllowlist,
         toolDenylist: controls.toolDenylist,
+        terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
         chatModel: controls.chatModel,
         maxContextTokens: controls.maxContextTokens,
         temperature: controls.temperature,
@@ -986,6 +994,7 @@ const renderControls = () => {
       : 'Ollama endpoint.'
   toolAllowlistElement.value = controls.toolAllowlist.join(', ')
   toolDenylistElement.value = controls.toolDenylist.join(', ')
+  terminalEnvironmentAllowlistElement.value = controls.terminalEnvironmentAllowlist.join(', ')
   debugLoggingElement.checked = controls.enableDebugLogging
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
@@ -2219,6 +2228,10 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (Array.isArray(preferences.toolDenylist)) {
         controls.toolDenylist = preferences.toolDenylist.filter((item): item is string => typeof item === 'string')
       }
+      if (Array.isArray(preferences.terminalEnvironmentAllowlist)) {
+        controls.terminalEnvironmentAllowlist = preferences.terminalEnvironmentAllowlist
+          .filter((item): item is string => typeof item === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(item))
+      }
       if (typeof preferences.enableDebugLogging === 'boolean') {
         controls.enableDebugLogging = preferences.enableDebugLogging
       }
@@ -2722,6 +2735,15 @@ const updateToolPermissions = () => {
 }
 toolAllowlistElement.addEventListener('change', updateToolPermissions)
 toolDenylistElement.addEventListener('change', updateToolPermissions)
+const updateTerminalEnvironmentAllowlist = () => {
+  controls.terminalEnvironmentAllowlist = [...new Set(terminalEnvironmentAllowlistElement.value
+    .split(',')
+    .map(item => item.trim())
+    .filter(item => /^[A-Za-z_][A-Za-z0-9_]*$/.test(item)))].slice(0, 40)
+  sendSettingsUpdate()
+  saveState()
+}
+terminalEnvironmentAllowlistElement.addEventListener('change', updateTerminalEnvironmentAllowlist)
 
 modelElement.addEventListener('change', () => {
   controls.chatModel = modelElement.value

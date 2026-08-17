@@ -1478,6 +1478,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         openaiUrl: settings.openaiUrl,
         toolAllowlist: settings.toolAllowlist ?? [...GHOST_TOOL_NAMES],
         toolDenylist: settings.toolDenylist ?? [],
+        terminalEnvironmentAllowlist: settings.terminalEnvironmentAllowlist,
         enableDebugLogging: settings.enableDebugLogging,
         networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl) ? 'external' : 'local'
       },
@@ -1526,6 +1527,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (Array.isArray(update.toolDenylist)) {
       await ghostConfig.update('toolDenylist', update.toolDenylist, target)
+    }
+    if (Array.isArray(update.terminalEnvironmentAllowlist)) {
+      await ghostConfig.update('terminalEnvironmentAllowlist', update.terminalEnvironmentAllowlist, target)
     }
     if (update.provider) {
       await ghostConfig.update('provider', update.provider, target)

@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process'
 
 import * as vscode from 'vscode'
 
+import { DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST, getGhostSettings } from '../config'
+import { redactSensitiveText } from '../privacy/redact'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 
 export interface RunTerminalCommandInput {
@@ -23,6 +25,40 @@ const MAX_OUTPUT_CHARS = 200000
 const PROCESS_TERMINATION_GRACE_MS = 500
 
 type TerminationReason = 'timeout' | 'cancelled' | 'output-limit'
+const SECRET_ENVIRONMENT_NAME = /(?:API|ACCESS|AUTH|BEARER|CERT|COOKIE|CREDENTIAL|KEY|PASSWORD|PASSWD|PRIVATE|SECRET|TOKEN)/i
+const VALID_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+function getEnvironmentValue(name: string): string | undefined {
+  if (process.env[name] !== undefined) {
+    return process.env[name]
+  }
+  const entry = Object.entries(process.env).find(([key]) => key.toLowerCase() === name.toLowerCase())
+  return entry?.[1]
+}
+
+function getTerminalEnvironment(): NodeJS.ProcessEnv {
+  const configured = getGhostSettings().terminalEnvironmentAllowlist
+  const names = Array.isArray(configured) ? configured : DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST
+  const environment: NodeJS.ProcessEnv = {}
+  for (const rawName of names) {
+    const name = typeof rawName === 'string' ? rawName.trim() : ''
+    if (!VALID_ENVIRONMENT_NAME.test(name) || SECRET_ENVIRONMENT_NAME.test(name)) {
+      continue
+    }
+    const value = getEnvironmentValue(name)
+    if (value !== undefined) {
+      environment[name] = value
+    }
+  }
+  return environment
+}
+
+function redactTerminalOutput(output: string, environment: NodeJS.ProcessEnv): string {
+  const values = Object.values(environment)
+    .filter((value): value is string => typeof value === 'string' && value.length >= 4)
+    .sort((left, right) => right.length - left.length)
+  return values.reduce((redacted, value) => redacted.split(value).join('[REDACTED_ENV]'), redactSensitiveText(output))
+}
 
 function terminateProcessTree(child: ReturnType<typeof spawn>, force: boolean): void {
   if (!child.pid) {
@@ -109,9 +145,10 @@ function getShellInvocation(command: string): { shell: string; args: string[] } 
 function runCommand(command: string, cwd: string, token: vscode.CancellationToken): Promise<string> {
   return new Promise((resolve, reject) => {
     const invocation = getShellInvocation(command)
+    const environment = getTerminalEnvironment()
     const child = spawn(invocation.shell, invocation.args, {
       cwd,
-      env: process.env,
+      env: environment,
       detached: process.platform !== 'win32',
       windowsHide: true
     })
@@ -172,7 +209,7 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
       const outputMessage = outputLimitReached ? '\n[Output limit reached; process stopped]' : ''
       const timeoutMessage = timedOut ? `\n[Command timed out after ${COMMAND_TIMEOUT_MS / 1000} seconds; process tree stopped]` : ''
       const exitMessage = `\n[Exit code: ${code ?? 'unknown'}]`
-      const result = `${output}${outputMessage}${timeoutMessage}${exitMessage}`
+      const result = `${redactTerminalOutput(output, environment)}${outputMessage}${timeoutMessage}${exitMessage}`
       if (terminationReason === 'cancelled') {
         finish(() => reject(new Error(`Terminal command cancelled; process tree stopped.\n${result}`)))
         return

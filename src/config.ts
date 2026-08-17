@@ -16,6 +16,24 @@ export const GHOST_TOOL_NAMES = [
   'ghost_list_directory'
 ] as const
 
+export const DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST = [
+  'PATH',
+  'HOME',
+  'USER',
+  'USERNAME',
+  'SHELL',
+  'ComSpec',
+  'SystemRoot',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'CI',
+  'PWD'
+] as const
+
 export interface GhostSettings {
   ollamaUrl: string
   openaiUrl: string
@@ -38,6 +56,7 @@ export interface GhostSettings {
   enableDebugLogging: boolean
   toolAllowlist?: string[]
   toolDenylist?: string[]
+  terminalEnvironmentAllowlist: string[]
 }
 
 export type GhostSetting = keyof GhostSettings
@@ -63,7 +82,8 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   enableConversationPersistence: false,
   enableDebugLogging: false,
   toolAllowlist: [...GHOST_TOOL_NAMES],
-  toolDenylist: []
+  toolDenylist: [],
+  terminalEnvironmentAllowlist: [...DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST]
 }
 
 export type GhostSettingsChangeListener = (
@@ -99,7 +119,8 @@ export class GhostConfig {
       enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOST_SETTINGS.enableConversationPersistence),
       enableDebugLogging: configuration.get('enableDebugLogging', DEFAULT_GHOST_SETTINGS.enableDebugLogging),
       toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOST_SETTINGS.toolAllowlist),
-      toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOST_SETTINGS.toolDenylist)
+      toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOST_SETTINGS.toolDenylist),
+      terminalEnvironmentAllowlist: configuration.get('terminalEnvironmentAllowlist', DEFAULT_GHOST_SETTINGS.terminalEnvironmentAllowlist)
     }
   }
 

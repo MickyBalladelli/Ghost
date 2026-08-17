@@ -72,6 +72,7 @@ export interface GhostSettingsUpdate {
   workspaceOnly?: boolean
   toolAllowlist?: string[]
   toolDenylist?: string[]
+  terminalEnvironmentAllowlist?: string[]
 }
 
 export interface GhostPersistedState {
@@ -173,6 +174,7 @@ export type GhostExtensionMessage =
         openaiUrl: string
         toolAllowlist: string[]
         toolDenylist: string[]
+        terminalEnvironmentAllowlist: string[]
         enableDebugLogging: boolean
         networkAccess: 'local' | 'external'
       }
@@ -276,6 +278,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
     && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.every(item => typeof item === 'string')))
     && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.every(item => typeof item === 'string')))
+    && (value.terminalEnvironmentAllowlist === undefined || (Array.isArray(value.terminalEnvironmentAllowlist) && value.terminalEnvironmentAllowlist.every(item => typeof item === 'string')))
   )
 }
 

@@ -19,6 +19,8 @@ All notable changes to this extension are documented here.
 - Added shared terminal command auditing for file writes, destructive actions, network access, package installs, and privilege changes.
 - Blocked terminal file-writing commands and showed audit classifications before other terminal commands run.
 - Hardened terminal timeout, output-limit, cancellation, and cross-platform process-tree cleanup.
+- Replaced the raw terminal environment with a configurable safe allowlist and masked environment values from command output.
+- Always excluded secret-looking environment variable names, including keys, tokens, passwords, credentials, and private values.
 
 ## 1.0.83 - 2026-08-17
 
