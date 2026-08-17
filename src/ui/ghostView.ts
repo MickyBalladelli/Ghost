@@ -26,7 +26,7 @@ import {
   GhostToolDiffPreview,
   GhostViewStatus,
   GhostWebviewRequestOptions,
-  isGhostWebviewMessage
+  decodeGhostWebviewMessage
 } from './ghostProtocol'
 import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
@@ -494,9 +494,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private cancel(requestId: string): void {
+  private cancel(requestId: string, conversationId?: string): void {
     const request = this.requests.get(requestId)
-    if (!request) {
+    if (!request || (conversationId !== undefined && request.conversationId !== conversationId)) {
       return
     }
     this.resolvePendingApprovals(requestId, { decision: 'reject' })
@@ -526,7 +526,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     const stored = this.failedToolRetries.get(failedToolCallId)
-    if (stored && (stored.conversationId !== conversationId || stored.call.name !== fallbackCall.name)) {
+    if (!stored || stored.requestId !== requestId || stored.conversationId !== conversationId || stored.call.name !== fallbackCall.name) {
       return
     }
     const call = stored?.call ?? fallbackCall
@@ -1656,11 +1656,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async handleMessage(value: unknown): Promise<void> {
-    if (!isGhostWebviewMessage(value)) {
+    const message = decodeGhostWebviewMessage(value)
+    if (!message) {
       return
     }
 
-    switch (value.type) {
+    switch (message.type) {
       case 'ready':
         await this.sendPersistedState()
         this.postState()
@@ -1672,13 +1673,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.clear()
         return
       case 'export':
-        await this.export(value.state)
+        await this.export(message.state)
         return
       case 'import':
         await this.importState()
         return
       case 'persist-state':
-        await this.persistState(value.state)
+        await this.persistState(message.state)
         return
       case 'check-status':
         await vscode.commands.executeCommand('ghost.checkOllamaStatus')
@@ -1687,50 +1688,50 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await this.testProvider()
         return
       case 'submit':
-        await this.submit(value.requestId, value.conversationId, value.prompt, value.options, value.attachments)
+        await this.submit(message.requestId, message.conversationId, message.prompt, message.options, message.attachments)
         return
       case 'cancel':
-        this.cancel(value.requestId)
+        this.cancel(message.requestId, message.conversationId)
         return
       case 'retry-tool':
-        await this.retryFailedTool(value.requestId, value.conversationId, value.toolCallId, {
-          name: value.tool as LocalToolName,
-          arguments: value.arguments
+        await this.retryFailedTool(message.requestId, message.conversationId, message.toolCallId, {
+          name: message.tool as LocalToolName,
+          arguments: message.arguments
         })
         return
       case 'approve-tool':
-        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, {
-          decision: value.decision,
-          selectedHunkIndexes: value.selectedHunkIndexes
+        this.decideToolApproval(message.requestId, message.conversationId, message.toolCallId, {
+          decision: message.decision,
+          selectedHunkIndexes: message.selectedHunkIndexes
         })
         return
       case 'reject-tool':
-        this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, { decision: 'reject' })
+        this.decideToolApproval(message.requestId, message.conversationId, message.toolCallId, { decision: 'reject' })
         return
       case 'cancel-tool':
-        this.cancel(value.requestId)
+        this.cancel(message.requestId, message.conversationId)
         return
       case 'edit-tool':
-        await this.editToolArguments(value.requestId, value.conversationId, value.toolCallId, value.arguments)
+        await this.editToolArguments(message.requestId, message.conversationId, message.toolCallId, message.arguments)
         return
       case 'restore-tool':
-        await this.restoreTool(value.requestId, value.conversationId, value.toolCallId)
+        await this.restoreTool(message.requestId, message.conversationId, message.toolCallId)
         return
       case 'open-file':
-        await this.openFile(value.path, value.line)
+        await this.openFile(message.path, message.line)
         return
       case 'load-controls':
       case 'refresh-models':
         await this.sendControlsState()
         return
       case 'update-settings':
-        await this.updateSettings(value.settings)
+        await this.updateSettings(message.settings)
         return
       case 'pick-file':
         await this.pickFiles()
         return
       case 'select-model':
-        await this.updateSettings({ chatModel: value.model })
+        await this.updateSettings({ chatModel: message.model })
         return
       case 'retry':
       case 'regenerate':

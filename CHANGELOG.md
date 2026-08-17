@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.86 - 2026-08-17
+
+- Added one bounded webview message decoder with strict source/version checks, payload limits, field schemas, and unknown-type rejection.
+- Enforced request and conversation ownership for cancellation and failed-tool retry actions.
+
 ## 1.0.85 - 2026-08-17
 
 - Added realpath and symlink boundary checks for workspace paths, including multi-root and missing-root handling.

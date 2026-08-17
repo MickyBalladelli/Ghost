@@ -26,7 +26,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add symlink and realpath boundary checks in `src/tools/workspacePath.ts`; test traversal, symlinks, multi-root workspaces, and missing roots.
 - [x] Store provider API keys in VS Code SecretStorage. Do not put credentials in settings, URLs, exports, logs, or conversation persistence.
 - [x] Redact secrets before model context, webview display, diagnostics, persistence, and export. Expand `src/privacy/redact.ts` for URLs, headers, cookies, cloud keys, and common private-key formats.
-- [ ] Validate every webview message through one protocol decoder. Check origin/source, schema, request ownership, payload size, and unknown message types.
+- [x] Validate every webview message through one protocol decoder. Check origin/source, schema, request ownership, payload size, and unknown message types.
 - [ ] Add a warning and scope selector for auto-accept: one edit, current file, request, session, workspace, or always. Make dangerous tools never auto-accepted by default.
 - [ ] Add undo for every applied edit and a visible recovery path after a failed verification.
 - [ ] Add a privacy page that explains local providers, external providers, terminal access, storage, export, and redaction.

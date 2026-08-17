@@ -2,6 +2,7 @@ import type { GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
+export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = 8 * 1024 * 1024
 
 export type GhostViewStatus = 'ready' | 'offline'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
@@ -199,19 +200,28 @@ const isNonEmptyString = (value: unknown): value is string => (
   typeof value === 'string' && value.trim().length > 0
 )
 
+const isBoundedString = (value: unknown, maximum: number): value is string => (
+  typeof value === 'string' && value.length <= maximum
+)
+
+const isFiniteNumber = (value: unknown): value is number => (
+  typeof value === 'number' && Number.isFinite(value)
+)
+
 const isPersistedState = (value: unknown): value is GhostPersistedState => (
   isRecord(value) &&
   (value.schemaVersion === 1 || value.schemaVersion === GHOST_PERSISTENCE_SCHEMA_VERSION) &&
-  (value.conversations === undefined || Array.isArray(value.conversations)) &&
-  (value.activeConversationId === undefined || typeof value.activeConversationId === 'string') &&
-  (value.promptHistory === undefined || (Array.isArray(value.promptHistory) && value.promptHistory.every(item => typeof item === 'string'))) &&
+  (value.conversations === undefined || (Array.isArray(value.conversations) && value.conversations.length <= 1000)) &&
+  (value.activeConversationId === undefined || isBoundedString(value.activeConversationId, 256)) &&
+  (value.promptHistory === undefined || (Array.isArray(value.promptHistory) && value.promptHistory.length <= 100 && value.promptHistory.every(item => isBoundedString(item, 20000)))) &&
   (value.presets === undefined || Array.isArray(value.presets)) &&
   (value.showReasoning === undefined || typeof value.showReasoning === 'boolean') &&
   (value.preferences === undefined || isRecord(value.preferences))
 )
 
 const isRequestEnvelope = (message: Record<string, unknown>): boolean => (
-  isNonEmptyString(message.requestId) && isNonEmptyString(message.conversationId)
+  isBoundedString(message.requestId, 256) && message.requestId.trim().length > 0 &&
+  isBoundedString(message.conversationId, 256) && message.conversationId.trim().length > 0
 )
 
 const isAttachment = (value: unknown): value is GhostAttachment => {
@@ -219,9 +229,9 @@ const isAttachment = (value: unknown): value is GhostAttachment => {
     return false
   }
   return (
-    (value.path === undefined || isNonEmptyString(value.path)) &&
+    (value.path === undefined || (isBoundedString(value.path, 4096) && value.path.trim().length > 0)) &&
     (value.content === undefined || (typeof value.content === 'string' && value.content.length <= 1024 * 1024)) &&
-    (value.mimeType === undefined || typeof value.mimeType === 'string')
+    (value.mimeType === undefined || isBoundedString(value.mimeType, 256))
   )
 }
 
@@ -234,22 +244,27 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
   }
   if (
     (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) ||
-    (value.model !== undefined && typeof value.model !== 'string') ||
-    (value.temperature !== undefined && typeof value.temperature !== 'number') ||
-    (value.topP !== undefined && typeof value.topP !== 'number') ||
-    (value.topK !== undefined && typeof value.topK !== 'number') ||
-    (value.minP !== undefined && typeof value.minP !== 'number') ||
-    (value.presencePenalty !== undefined && typeof value.presencePenalty !== 'number') ||
-    (value.repeatPenalty !== undefined && typeof value.repeatPenalty !== 'number') ||
-    (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||
-    (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') ||
+    (value.model !== undefined && !isBoundedString(value.model, 512)) ||
+    (value.temperature !== undefined && !isFiniteNumber(value.temperature)) ||
+    (value.topP !== undefined && !isFiniteNumber(value.topP)) ||
+    (value.topK !== undefined && !isFiniteNumber(value.topK)) ||
+    (value.minP !== undefined && !isFiniteNumber(value.minP)) ||
+    (value.presencePenalty !== undefined && !isFiniteNumber(value.presencePenalty)) ||
+    (value.repeatPenalty !== undefined && !isFiniteNumber(value.repeatPenalty)) ||
+    (value.maxContextTokens !== undefined && !isFiniteNumber(value.maxContextTokens)) ||
+    (value.maxTokens !== undefined && !isFiniteNumber(value.maxTokens)) ||
     (value.showReasoning !== undefined && typeof value.showReasoning !== 'boolean') ||
-    (value.customSystemInstructions !== undefined && typeof value.customSystemInstructions !== 'string') ||
+    (value.customSystemInstructions !== undefined && !isBoundedString(value.customSystemInstructions, 8000)) ||
     (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false
   }
-  return value.context === undefined || isRecord(value.context)
+  return value.context === undefined || (
+    isRecord(value.context) &&
+    Object.entries(value.context).every(([key, item]) => (
+      ['workspace', 'folders', 'activeFile', 'selection', 'openFiles', 'tools'].includes(key) && typeof item === 'boolean'
+    ))
+  )
 }
 
 const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
@@ -258,31 +273,45 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
   }
   return (
     (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) &&
-    (value.chatModel === undefined || typeof value.chatModel === 'string') &&
-    (value.autocompleteModel === undefined || typeof value.autocompleteModel === 'string') &&
-    (value.maxContextTokens === undefined || typeof value.maxContextTokens === 'number') &&
-    (value.temperature === undefined || typeof value.temperature === 'number') &&
-    (value.topP === undefined || typeof value.topP === 'number') &&
-    (value.topK === undefined || typeof value.topK === 'number') &&
-    (value.minP === undefined || typeof value.minP === 'number') &&
-    (value.presencePenalty === undefined || typeof value.presencePenalty === 'number') &&
-    (value.repeatPenalty === undefined || typeof value.repeatPenalty === 'number') &&
+    (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
+    (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
+    (value.maxContextTokens === undefined || isFiniteNumber(value.maxContextTokens)) &&
+    (value.temperature === undefined || isFiniteNumber(value.temperature)) &&
+    (value.topP === undefined || isFiniteNumber(value.topP)) &&
+    (value.topK === undefined || isFiniteNumber(value.topK)) &&
+    (value.minP === undefined || isFiniteNumber(value.minP)) &&
+    (value.presencePenalty === undefined || isFiniteNumber(value.presencePenalty)) &&
+    (value.repeatPenalty === undefined || isFiniteNumber(value.repeatPenalty)) &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.fileEditApproval === undefined || ['confirm', 'auto'].includes(value.fileEditApproval as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
-    (value.ollamaUrl === undefined || typeof value.ollamaUrl === 'string')
-    && (value.mlxUrl === undefined || typeof value.mlxUrl === 'string')
-    && (value.openaiUrl === undefined || typeof value.openaiUrl === 'string')
+    (value.ollamaUrl === undefined || isBoundedString(value.ollamaUrl, 4096))
+    && (value.mlxUrl === undefined || isBoundedString(value.mlxUrl, 4096))
+    && (value.openaiUrl === undefined || isBoundedString(value.openaiUrl, 4096))
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
-    && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.every(item => typeof item === 'string')))
-    && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.every(item => typeof item === 'string')))
-    && (value.terminalEnvironmentAllowlist === undefined || (Array.isArray(value.terminalEnvironmentAllowlist) && value.terminalEnvironmentAllowlist.every(item => typeof item === 'string')))
+    && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.length <= 100 && value.toolAllowlist.every(item => isBoundedString(item, 256))))
+    && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.length <= 100 && value.toolDenylist.every(item => isBoundedString(item, 256))))
+    && (value.terminalEnvironmentAllowlist === undefined || (Array.isArray(value.terminalEnvironmentAllowlist) && value.terminalEnvironmentAllowlist.length <= 100 && value.terminalEnvironmentAllowlist.every(item => isBoundedString(item, 256))))
   )
 }
 
+export function decodeGhostWebviewMessage(value: unknown): GhostWebviewMessage | undefined {
+  return isGhostWebviewMessage(value) ? value : undefined
+}
+
 export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMessage {
+  if (!isRecord(value)) {
+    return false
+  }
+  try {
+    if (JSON.stringify(value).length > MAX_GHOST_WEBVIEW_MESSAGE_BYTES) {
+      return false
+    }
+  } catch {
+    return false
+  }
   if (!isRecord(value) || value.source !== 'ghost-webview' || value.version !== GHOST_WEBVIEW_PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
     return false
   }
@@ -310,28 +339,28 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
   }
   if (value.type === 'retry-tool') {
-    return isNonEmptyString(value.toolCallId) &&
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 &&
       ['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
       isRecord(value.arguments)
   }
   if (value.type === 'approve-tool') {
-    return isNonEmptyString(value.toolCallId) && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
   }
   if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
-    return isNonEmptyString(value.toolCallId)
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0
   }
   if (value.type === 'edit-tool') {
-    return isNonEmptyString(value.toolCallId) && isRecord(value.arguments)
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && isRecord(value.arguments)
   }
   if (value.type === 'restore-tool') {
     return isNonEmptyString(value.toolCallId)
   }
   if (value.type === 'open-file') {
     const line = value.line
-    return isNonEmptyString(value.path) && (line === undefined || (typeof line === 'number' && Number.isInteger(line) && line >= 1))
+    return isBoundedString(value.path, 4096) && value.path.trim().length > 0 && (line === undefined || (typeof line === 'number' && Number.isInteger(line) && line >= 1))
   }
   if (value.type === 'edit') {
-    return isNonEmptyString(value.messageId) && typeof value.prompt === 'string'
+    return isBoundedString(value.messageId, 256) && value.messageId.trim().length > 0 && isBoundedString(value.prompt, 20000)
   }
   if (value.type === 'attach') {
     return Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)
@@ -340,7 +369,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return ['workspace', 'folders', 'activeFile', 'selection', 'openFiles', 'tools'].includes(value.contextKey as string)
   }
   if (value.type === 'select-model') {
-    return isNonEmptyString(value.model)
+    return isBoundedString(value.model, 512) && value.model.trim().length > 0
   }
   if (value.type === 'update-settings') {
     return isSettingsUpdate(value.settings)
