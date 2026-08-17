@@ -214,6 +214,10 @@ function summarizeToolResult(value: string): string {
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
 }
 
+function isProviderConnectivityFailure(value: string): boolean {
+  return /abort|connection refused|connection reset|econn|enotfound|etimedout|fetch failed|network|socket|timed out|timeout|502|503|504|temporarily unavailable|offline/i.test(value)
+}
+
 function toolResultContinuation(toolName: LocalToolCall['name'], value: string): string {
   if (toolName === 'ghost_read_file') {
     const existingHint = value.match(/\[File output truncated\.[\s\S]*?\]/)?.[0]
@@ -1252,9 +1256,12 @@ export function createChatParticipantHandler(
 
     } catch (error) {
       if (!token.isCancellationRequested) {
-        finalStatus = 'offline'
         const message = redactSensitiveText(error instanceof Error ? error.message : 'Unknown local model error')
-        response.markdown(`Ghost could not reach the local model: ${message}`)
+        const connectivityFailure = isProviderConnectivityFailure(message)
+        finalStatus = connectivityFailure ? 'offline' : 'ready'
+        response.markdown(connectivityFailure
+          ? `Ghost could not reach the local model: ${message}`
+          : `Ghost request failed: ${message}`)
       }
     } finally {
       cancellation.dispose()

@@ -127,6 +127,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private pendingMessages: GhostExtensionMessage[] = []
   private status: GhostViewStatus = 'ready'
   private disposed = false
+  private controlsStateGeneration = 0
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
@@ -1461,6 +1462,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async sendControlsState(): Promise<void> {
+    const generation = ++this.controlsStateGeneration
     const settings = getGhostSettings()
     let models: string[] = []
     let connection: 'online' | 'offline' | 'unknown' = 'unknown'
@@ -1474,13 +1476,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             undefined,
             () => this.providerApiKey?.(settings.provider)
           )
-      const online = await client.checkHealth(1500)
+      const online = await client.checkHealth(3000)
+      if (this.disposed || generation !== this.controlsStateGeneration) {
+        return
+      }
       connection = online ? 'online' : 'offline'
       if (online) {
-        models = await client.listModels()
+        try {
+          models = await client.listModels()
+        } catch (error) {
+          this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
+        }
       }
     } catch {
+      if (this.disposed || generation !== this.controlsStateGeneration) {
+        return
+      }
       connection = 'offline'
+    }
+
+    if (this.disposed || generation !== this.controlsStateGeneration) {
+      return
     }
 
     if (models.length === 0) {
