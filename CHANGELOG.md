@@ -9,6 +9,7 @@ All notable changes to this extension are documented here.
 - Added clear no-tool failure reasons and always-visible Retry and Regenerate actions for failed replies.
 - Added workspace-relative model paths with host-side workspace validation while preserving absolute path compatibility.
 - Added bounded, redacted per-request event logs with timestamps and status transitions for display and export.
+- Added a shared provider adapter contract for chat, streaming, model discovery, health, capabilities, cancellation, and normalized errors.
 
 ## 1.0.92 - 2026-08-18
 

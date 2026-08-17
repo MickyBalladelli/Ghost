@@ -1,14 +1,11 @@
 import * as vscode from 'vscode'
 
 import { DEFAULT_MLX_URL, MlxChatOptions, MlxClient } from './mlxClient'
+import { createProviderAdapter, ProviderAdapter, ProviderClient, ProviderId } from './providerAdapter'
 
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostProvider = ProviderId
 
-export interface LlmClient {
-  checkHealth(timeoutMs?: number): Promise<boolean>
-  listModels?(signal?: AbortSignal): Promise<string[]>
-  streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string>
-}
+export type LlmClient = ProviderClient
 
 export interface LlmProviderClients {
   ollamaClient: LlmClient
@@ -19,6 +16,7 @@ export interface LlmProviderClients {
 export interface ResolvedLlmClient {
   provider: GhostProvider
   client: LlmClient
+  adapter: ProviderAdapter
 }
 
 export interface LlmFactoryOptions {
@@ -37,6 +35,7 @@ export class LlmFactory {
   private readonly configuration: vscode.WorkspaceConfiguration
   private readonly mlxDetectionTimeoutMs: number
   private readonly clients: LlmProviderClients
+  private readonly adapters = new Map<GhostProvider, ProviderAdapter>()
   private mlxDetectionComplete = false
 
   constructor(clients: LlmProviderClients, options: LlmFactoryOptions = {}) {
@@ -58,16 +57,18 @@ export class LlmFactory {
       await this.suggestMlxProvider()
     }
 
+    const client = this.getClient(provider)
     return {
       provider,
-      client: this.getClient(provider)
+      client,
+      adapter: this.getAdapter(provider, client)
     }
   }
 
   async *streamChatCompletion(options: MlxChatOptions & { provider?: GhostProvider }): AsyncGenerator<string> {
     const resolved = await this.resolve(options.provider)
-    const model = await this.selectAvailableModel(resolved.client, options.model, options.signal)
-    yield* resolved.client.streamChatCompletion({ ...options, model })
+    const model = await this.selectAvailableModel(resolved.adapter, options.model, options.signal)
+    yield* resolved.adapter.stream({ ...options, model })
   }
 
   resetMlxDetection(): void {
@@ -99,8 +100,16 @@ export class LlmFactory {
     return this.clients.openaiCompatibleClient
   }
 
-  private async selectAvailableModel(client: LlmClient, configuredModel: string, signal?: AbortSignal): Promise<string> {
-    if (!client.listModels || !configuredModel.trim()) {
+  private getAdapter(provider: GhostProvider, client: LlmClient): ProviderAdapter {
+    const existing = this.adapters.get(provider)
+    if (existing) return existing
+    const adapter = createProviderAdapter(provider, client)
+    this.adapters.set(provider, adapter)
+    return adapter
+  }
+
+  private async selectAvailableModel(client: ProviderAdapter, configuredModel: string, signal?: AbortSignal): Promise<string> {
+    if (!configuredModel.trim()) {
       return configuredModel
     }
 
@@ -119,7 +128,7 @@ export class LlmFactory {
 
   private async suggestMlxProvider(): Promise<boolean> {
     const mlxClient = this.getMlxClient()
-    const isAvailable = await mlxClient.checkHealth(this.mlxDetectionTimeoutMs)
+    const isAvailable = await this.getAdapter('mlx-vlm', mlxClient).health(this.mlxDetectionTimeoutMs)
 
     if (!isAvailable) {
       return false
