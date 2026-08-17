@@ -2378,6 +2378,22 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         border-left-color: var(--vscode-charts-yellow, #cca700);
       }
 
+      .tool-progress.tool-success {
+        border-left-color: var(--vscode-testing-iconPassed, #73c991);
+        color: var(--vscode-testing-iconPassed, #73c991);
+      }
+
+      .tool-progress.tool-failure {
+        border-left-color: var(--vscode-editorWarning-foreground, #cca700);
+        color: var(--vscode-editorWarning-foreground, #cca700);
+      }
+
+      .tool-status-icon {
+        display: inline-block;
+        font-weight: 700;
+        margin-right: 4px;
+      }
+
       .tool-details {
         margin-top: 5px;
       }

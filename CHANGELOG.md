@@ -2,8 +2,9 @@
 
 All notable changes to this extension are documented here.
 
-## 1.0.82 - 2026-08-17
+## 1.0.83 - 2026-08-17
 
+- Added `TODO.md` with a prioritized roadmap for safety, reliability, UX, performance, provider support, testing, and release quality.
 - Added “Apply to all files” approval for the current session.
 - Added Confirm or Auto-accept as the default file-edit behavior.
 - Blocked terminal redirection and script-based file writes so failed file edits retry through Ghost file tools.
@@ -22,6 +23,7 @@ All notable changes to this extension are documented here.
 - Added chunked large-file reads, no-op edit detection, repeated-edit detection, and an eight-edit per-file safety limit.
 - Reduced the per-batch tool-call limit from 512 to 128 so looping requests stop sooner.
 - Increased tool-enabled response capacity to 4096 tokens and instructed Ghost to split large edits, preventing truncated JSON tool calls.
+- Added green success and orange failure icons to compact tool progress.
 
 ## 1.0.67 - 2026-08-16
 

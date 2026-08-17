@@ -1606,7 +1606,17 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
       ? ` — ${escapeHtml(part.toolCall.result.replace(/^Tool error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 240))}`
       : ''
-    return `<div class="message-progress tool-progress"><strong>${escapeHtml(toolActionText(part.toolCall))}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+    const toolStatusClass = part.toolCall.status === 'completed'
+      ? 'tool-success'
+      : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
+        ? 'tool-failure'
+        : ''
+    const toolStatusIcon = part.toolCall.status === 'completed'
+      ? '✓'
+      : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
+        ? '✕'
+        : '•'
+    return `<div class="message-progress tool-progress ${toolStatusClass}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${escapeHtml(toolActionText(part.toolCall))}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')

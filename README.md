@@ -107,6 +107,8 @@ Ghost allows up to 128 tool calls per batch. It asks whether to continue after t
 
 Tool progress is compact by default: Ghost says what it is reading, editing, or executing. Enable **Show verbose tool details** in Settings to show raw arguments, results, timings, and previews.
 
+Tool results use a green check for success and an orange cross for failed or rejected actions. Compact failures include the short error reason.
+
 ## Settings
 
 All VS Code settings use the `ghost` prefix. Open **Settings** and search for `Ghost`, or use the **Settings** gear in the Ghost view.
