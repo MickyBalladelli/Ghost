@@ -101,6 +101,12 @@ Ghost exposes these tools to the agent:
 
 The **Context** popup shows the tools currently available to the request. The **Settings** panel and `ghost.toolAllowlist` / `ghost.toolDenylist` settings control which tools Ghost may use.
 
+Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Ghost also stops repeated edits to the same file and stops after eight successful edits to one file to prevent edit loops.
+
+Ghost allows up to 128 tool calls per batch. It asks whether to continue after that limit. The counter includes reads, edits, terminal commands, and directory listings.
+
+Tool progress is compact by default: Ghost says what it is reading, editing, or executing. Enable **Show verbose tool details** in Settings to show raw arguments, results, timings, and previews.
+
 ## Settings
 
 All VS Code settings use the `ghost` prefix. Open **Settings** and search for `Ghost`, or use the **Settings** gear in the Ghost view.
@@ -122,7 +128,12 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `ghost.maxContextTokens` | `8192` | Maximum context budget sent to the model. |
-| `ghost.temperature` | `0.2` | Sampling temperature from `0` to `2`. Lower values are more predictable. |
+| `ghost.temperature` | `0.3` | Sampling temperature from `0` to `2`. Lower values are more predictable; higher values are more varied. |
+| `ghost.topP` | `0.9` | Nucleus sampling from `0` to `1`. Keeps the smallest likely-token group reaching this probability. |
+| `ghost.topK` | `20` | Limits each next token to the K most likely choices. `0` disables the limit. |
+| `ghost.minP` | `0.05` | Removes tokens below this fraction of the most likely token. `0` disables the filter. |
+| `ghost.presencePenalty` | `0.0` | Penalizes tokens already used. Positive values encourage new topics; negative values allow reuse. |
+| `ghost.repeatPenalty` | `1.05` | Ollama repeat penalty. `1` disables it; values above `1` penalize repeated text more. |
 | `ghost.responseLength` | `balanced` | Choose `short`, `balanced`, `long`, or `unlimited`. |
 | `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. Agent implements approved code changes. |
 
@@ -146,16 +157,19 @@ The **Settings** panel also includes:
 - Automatic context collection
 - Workspace-specific settings
 - Context token limit, temperature, response length, and workflow mode
+- Temperature, Top P, Top K, Min P, presence penalty, and repeat penalty controls with tooltips
 - Provider endpoint and model selection
 - Composer height and prompt row count
 - Assistant name, avatar, and accent color
 - Compact conversation layout
 - Provider reasoning visibility
-- Thinking details and tool progress visibility
+- Thinking details and compact or verbose tool progress
 - Telemetry-free diagnostics
 - Custom system instructions
 - Conversation persistence
 - Local debug logging
+
+Generation settings are sent with each request. Native Ollama supports all six sampling controls. MLX/VLM and OpenAI-compatible endpoints receive the standard `temperature`, `top_p`, and `presence_penalty` fields; their servers may ignore the Ollama-specific `topK`, `minP`, and `repeatPenalty` controls.
 
 The panel also manages prompt presets. Saving a preset closes the panel. When conversation persistence is enabled, presets are stored in VS Code extension storage rather than in the project. The **Use workspace-specific settings** option controls where Ghost configuration is written: enabled writes to the current workspace settings, while disabled writes to global VS Code user settings.
 
@@ -197,7 +211,7 @@ ollama pull qwen2.5-coder:1.5b
 
 ### Responses are slow
 
-Lower `ghost.maxContextTokens`, disable automatic context, hide thinking and tool progress details, or enable compact layout. Long histories are loaded in pages.
+Lower `ghost.maxContextTokens`, disable automatic context, hide thinking details, choose compact tool progress, or enable compact layout. Long histories are loaded in pages.
 
 ### A tool is blocked
 

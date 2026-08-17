@@ -23,6 +23,11 @@ export interface FimCompletionOptions {
   prefix: string
   suffix: string
   temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   maxTokens?: number
   signal?: AbortSignal
   mode?: OllamaApiMode
@@ -415,6 +420,11 @@ export class OllamaClient {
           stream,
           options: {
             ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+            ...(options.topP === undefined ? {} : { top_p: options.topP }),
+            ...(options.topK === undefined ? {} : { top_k: options.topK }),
+            ...(options.minP === undefined ? {} : { min_p: options.minP }),
+            ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
+            ...(options.repeatPenalty === undefined ? {} : { repeat_penalty: options.repeatPenalty }),
             ...(options.maxTokens === undefined ? {} : { num_predict: options.maxTokens })
           }
         })
@@ -433,6 +443,8 @@ export class OllamaClient {
         messages,
         stream,
         ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+        ...(options.topP === undefined ? {} : { top_p: options.topP }),
+        ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
         ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens })
       })
     }
@@ -468,6 +480,11 @@ export class OllamaClient {
           stream: false,
           options: {
             ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+            ...(options.topP === undefined ? {} : { top_p: options.topP }),
+            ...(options.topK === undefined ? {} : { top_k: options.topK }),
+            ...(options.minP === undefined ? {} : { min_p: options.minP }),
+            ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
+            ...(options.repeatPenalty === undefined ? {} : { repeat_penalty: options.repeatPenalty }),
             ...(options.maxTokens === undefined ? {} : { num_predict: options.maxTokens })
           }
         })
@@ -486,6 +503,8 @@ export class OllamaClient {
         prompt,
         stream: false,
         ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+        ...(options.topP === undefined ? {} : { top_p: options.topP }),
+        ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
         ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens })
       })
     }

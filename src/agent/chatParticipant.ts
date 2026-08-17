@@ -8,10 +8,10 @@ import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
-import { LocalToolCall, parseLocalToolCall } from './toolCallParser'
+import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
-const DEFAULT_TEMPERATURE = 0.2
+const DEFAULT_TEMPERATURE = 0.3
 
 const SYSTEM_PROMPT = [
   'You are Ghost, a private local coding assistant.',
@@ -22,17 +22,34 @@ const SYSTEM_PROMPT = [
   'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
   'When using a tool, do not explain the plan first; emit the tool call as the complete response.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, or ghost_write_file.',
-  'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists.',
-  'Available tools: ghost_read_file({"path":"absolute workspace path"}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
-  'After receiving a tool result, continue the task and provide the final answer.'
+  'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
+  'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
-const MAX_TOOL_ROUNDS = 32
+const MAX_TOOL_ROUNDS = 128
+const MAX_EDITS_PER_FILE = 8
+const MAX_MISSING_TOOL_RETRIES = 2
+const MAX_EMPTY_PROVIDER_RETRIES = 2
 const MAX_TOOL_RESULT_CHARACTERS = 16000
 
 function summarizeToolResult(value: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
+}
+
+function describesWorkspaceChange(value: string): boolean {
+  return /\b(?:fix|edit|change|update|implement|create|write|remove|delete|add|replace|apply|modify|wire|refactor)\b/i.test(value)
+}
+
+function isFileEditTool(name: LocalToolCall['name']): boolean {
+  return name === 'ghost_write_file' || name === 'ghost_apply_edit'
+}
+
+function getEditPath(call: LocalToolCall): string | undefined {
+  return isFileEditTool(call.name) && typeof call.arguments.path === 'string'
+    ? call.arguments.path
+    : undefined
 }
 
 function getToolArgumentError(call: LocalToolCall): string | undefined {
@@ -87,6 +104,11 @@ export interface GhostRequestOptions {
   provider?: GhostProvider
   model?: string
   temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   maxContextTokens?: number
   maxTokens?: number
   mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
@@ -528,11 +550,18 @@ export function createChatParticipantHandler(
     }
 
     const toolsEnabled = requestOptions.context?.tools !== false
+    const workspaceChangeRequested = describesWorkspaceChange(request.prompt)
+    if (!toolsEnabled && workspaceChangeRequested) {
+      response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')
+      return
+    }
     const workflowInstruction = requestOptions.mode === 'agent'
       ? '\n\nAgent mode is active. When the user asks you to implement, fix, edit, or change code, do the work in the workspace. Inspect files with tools, use ghost_apply_edit or ghost_write_file to make changes, and use ghost_run_terminal_command only for requested or useful verification. Never use the terminal to create or edit files. Do not only describe a hypothetical solution. Start with a tool call when a workspace change is needed, then continue until the task is complete.'
       : requestOptions.mode === 'edit'
         ? '\n\nEdit mode is active. When the user asks for a code change, inspect the relevant files and propose the actual workspace edit with ghost_apply_edit or ghost_write_file. Do not only describe what could be changed.'
-        : ''
+        : workspaceChangeRequested
+          ? '\n\nThe user directly requested a workspace change. Use tools to inspect and edit the real files. Do not answer with a plan. Start with ghost_read_file, then use ghost_apply_edit or ghost_write_file.'
+          : ''
     const baseSystemPrompt = !toolsEnabled
       ? 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
       : `${SYSTEM_PROMPT}${workflowInstruction}`
@@ -553,6 +582,9 @@ export function createChatParticipantHandler(
     try {
       response.progress('Preparing model request')
       let toolCallCount = 0
+      let missingToolRetries = 0
+      let emptyProviderRetries = 0
+      const fileEditStates = new Map<string, { count: number; signatures: Set<string> }>()
       while (true) {
         const turn = await streamModelTurn(
           llmFactory,
@@ -561,6 +593,11 @@ export function createChatParticipantHandler(
             model: requestOptions.model?.trim() || settings.chatModel,
             messages,
             temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
+            topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
+            topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
+            minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
+            presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
+            repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
             maxTokens: requestOptions.maxTokens,
             signal: cancellation.signal
           },
@@ -577,14 +614,38 @@ export function createChatParticipantHandler(
         const generated = turn.generated
 
         if (!generated) {
+          if (emptyProviderRetries < MAX_EMPTY_PROVIDER_RETRIES) {
+            emptyProviderRetries += 1
+            response.progress(`Provider returned no content. Retrying (${emptyProviderRetries}/${MAX_EMPTY_PROVIDER_RETRIES})...`)
+            messages.push(
+              { role: 'assistant', content: '[empty provider response]' },
+              { role: 'user', content: 'The previous response was empty. Continue the requested task now. If a workspace file is involved, inspect it with ghost_read_file and then use the correct workspace tool. Emit exactly one complete valid JSON tool call, or give a concise answer if no tool is needed.' }
+            )
+            continue
+          }
           response.progress('Provider returned an empty response')
-          response.markdown('The provider returned no content. Check the model and connection, then retry.')
+          response.markdown('The provider returned no content after 2 retries. Check the model response or connection, then retry.')
           return
         }
 
         const toolCall = parseLocalToolCall(generated)
 
         if (!toolCall) {
+          const malformedToolCall = hasLocalToolCallIntent(generated)
+          const expectsWorkspaceTool = toolsEnabled && (workspaceChangeRequested || describesWorkspaceChange(generated) || malformedToolCall)
+          if (expectsWorkspaceTool && missingToolRetries < MAX_MISSING_TOOL_RETRIES) {
+            missingToolRetries += 1
+            response.progress(malformedToolCall
+              ? 'The model returned a malformed or truncated tool call. Asking it to retry with valid JSON.'
+              : 'The model described a workspace change without calling a tool. Asking it to perform the change.')
+            messages.push(
+              { role: 'assistant', content: generated },
+              { role: 'user', content: malformedToolCall
+                ? 'Your previous tool call was malformed or truncated. Retry with exactly one complete valid JSON tool call. Keep the edit small: use ghost_apply_edit with concise hunks, or use ghost_write_file only when replacing the complete file.'
+                : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
+            )
+            continue
+          }
           response.markdown(generated)
           return
         }
@@ -635,6 +696,21 @@ export function createChatParticipantHandler(
           )
           continue
         }
+        const editPath = getEditPath(toolCall)
+        const editSignature = editPath
+          ? `${toolCall.name}:${editPath}:${JSON.stringify(toolCall.arguments)}`
+          : undefined
+        const editState = editPath
+          ? fileEditStates.get(editPath) ?? { count: 0, signatures: new Set<string>() }
+          : undefined
+        if (editPath && editState && editSignature && editState.signatures.has(editSignature)) {
+          response.markdown(`Ghost stopped because it tried to apply the same edit to ${editPath} again. Review the file and retry with a more specific request.`)
+          return
+        }
+        if (editPath && editState && editState.count >= MAX_EDITS_PER_FILE) {
+          response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
+          return
+        }
         if (approval.decision === 'reject') {
           const rejection = approval.reason ?? 'User rejected this tool call.'
           response.progress(`Tool result: ${toolCall.name}: ${rejection}`)
@@ -669,6 +745,17 @@ export function createChatParticipantHandler(
           { role: 'assistant', content: generated },
           { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolResult}` }
         )
+
+        const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
+        if (editPath && editState && editSignature && !editFailed) {
+          editState.count += 1
+          editState.signatures.add(editSignature)
+          fileEditStates.set(editPath, editState)
+          if (editState.count >= MAX_EDITS_PER_FILE) {
+            response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
+            return
+          }
+        }
       }
 
     } catch (error) {

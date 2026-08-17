@@ -40,6 +40,11 @@ export interface MlxChatOptions {
   model: string
   messages: MlxMessage[]
   temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   maxTokens?: number
   signal?: AbortSignal
 }
@@ -264,6 +269,8 @@ export class MlxClient {
       model: options.model,
       messages: options.messages,
       temperature: options.temperature,
+      ...(options.topP === undefined ? {} : { top_p: options.topP }),
+      ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
       max_tokens: options.maxTokens,
       stream: true
     })

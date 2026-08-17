@@ -36,6 +36,11 @@ export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
   temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   maxContextTokens?: number
   maxTokens?: number
   mode?: GhostMode
@@ -50,6 +55,11 @@ export interface GhostSettingsUpdate {
   autocompleteModel?: string
   maxContextTokens?: number
   temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   responseLength?: GhostResponseLength
   mode?: GhostMode
   fileEditApproval?: 'confirm' | 'auto'
@@ -147,6 +157,11 @@ export type GhostExtensionMessage =
         autocompleteModel: string
         maxContextTokens: number
         temperature: number
+        topP: number
+        topK: number
+        minP: number
+        presencePenalty: number
+        repeatPenalty: number
         responseLength: GhostResponseLength
         mode: GhostMode
         fileEditApproval: 'confirm' | 'auto'
@@ -217,6 +232,11 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) ||
     (value.model !== undefined && typeof value.model !== 'string') ||
     (value.temperature !== undefined && typeof value.temperature !== 'number') ||
+    (value.topP !== undefined && typeof value.topP !== 'number') ||
+    (value.topK !== undefined && typeof value.topK !== 'number') ||
+    (value.minP !== undefined && typeof value.minP !== 'number') ||
+    (value.presencePenalty !== undefined && typeof value.presencePenalty !== 'number') ||
+    (value.repeatPenalty !== undefined && typeof value.repeatPenalty !== 'number') ||
     (value.maxContextTokens !== undefined && typeof value.maxContextTokens !== 'number') ||
     (value.maxTokens !== undefined && typeof value.maxTokens !== 'number') ||
     (value.showReasoning !== undefined && typeof value.showReasoning !== 'boolean') ||
@@ -238,6 +258,11 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.autocompleteModel === undefined || typeof value.autocompleteModel === 'string') &&
     (value.maxContextTokens === undefined || typeof value.maxContextTokens === 'number') &&
     (value.temperature === undefined || typeof value.temperature === 'number') &&
+    (value.topP === undefined || typeof value.topP === 'number') &&
+    (value.topK === undefined || typeof value.topK === 'number') &&
+    (value.minP === undefined || typeof value.minP === 'number') &&
+    (value.presencePenalty === undefined || typeof value.presencePenalty === 'number') &&
+    (value.repeatPenalty === undefined || typeof value.repeatPenalty === 'number') &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.fileEditApproval === undefined || ['confirm', 'auto'].includes(value.fileEditApproval as string)) &&

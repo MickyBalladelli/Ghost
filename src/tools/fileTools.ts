@@ -8,6 +8,8 @@ import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkfl
 
 export interface ReadFileInput {
   path: string
+  startLine?: number
+  endLine?: number
 }
 
 export interface WriteFileInput {
@@ -48,6 +50,54 @@ function assertNotCancelled(token: vscode.CancellationToken): void {
   }
 }
 
+const MAX_READ_LINES = 400
+const MAX_READ_CHARACTERS = 12000
+
+function readFileWindow(content: string, input: ReadFileInput, filePath: string): string {
+  const lines = content.split(/\r?\n/)
+  const hasRange = input.startLine !== undefined || input.endLine !== undefined
+  const startLine = input.startLine ?? 1
+  const endLine = input.endLine ?? startLine + MAX_READ_LINES - 1
+
+  if (!Number.isInteger(startLine) || startLine < 1) {
+    throw new Error('startLine must be a positive integer')
+  }
+  if (!Number.isInteger(endLine) || endLine < startLine) {
+    throw new Error('endLine must be an integer greater than or equal to startLine')
+  }
+  if (startLine > lines.length) {
+    throw new Error(`startLine ${startLine} exceeds the file length of ${lines.length} lines`)
+  }
+
+  const requestedEnd = Math.min(endLine, startLine + MAX_READ_LINES - 1, lines.length)
+  const selected: string[] = []
+  let characterCount = 0
+  let actualEnd = startLine - 1
+
+  for (let lineNumber = startLine; lineNumber <= requestedEnd; lineNumber += 1) {
+    const line = lines[lineNumber - 1]
+    const numberedLine = `${lineNumber}: ${line}`
+    if (selected.length > 0 && characterCount + numberedLine.length > MAX_READ_CHARACTERS) {
+      break
+    }
+    selected.push(numberedLine)
+    characterCount += numberedLine.length
+    actualEnd = lineNumber
+  }
+
+  const truncated = actualEnd < lines.length
+  const nextStart = actualEnd + 1
+  const nextHint = truncated
+    ? `\n\n[File output truncated. Read the next chunk with ghost_read_file({"path":"${filePath}","startLine":${nextStart},"endLine":${Math.min(nextStart + MAX_READ_LINES - 1, lines.length)}}).]`
+    : ''
+
+  if (!hasRange && !truncated) {
+    return `File: ${filePath}\n\n${content}`
+  }
+
+  return `File: ${filePath}\nLines ${startLine}-${actualEnd} of ${lines.length}\n\n${selected.join('\n')}${nextHint}`
+}
+
 export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
   async invoke(
     options: vscode.LanguageModelToolInvocationOptions<ReadFileInput>,
@@ -56,7 +106,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
     const content = decodeText(await vscode.workspace.fs.readFile(uri))
-    return textResult(`File: ${uri.fsPath}\n\n${content}`)
+    return textResult(readFileWindow(content, options.input, uri.fsPath))
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileInput>): vscode.PreparedToolInvocation {
@@ -105,6 +155,9 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
       throw new Error('Edit expected different file content')
     }
     const updated = applyGhostEdit(current, edit)
+    if (updated === current) {
+      return textResult(`${summarizeGhostEdit(edit)}\nNo changes needed.`)
+    }
     await vscode.workspace.fs.writeFile(uri, Buffer.from(updated, 'utf8'))
     return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.`)
   }

@@ -1173,6 +1173,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         autocompleteModel: settings.autocompleteModel,
         maxContextTokens: settings.maxContextTokens,
         temperature: settings.temperature,
+        topP: settings.topP,
+        topK: settings.topK,
+        minP: settings.minP,
+        presencePenalty: settings.presencePenalty,
+        repeatPenalty: settings.repeatPenalty,
         responseLength: settings.responseLength,
         mode: settings.mode,
         fileEditApproval: settings.fileEditApproval,
@@ -1245,6 +1250,21 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.temperature === 'number' && Number.isFinite(update.temperature)) {
       await ghostConfig.update('temperature', Math.min(2, Math.max(0, update.temperature)), target)
+    }
+    if (typeof update.topP === 'number' && Number.isFinite(update.topP)) {
+      await ghostConfig.update('topP', Math.min(1, Math.max(0, update.topP)), target)
+    }
+    if (typeof update.topK === 'number' && Number.isFinite(update.topK)) {
+      await ghostConfig.update('topK', Math.max(0, Math.floor(update.topK)), target)
+    }
+    if (typeof update.minP === 'number' && Number.isFinite(update.minP)) {
+      await ghostConfig.update('minP', Math.min(1, Math.max(0, update.minP)), target)
+    }
+    if (typeof update.presencePenalty === 'number' && Number.isFinite(update.presencePenalty)) {
+      await ghostConfig.update('presencePenalty', Math.min(2, Math.max(-2, update.presencePenalty)), target)
+    }
+    if (typeof update.repeatPenalty === 'number' && Number.isFinite(update.repeatPenalty)) {
+      await ghostConfig.update('repeatPenalty', Math.min(3, Math.max(0, update.repeatPenalty)), target)
     }
     if (update.responseLength) {
       await ghostConfig.update('responseLength', update.responseLength, target)

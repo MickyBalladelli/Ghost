@@ -121,6 +121,12 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
           model: settings.autocompleteModel,
           prefix,
           suffix,
+          temperature: settings.temperature,
+          topP: settings.topP,
+          topK: settings.topK,
+          minP: settings.minP,
+          presencePenalty: settings.presencePenalty,
+          repeatPenalty: settings.repeatPenalty,
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
           signal: cancellation.signal
         }

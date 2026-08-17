@@ -2,11 +2,25 @@
 
 All notable changes to this extension are documented here.
 
-## 1.0.69 - 2026-08-16
+## 1.0.81 - 2026-08-17
 
 - Added “Apply to all files” approval for the current session.
 - Added Confirm or Auto-accept as the default file-edit behavior.
 - Blocked terminal redirection and script-based file writes so failed file edits retry through Ghost file tools.
+- Made agent and edit mode retry when the model describes a file change without calling a workspace tool.
+- Made direct fix and edit requests require a workspace tool even when Ask mode is selected.
+- Increased the per-request shared tool-call limit from 32 to 512.
+- Recovered malformed multiline `ghost_apply_edit` calls and retried truncated tool JSON instead of showing it as the answer.
+- Retried empty provider responses before stopping a workspace request.
+- Added configurable temperature, Top P, Top K, Min P, presence penalty, and repeat penalty settings with value tooltips.
+- Sent supported generation settings to Ollama, OpenAI-compatible, MLX/VLM, and inline completion requests.
+- Made compact tool progress the default, with an option to show verbose tool arguments, results, timings, and previews.
+- Repaired raw multiline JSON tool calls so compact `ghostapplyedit` calls continue executing instead of stopping as plain text.
+- Changed generation defaults to the stable coding profile: temperature `0.3`, top P `0.9`, top K `20`, min P `0.05`, presence penalty `0`, and repeat penalty `1.05`.
+- Added `OLLAMA_PARAMETERS.md` with parameter meanings, provider mappings, Modelfile examples, and tuning guidance.
+- Added concise failure reasons to compact tool progress; successful commands remain short.
+- Added chunked large-file reads, no-op edit detection, repeated-edit detection, and an eight-edit per-file safety limit.
+- Reduced the per-batch tool-call limit from 512 to 128 so looping requests stop sooner.
 
 ## 1.0.67 - 2026-08-16
 

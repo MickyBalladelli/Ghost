@@ -37,6 +37,11 @@ interface ControlSettings {
   autocompleteModel: string
   maxContextTokens: number
   temperature: number
+  topP: number
+  topK: number
+  minP: number
+  presencePenalty: number
+  repeatPenalty: number
   responseLength: ResponseLength
   mode: GhostMode
   fileEditApproval: 'confirm' | 'auto'
@@ -50,6 +55,7 @@ interface UiPreferences {
   compactLayout: boolean
   showThinkingDetails: boolean
   showToolProgress: boolean
+  verboseToolDetails?: boolean
   showDiagnostics: boolean
   autoContext: boolean
   customSystemInstructions: string
@@ -237,6 +243,11 @@ interface WebviewRequestOptions {
   provider: GhostProvider
   model: string
   temperature: number
+  topP: number
+  topK: number
+  minP: number
+  presencePenalty: number
+  repeatPenalty: number
   maxContextTokens: number
   maxTokens?: number
   mode: GhostMode
@@ -443,7 +454,12 @@ let controls: ControlSettings = {
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   maxContextTokens: 8192,
-  temperature: 0.2,
+  temperature: 0.3,
+  topP: 0.9,
+  topK: 20,
+  minP: 0.05,
+  presencePenalty: 0.0,
+  repeatPenalty: 1.05,
   responseLength: 'balanced',
   mode: 'agent',
   fileEditApproval: 'confirm',
@@ -480,7 +496,7 @@ let uiPreferences: UiPreferences = {
   accentColor: '',
   compactLayout: false,
   showThinkingDetails: true,
-  showToolProgress: true,
+  showToolProgress: false,
   showDiagnostics: false,
   autoContext: true,
   customSystemInstructions: '',
@@ -588,8 +604,18 @@ app.innerHTML = `
         <div class="modal-header"><h2 id="settings-title">Composer controls</h2><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div>
         <div class="modal-scroll">
           <div class="settings-grid">
-          <label for="temperature">Temperature <output id="temperature-value">0.2</output></label>
-          <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.2">
+          <label for="temperature" title="Temperature controls randomness. Lower values make answers more predictable; higher values make them more varied. Range: 0 to 2.">Temperature <output id="temperature-value">0.3</output></label>
+          <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.3" title="Temperature: 0 is most focused, 1 is balanced, and 2 is most varied.">
+          <label for="top-p" title="Top P, or nucleus sampling, keeps only the smallest group of likely tokens whose probabilities add up to this value. Lower values focus the answer. Range: 0 to 1.">Top P</label>
+          <input id="top-p" type="number" min="0" max="1" step="0.01" value="0.9" title="Top P: 0 is very focused; 0.9 keeps the likely 90% probability mass; 1 disables this limit.">
+          <label for="top-k" title="Top K limits each next token to the K most likely choices. Lower values focus the answer. Range: 0 or higher.">Top K</label>
+          <input id="top-k" type="number" min="0" step="1" value="20" title="Top K: 20 keeps the 20 most likely choices; 0 disables this limit.">
+          <label for="min-p" title="Min P removes tokens whose probability is below this fraction of the most likely token. Range: 0 to 1.">Min P</label>
+          <input id="min-p" type="number" min="0" max="1" step="0.01" value="0.05" title="Min P: 0 disables this filter; 0.05 is a light filter; higher values keep fewer low-probability choices.">
+          <label for="presence-penalty" title="Presence penalty discourages tokens that already appeared. Positive values encourage new topics; negative values allow reuse. Range: -2 to 2.">Presence penalty</label>
+          <input id="presence-penalty" type="number" min="-2" max="2" step="0.1" value="0" title="Presence penalty: 0 disables it; positive values reduce repeated topics; negative values make reuse more likely.">
+          <label for="repeat-penalty" title="Repeat penalty discourages repeated text. Range: 0 to 3.">Repeat penalty</label>
+          <input id="repeat-penalty" type="number" min="0" max="3" step="0.05" value="1.05" title="Repeat penalty: 1 disables it; 1.05 is a light penalty; higher values penalize repetition more.">
           <label for="max-context">Max context tokens</label>
           <input id="max-context" type="number" min="1" step="256" value="8192">
           <label for="response-length">Response length</label>
@@ -620,7 +646,7 @@ app.innerHTML = `
           <label class="settings-checkbox" for="persist-conversations"><input id="persist-conversations" type="checkbox"> Save conversations and preferences in VS Code storage</label>
           <label class="settings-checkbox" for="compact-layout"><input id="compact-layout" type="checkbox"> Compact conversation layout</label>
           <label class="settings-checkbox" for="show-thinking"><input id="show-thinking" type="checkbox"> Show thinking details</label>
-          <label class="settings-checkbox" for="show-tool-progress"><input id="show-tool-progress" type="checkbox"> Show tool progress</label>
+          <label class="settings-checkbox" for="show-tool-progress" title="When enabled, show tool arguments, results, timings, and detailed previews. When disabled, show only a short action such as ‘I'm reading file…’."><input id="show-tool-progress" type="checkbox"> Show verbose tool details</label>
           <label class="settings-checkbox" for="show-diagnostics"><input id="show-diagnostics" type="checkbox"> Show telemetry-free diagnostics</label>
           <label class="settings-checkbox" for="debug-logging"><input id="debug-logging" type="checkbox"> Enable local debug logging</label>
           <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
@@ -684,6 +710,11 @@ const fileInputElement = document.getElementById('file-input') as HTMLInputEleme
 const mentionMenuElement = document.getElementById('mention-menu') as HTMLElement
 const temperatureElement = document.getElementById('temperature') as HTMLInputElement
 const temperatureValueElement = document.getElementById('temperature-value') as HTMLOutputElement
+const topPElement = document.getElementById('top-p') as HTMLInputElement
+const topKElement = document.getElementById('top-k') as HTMLInputElement
+const minPElement = document.getElementById('min-p') as HTMLInputElement
+const presencePenaltyElement = document.getElementById('presence-penalty') as HTMLInputElement
+const repeatPenaltyElement = document.getElementById('repeat-penalty') as HTMLInputElement
 const maxContextElement = document.getElementById('max-context') as HTMLInputElement
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
@@ -769,6 +800,11 @@ const createPersistedState = () => ({
     autocompleteModel: controls.autocompleteModel,
     maxContextTokens: controls.maxContextTokens,
     temperature: controls.temperature,
+    topP: controls.topP,
+    topK: controls.topK,
+    minP: controls.minP,
+    presencePenalty: controls.presencePenalty,
+    repeatPenalty: controls.repeatPenalty,
     responseLength: controls.responseLength,
     mode: controls.mode,
     fileEditApproval: controls.fileEditApproval,
@@ -780,7 +816,7 @@ const createPersistedState = () => ({
     accentColor: uiPreferences.accentColor,
     compactLayout: uiPreferences.compactLayout,
     showThinkingDetails: uiPreferences.showThinkingDetails,
-    showToolProgress: uiPreferences.showToolProgress,
+    verboseToolDetails: uiPreferences.showToolProgress,
     showDiagnostics: uiPreferences.showDiagnostics,
     autoContext: uiPreferences.autoContext,
     customSystemInstructions: uiPreferences.customSystemInstructions,
@@ -872,6 +908,11 @@ const sendSettingsUpdate = () => {
         chatModel: controls.chatModel,
         maxContextTokens: controls.maxContextTokens,
         temperature: controls.temperature,
+        topP: controls.topP,
+        topK: controls.topK,
+        minP: controls.minP,
+        presencePenalty: controls.presencePenalty,
+        repeatPenalty: controls.repeatPenalty,
         responseLength: controls.responseLength,
         mode: controls.mode,
         fileEditApproval: controls.fileEditApproval,
@@ -918,6 +959,11 @@ const renderControls = () => {
   modelElement.value = controls.chatModel
   temperatureElement.value = String(controls.temperature)
   temperatureValueElement.value = controls.temperature.toFixed(1)
+  topPElement.value = String(controls.topP)
+  topKElement.value = String(controls.topK)
+  minPElement.value = String(controls.minP)
+  presencePenaltyElement.value = String(controls.presencePenalty)
+  repeatPenaltyElement.value = String(controls.repeatPenalty)
   maxContextElement.value = String(controls.maxContextTokens)
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
@@ -1099,6 +1145,11 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
   provider: controls.provider,
   model: controls.chatModel,
   temperature: controls.temperature,
+  topP: controls.topP,
+  topK: controls.topK,
+  minP: controls.minP,
+  presencePenalty: controls.presencePenalty,
+  repeatPenalty: controls.repeatPenalty,
   maxContextTokens: controls.maxContextTokens,
   maxTokens: maxTokensForLength(controls.responseLength),
   mode: controls.mode,
@@ -1467,6 +1518,50 @@ const renderResponseStats = (message: ChatMessage): string => {
   return `<div class="message-response-stats">${formatElapsed(elapsedMs)} · ${tokenCount} tok · ${tokensPerSecond.toFixed(1)} tok/s${modelLabel}</div>`
 }
 
+const toolActionText = (toolCall: ToolCall): string => {
+  let args: Record<string, unknown> = {}
+  if (toolCall.arguments) {
+    try {
+      const parsed = JSON.parse(toolCall.arguments) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>
+      }
+    } catch {
+      // Keep the short tool description when arguments are malformed.
+    }
+  }
+
+  const path = typeof args.path === 'string' ? args.path.trim() : ''
+  const command = typeof args.command === 'string' ? args.command.trim() : ''
+  const target = path || command
+  const displayedTarget = target.length > 180 ? `${target.slice(0, 177)}…` : target
+  const base = toolCall.name === 'ghost_read_file'
+    ? `I'm reading file${displayedTarget ? ` ${displayedTarget}` : ''}`
+    : toolCall.name === 'ghost_write_file'
+      ? `I'm writing file${displayedTarget ? ` ${displayedTarget}` : ''}`
+      : toolCall.name === 'ghost_apply_edit'
+        ? `I'm editing file${displayedTarget ? ` ${displayedTarget}` : ''}`
+        : toolCall.name === 'ghost_run_terminal_command'
+          ? `I'm executing command${displayedTarget ? `: ${displayedTarget}` : ''}`
+          : toolCall.name === 'ghost_list_directory'
+            ? `I'm listing directory${displayedTarget ? ` ${displayedTarget}` : ''}`
+            : `I'm running ${toolCall.name}`
+
+  if (toolCall.status === 'requested' && toolCall.requiresApproval) {
+    return `Waiting for approval: ${base.replace(/^I'm /, '')}`
+  }
+  if (toolCall.status === 'completed') {
+    return `Done: ${base.replace(/^I'm /, '')}`
+  }
+  if (toolCall.status === 'failed') {
+    return `Failed: ${base.replace(/^I'm /, '')}`
+  }
+  if (toolCall.status === 'rejected') {
+    return `Rejected: ${base.replace(/^I'm /, '')}`
+  }
+  return base
+}
+
 const renderMessagePartSummary = (message: ChatMessage): string => {
   const parts = message.parts.filter(part => part.kind !== 'text')
   if (parts.length === 0) {
@@ -1479,17 +1574,17 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   const renderedProgress = uiPreferences.showThinkingDetails && progressParts.length > 0
     ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
     : ''
-  const renderedTools = uiPreferences.showToolProgress ? toolParts.map(part => {
+  const renderedTools = toolParts.map(part => {
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
     const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
     const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''
-    const argumentsBlock = part.toolCall.arguments
+    const argumentsBlock = uiPreferences.showToolProgress && part.toolCall.arguments
       ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`
       : ''
     const diffBlock = part.toolCall.diffPreview
       ? `<details class="tool-details"><summary>Diff preview · ${escapeHtml(part.toolCall.diffPreview.path)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary>${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<label><input type="checkbox" data-tool-hunk="${index}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" checked> Lines ${hunk.startLine}-${hunk.endLine}<button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open line</button></label>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
       : ''
-    const resultBlock = part.toolCall.result
+    const resultBlock = uiPreferences.showToolProgress && part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
@@ -1507,8 +1602,12 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const resultActions = part.toolCall.result || fileAction || restoreAction
       ? `<div class="tool-result-actions">${fileAction}${restoreAction}${selectedHunkAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>` : ''}</div>`
       : ''
-    return `<div class="message-progress tool-progress"><strong>${escapeHtml(part.toolCall.name)}</strong> · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
-  }).join('') : ''
+    const verboseStatus = uiPreferences.showToolProgress ? ` · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}` : ''
+    const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
+      ? ` — ${escapeHtml(part.toolCall.result.replace(/^Tool error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 240))}`
+      : ''
+    return `<div class="message-progress tool-progress"><strong>${escapeHtml(toolActionText(part.toolCall))}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+  }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
   return `<div class="message-part-summary">${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
@@ -1978,6 +2077,21 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.temperature === 'number' && Number.isFinite(preferences.temperature)) {
         controls.temperature = Math.min(2, Math.max(0, preferences.temperature))
       }
+      if (typeof preferences.topP === 'number' && Number.isFinite(preferences.topP)) {
+        controls.topP = Math.min(1, Math.max(0, preferences.topP))
+      }
+      if (typeof preferences.topK === 'number' && Number.isFinite(preferences.topK)) {
+        controls.topK = Math.max(0, Math.floor(preferences.topK))
+      }
+      if (typeof preferences.minP === 'number' && Number.isFinite(preferences.minP)) {
+        controls.minP = Math.min(1, Math.max(0, preferences.minP))
+      }
+      if (typeof preferences.presencePenalty === 'number' && Number.isFinite(preferences.presencePenalty)) {
+        controls.presencePenalty = Math.min(2, Math.max(-2, preferences.presencePenalty))
+      }
+      if (typeof preferences.repeatPenalty === 'number' && Number.isFinite(preferences.repeatPenalty)) {
+        controls.repeatPenalty = Math.min(3, Math.max(0, preferences.repeatPenalty))
+      }
       if (preferences.responseLength === 'short' || preferences.responseLength === 'balanced' || preferences.responseLength === 'long' || preferences.responseLength === 'unlimited') {
         controls.responseLength = preferences.responseLength
       }
@@ -2029,8 +2143,8 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.showThinkingDetails === 'boolean') {
         uiPreferences.showThinkingDetails = preferences.showThinkingDetails
       }
-      if (typeof preferences.showToolProgress === 'boolean') {
-        uiPreferences.showToolProgress = preferences.showToolProgress
+      if (typeof preferences.verboseToolDetails === 'boolean') {
+        uiPreferences.showToolProgress = preferences.verboseToolDetails
       }
       if (typeof preferences.showDiagnostics === 'boolean') {
         uiPreferences.showDiagnostics = preferences.showDiagnostics
@@ -2498,6 +2612,26 @@ temperatureElement.addEventListener('input', () => {
   temperatureValueElement.value = controls.temperature.toFixed(1)
 })
 temperatureElement.addEventListener('change', sendSettingsUpdate)
+const updateGenerationSettings = () => {
+  const topP = Number(topPElement.value)
+  const topK = Number(topKElement.value)
+  const minP = Number(minPElement.value)
+  const presencePenalty = Number(presencePenaltyElement.value)
+  const repeatPenalty = Number(repeatPenaltyElement.value)
+  controls.topP = Number.isFinite(topP) ? Math.min(1, Math.max(0, topP)) : 0.9
+  controls.topK = Number.isFinite(topK) ? Math.max(0, Math.floor(topK)) : 20
+  controls.minP = Number.isFinite(minP) ? Math.min(1, Math.max(0, minP)) : 0.05
+  controls.presencePenalty = Number.isFinite(presencePenalty) ? Math.min(2, Math.max(-2, presencePenalty)) : 0
+  controls.repeatPenalty = Number.isFinite(repeatPenalty) ? Math.min(3, Math.max(0, repeatPenalty)) : 1.05
+  renderControls()
+  sendSettingsUpdate()
+  saveState()
+}
+topPElement.addEventListener('change', updateGenerationSettings)
+topKElement.addEventListener('change', updateGenerationSettings)
+minPElement.addEventListener('change', updateGenerationSettings)
+presencePenaltyElement.addEventListener('change', updateGenerationSettings)
+repeatPenaltyElement.addEventListener('change', updateGenerationSettings)
 maxContextElement.addEventListener('change', () => {
   controls.maxContextTokens = Math.max(1, Number(maxContextElement.value) || 8192)
   maxContextElement.value = String(controls.maxContextTokens)

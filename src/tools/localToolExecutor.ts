@@ -84,7 +84,11 @@ export class LocalToolExecutor {
 
     switch (call.name) {
       case 'ghost_read_file': {
-        const input: ReadFileInput = { path: requiredString(call.arguments, 'path') }
+        const input: ReadFileInput = {
+          path: requiredString(call.arguments, 'path'),
+          ...(typeof call.arguments.startLine === 'number' ? { startLine: call.arguments.startLine } : {}),
+          ...(typeof call.arguments.endLine === 'number' ? { endLine: call.arguments.endLine } : {})
+        }
         return resultText(await this.readFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
       case 'ghost_list_directory': {
@@ -123,6 +127,11 @@ export class LocalToolExecutor {
           }
         }
 
+        const current = await readCurrentFile(input.path)
+        if (current === input.content) {
+          return `${input.path}: no changes needed.`
+        }
+
         return resultText(await this.writeFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
       case 'ghost_apply_edit': {
@@ -152,6 +161,9 @@ export class LocalToolExecutor {
         }
         const selectedHunks = options.selectedHunkIndexes ? new Set(options.selectedHunkIndexes) : undefined
         const updated = applyGhostEdit(current, edit, selectedHunks)
+        if (updated === current) {
+          return `${summarizeGhostEdit(edit)}\nNo changes needed.`
+        }
         await vscode.workspace.fs.writeFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'))
         return `${summarizeGhostEdit(edit)}\nApplied successfully.`
       }

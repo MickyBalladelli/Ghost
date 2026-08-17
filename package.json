@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.70",
+  "version": "1.0.81",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -155,10 +155,44 @@
         },
         "ghost.temperature": {
           "type": "number",
-          "default": 0.2,
+          "default": 0.3,
           "minimum": 0,
           "maximum": 2,
           "description": "Sampling temperature for chat responses."
+        },
+        "ghost.topP": {
+          "type": "number",
+          "default": 0.9,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Nucleus sampling: keep tokens within this cumulative probability."
+        },
+        "ghost.topK": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "description": "Keep only the top K likely tokens. Lower values are more focused."
+        },
+        "ghost.minP": {
+          "type": "number",
+          "default": 0.05,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Discard tokens below this probability relative to the most likely token."
+        },
+        "ghost.presencePenalty": {
+          "type": "number",
+          "default": 0,
+          "minimum": -2,
+          "maximum": 2,
+          "description": "Penalize tokens that already appeared. Positive values encourage new topics."
+        },
+        "ghost.repeatPenalty": {
+          "type": "number",
+          "default": 1.05,
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Penalize repeated text. Values above 1 penalize repetition more strongly."
         },
         "ghost.responseLength": {
           "type": "string",
@@ -258,7 +292,7 @@
         "displayName": "Ghost Read File",
         "toolReferenceName": "ghost_read_file",
         "userDescription": "Read a text file from the current workspace.",
-        "modelDescription": "Reads the complete content of a text file in the current workspace. Use this for inspecting code or configuration. The path must be absolute and inside the workspace. Do not use it for binary files.",
+        "modelDescription": "Reads a text file in chunks from the current workspace. The path must be absolute and inside the workspace. For large files, use optional startLine and endLine and read every relevant chunk before editing. Do not use it for binary files.",
         "canBeReferencedInPrompt": true,
         "icon": "$(file)",
         "when": "true",
@@ -269,6 +303,16 @@
               "type": "string",
               "minLength": 1,
               "description": "Absolute path of the text file to read. The path must be inside the current workspace."
+            },
+            "startLine": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional first line to read. Use this to read a large file in chunks."
+            },
+            "endLine": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional last line to read. Keep each read chunk to about 400 lines."
             }
           },
           "required": [

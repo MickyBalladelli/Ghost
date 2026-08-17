@@ -25,6 +25,11 @@ export interface GhostSettings {
   provider: GhostProvider
   mlxUrl: string
   temperature: number
+  topP: number
+  topK: number
+  minP: number
+  presencePenalty: number
+  repeatPenalty: number
   responseLength: GhostResponseLength
   mode: GhostMode
   fileEditApproval: GhostFileEditApproval
@@ -45,7 +50,12 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   enableInlineCompletions: true,
   provider: 'ollama',
   mlxUrl: 'http://localhost:8000',
-  temperature: 0.2,
+  temperature: 0.3,
+  topP: 0.9,
+  topK: 20,
+  minP: 0.05,
+  presencePenalty: 0.0,
+  repeatPenalty: 1.05,
   responseLength: 'balanced',
   mode: 'agent',
   fileEditApproval: 'confirm',
@@ -77,6 +87,11 @@ export class GhostConfig {
       provider: configuration.get('provider', DEFAULT_GHOST_SETTINGS.provider),
       mlxUrl: configuration.get('mlxUrl', DEFAULT_GHOST_SETTINGS.mlxUrl),
       temperature: configuration.get('temperature', DEFAULT_GHOST_SETTINGS.temperature),
+      topP: configuration.get('topP', DEFAULT_GHOST_SETTINGS.topP),
+      topK: configuration.get('topK', DEFAULT_GHOST_SETTINGS.topK),
+      minP: configuration.get('minP', DEFAULT_GHOST_SETTINGS.minP),
+      presencePenalty: configuration.get('presencePenalty', DEFAULT_GHOST_SETTINGS.presencePenalty),
+      repeatPenalty: configuration.get('repeatPenalty', DEFAULT_GHOST_SETTINGS.repeatPenalty),
       responseLength: configuration.get('responseLength', DEFAULT_GHOST_SETTINGS.responseLength),
       mode: configuration.get('mode', DEFAULT_GHOST_SETTINGS.mode),
       fileEditApproval: configuration.get('fileEditApproval', DEFAULT_GHOST_SETTINGS.fileEditApproval),
