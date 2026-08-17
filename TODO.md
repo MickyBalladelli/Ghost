@@ -33,7 +33,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## P1 — make the agent finish work reliably
 
-- [ ] Add a context-budget manager in `src/agent/chatParticipant.ts`. Estimate tokens, reserve output space, compact old tool results, and preserve current files, diffs, errors, and the user request.
+- [x] Add a context-budget manager in `src/agent/chatParticipant.ts`. Estimate tokens, reserve output space, compact old tool results, and preserve current files, diffs, errors, and the user request.
 - [ ] Replace the global `MAX_TOOL_RESULT_CHARACTERS` cap with per-tool limits and structured truncation. Return `head`, `tail`, byte count, and a continuation hint.
 - [ ] Add a first-class search tool using ripgrep. Return structured file, line, and match data so the model does not use terminal commands for ordinary searching.
 - [ ] Add read modes for `head`, `tail`, line range, byte range, symbol range, and matching lines. Include encoding, line endings, size, and content hash.

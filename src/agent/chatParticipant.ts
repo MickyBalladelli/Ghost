@@ -72,6 +72,134 @@ interface RequestBudget {
   modelTokens: number
 }
 
+interface ContextBudgetResult {
+  messages: MlxMessage[]
+  inputTokens: number
+  compacted: boolean
+}
+
+const estimateTextTokens = (text: string): number => Math.ceil(text.length / 4)
+
+const estimateMessageTokens = (message: MlxMessage): number => {
+  if (typeof message.content === 'string') {
+    return estimateTextTokens(message.content)
+  }
+  return message.content.reduce((total, part) => total + (part.type === 'text' ? estimateTextTokens(part.text) : 256), 0)
+}
+
+const compactText = (text: string, maxTokens: number, marker = '[Context compacted by Ghost]'): string => {
+  const maxCharacters = Math.max(256, maxTokens * 4)
+  if (text.length <= maxCharacters) {
+    return text
+  }
+  const headCharacters = Math.floor(maxCharacters * 0.55)
+  const tailCharacters = Math.max(0, maxCharacters - headCharacters - marker.length - 4)
+  return `${text.slice(0, headCharacters)}\n\n${marker}\n\n${text.slice(-tailCharacters)}`
+}
+
+const contextSectionPriority = (section: string): number => {
+  if (/^User request:/i.test(section)) return 100
+  if (/^Active file:/i.test(section)) return 95
+  if (/diff|error|failed|verification|changed externally/i.test(section)) return 90
+  if (/^Additional prompt context:/i.test(section)) return 85
+  if (/^Attached file:/i.test(section)) return 75
+  if (/@workspace|^Workspace:/i.test(section)) return 50
+  return 60
+}
+
+const compactInitialContext = (text: string, maxTokens: number): string => {
+  const sections = text.split(/\n\n(?=[A-Za-z@])/)
+  if (sections.length <= 1) {
+    return compactText(text, maxTokens)
+  }
+  const selected: Array<{ text: string; index: number }> = []
+  let remaining = Math.max(256, maxTokens)
+  const ranked = sections
+    .map((section, index) => ({ section, index, priority: contextSectionPriority(section) }))
+    .sort((left, right) => right.priority - left.priority || left.index - right.index)
+  for (const item of ranked) {
+    if (remaining <= 0) break
+    const sectionTokens = estimateTextTokens(item.section)
+    const allowedTokens = Math.min(sectionTokens, remaining)
+    if (allowedTokens < 32 && selected.length > 0) continue
+    selected.push({
+      text: sectionTokens > allowedTokens ? compactText(item.section, allowedTokens, '[File context compacted by Ghost]') : item.section,
+      index: item.index
+    })
+    remaining -= Math.min(sectionTokens, allowedTokens)
+  }
+  return selected
+    .sort((left, right) => left.index - right.index)
+    .map(item => item.text)
+    .join('\n\n')
+}
+
+const compactHistoryMessage = (message: MlxMessage, maxTokens: number): MlxMessage => {
+  if (typeof message.content !== 'string') {
+    return message
+  }
+  const marker = /tool result|diff|error|failed|verification/i.test(message.content)
+    ? '[Older tool result compacted by Ghost]'
+    : '[Older model turn compacted by Ghost]'
+  return { ...message, content: compactText(message.content, maxTokens, marker) }
+}
+
+class ContextBudgetManager {
+  private readonly inputTokenBudget: number
+
+  constructor(maxContextTokens: number, requestedOutputTokens: number | undefined, toolsEnabled: boolean) {
+    const outputReserve = Math.max(
+      toolsEnabled ? MIN_TOOL_CALL_TOKENS : 512,
+      requestedOutputTokens ?? 0
+    )
+    this.inputTokenBudget = Math.max(256, Math.floor(maxContextTokens) - outputReserve)
+  }
+
+  prepare(messages: MlxMessage[]): ContextBudgetResult {
+    const originalTokens = messages.reduce((total, message) => total + estimateMessageTokens(message), 0)
+    if (originalTokens <= this.inputTokenBudget) {
+      return { messages, inputTokens: originalTokens, compacted: false }
+    }
+
+    const system = messages[0]
+    const initial = messages[1]
+    const history = messages.slice(2)
+    const systemTokens = system ? estimateMessageTokens(system) : 0
+    const initialBudget = Math.max(512, Math.floor((this.inputTokenBudget - systemTokens) * 0.65))
+    const compactedInitial = initial && typeof initial.content === 'string'
+      ? { ...initial, content: compactInitialContext(initial.content, initialBudget) }
+      : initial
+    const selected: MlxMessage[] = [
+      ...(system ? [system] : []),
+      ...(compactedInitial ? [compactedInitial] : [])
+    ]
+    let remaining = this.inputTokenBudget - selected.reduce((total, message) => total + estimateMessageTokens(message), 0)
+    const chosenHistory: MlxMessage[] = []
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      if (remaining <= 0) break
+      const original = history[index]
+      const isRecent = history.length - index <= 4
+      const candidate = isRecent
+        ? original
+        : compactHistoryMessage(original, Math.min(768, Math.max(128, Math.floor(remaining / 2))))
+      const candidateTokens = estimateMessageTokens(candidate)
+      if (candidateTokens > remaining) {
+        const compacted = compactHistoryMessage(candidate, remaining)
+        const compactedTokens = estimateMessageTokens(compacted)
+        if (compactedTokens > remaining || compactedTokens < 8) continue
+        chosenHistory.unshift(compacted)
+        remaining -= compactedTokens
+        continue
+      }
+      chosenHistory.unshift(candidate)
+      remaining -= candidateTokens
+    }
+    selected.push(...chosenHistory)
+    const inputTokens = selected.reduce((total, message) => total + estimateMessageTokens(message), 0)
+    return { messages: selected, inputTokens, compacted: true }
+  }
+}
+
 function summarizeToolResult(value: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
@@ -791,6 +919,11 @@ export function createChatParticipantHandler(
       },
       { role: 'user', content: contextPrompt }
     ]
+    const outputTokens = toolsEnabled
+      ? Math.max(requestOptions.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
+      : requestOptions.maxTokens
+    const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, toolsEnabled)
+    let contextCompactionReported = false
     const cancellation = createCancellationSignal(token)
     let finalStatus: 'ready' | 'offline' = 'ready'
     statusBar?.setStatus('generating')
@@ -816,21 +949,24 @@ export function createChatParticipantHandler(
           stopForBudget(response, beforeModelBudget, requestOptions.onStop)
           return
         }
+        const preparedContext = contextBudget.prepare(messages)
+        if (preparedContext.compacted && !contextCompactionReported) {
+          contextCompactionReported = true
+          response.progress(`Context compacted to ${preparedContext.inputTokens} estimated input tokens; current request, files, diffs, and errors kept.`)
+        }
         const turn = await streamModelTurn(
           llmFactory,
           {
             provider: requestOptions.provider,
             model: requestOptions.model?.trim() || settings.chatModel,
-            messages: redactSensitiveValue(messages),
+            messages: redactSensitiveValue(preparedContext.messages),
             temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
             topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
             topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
             minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
             presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
             repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
-            maxTokens: toolsEnabled
-              ? Math.max(requestOptions.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
-              : requestOptions.maxTokens,
+            maxTokens: outputTokens,
             signal: cancellation.signal
           },
           response,
