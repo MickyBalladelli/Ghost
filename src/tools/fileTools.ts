@@ -9,6 +9,7 @@ import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkfl
 import { atomicWriteFile } from './atomicFile'
 import { readWorkspaceFile, verifyWorkspaceFile } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
+import { awaitCancellable } from './cancellation'
 
 export interface ReadFileInput {
   path: string
@@ -146,14 +147,14 @@ function matchesGitignorePattern(relativePath: string, rawPattern: string): bool
   return segments.some(segment => patternMatcher.test(segment)) || (directoryOnly && segments.includes(pattern))
 }
 
-async function isGitIgnored(uri: vscode.Uri): Promise<boolean> {
+async function isGitIgnored(uri: vscode.Uri, token?: vscode.CancellationToken): Promise<boolean> {
   const relativePath = normalizedWorkspaceRelativePath(uri)
   if (!relativePath || relativePath.startsWith('..')) {
     return false
   }
   try {
     const ignoreFile = vscode.Uri.joinPath(getWorkspaceRoot(), '.gitignore')
-    const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await vscode.workspace.fs.readFile(ignoreFile))
+    const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await awaitCancellable(vscode.workspace.fs.readFile(ignoreFile), token))
     let ignored = false
     for (const rawPattern of ignoreContent.split(/\r\n|\n|\r/)) {
       const pattern = rawPattern.trim()
@@ -404,7 +405,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
       }
       const bytes = Buffer.from(openDocument.getText(), 'utf8')
       const reasons = pathCategoryReasons(uri)
-      if (await isGitIgnored(uri)) {
+      if (await isGitIgnored(uri, token)) {
         reasons.push('matched .gitignore')
       }
       if (bytes.length > MAX_SAFE_READ_BYTES) {
@@ -417,12 +418,13 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     }
 
     const stat = await vscode.workspace.fs.stat(uri)
+    assertNotCancelled(token)
     if ((stat.type & vscode.FileType.Directory) !== 0) {
       throw new Error('The path points to a directory. Use ghost_list_directory instead.')
     }
 
     const reasons = pathCategoryReasons(uri)
-    if (await isGitIgnored(uri)) {
+    if (await isGitIgnored(uri, token)) {
       reasons.push('matched .gitignore')
     }
     if (stat.size > MAX_SAFE_READ_BYTES) {
@@ -441,6 +443,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     }
 
     const bytes = await vscode.workspace.fs.readFile(uri)
+    assertNotCancelled(token)
     let content: string
     try {
       content = decodeText(bytes)
@@ -469,9 +472,9 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
-    const current = await readWorkspaceFile(uri)
-    await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'), current)
-    await verifyWorkspaceFile(uri, { exists: true, content: options.input.content })
+    const current = await readWorkspaceFile(uri, token)
+    await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'), current, token)
+    await verifyWorkspaceFile(uri, { exists: true, content: options.input.content }, token)
 
     return textResult(`Wrote ${options.input.content.length} characters to ${uri.fsPath}\nVerification: passed (readback matched).`)
   }
@@ -496,6 +499,7 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
     const uri = resolveWorkspacePath(edit.path)
     const current = decodeText(await vscode.workspace.fs.readFile(uri))
+    assertNotCancelled(token)
     if (edit.expectedContent !== undefined && current !== edit.expectedContent) {
       throw new Error('Edit expected different file content')
     }
@@ -503,8 +507,8 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     if (updated === current) {
       return textResult(`${summarizeGhostEdit(edit)}\nNo changes needed.`)
     }
-    await atomicWriteFile(uri, Buffer.from(updated, 'utf8'), { exists: true, content: current })
-    await verifyWorkspaceFile(uri, { exists: true, content: updated })
+    await atomicWriteFile(uri, Buffer.from(updated, 'utf8'), { exists: true, content: current }, token)
+    await verifyWorkspaceFile(uri, { exists: true, content: updated }, token)
     return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`)
   }
 
@@ -527,7 +531,7 @@ export class ApplyTransactionTool implements vscode.LanguageModelTool<FileTransa
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
-    const applied = await applyFileTransaction(transaction)
+    const applied = await applyFileTransaction(transaction, undefined, token)
     return textResult(`${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`)
   }
 

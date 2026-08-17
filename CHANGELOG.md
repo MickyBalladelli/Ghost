@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.92 - 2026-08-18
 
+- Strengthened request cancellation across file writes, verification, transactions, approval dialogs, timers, and tool execution.
 - Added a Continue action for failed requests that sends the last failed tool, fresh current file state, and remaining task plan without replaying the conversation.
 
 ## 1.0.91 - 2026-08-17

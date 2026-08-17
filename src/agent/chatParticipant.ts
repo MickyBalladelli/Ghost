@@ -1217,6 +1217,10 @@ export function createChatParticipantHandler(
           toolResult = `Tool error: ${message}`
         }
 
+        if (token.isCancellationRequested) {
+          return
+        }
+
         toolResult = limitToolResult(toolCall.name, toolResult)
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)

@@ -4,6 +4,7 @@ import { atomicWriteFile } from './atomicFile'
 import { applyGhostEdit, GhostEditHunk, parseGhostEdit } from './editWorkflow'
 import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { resolveWorkspacePath } from './workspacePath'
+import { throwIfCancelled } from './cancellation'
 
 export interface TransactionFileInput {
   path: string
@@ -72,11 +73,13 @@ export function parseFileTransaction(value: Record<string, unknown>): FileTransa
 
 export async function prepareFileTransaction(
   transaction: FileTransactionInput,
-  expectedSnapshots?: Record<string, WorkspaceFileSnapshot>
+  expectedSnapshots?: Record<string, WorkspaceFileSnapshot>,
+  token?: vscode.CancellationToken
 ): Promise<PreparedTransactionFile[]> {
   return Promise.all(transaction.edits.map(async edit => {
+    throwIfCancelled(token)
     const uri = resolveWorkspacePath(edit.path)
-    const before = await readWorkspaceFile(uri)
+    const before = await readWorkspaceFile(uri, token)
     const expected = expectedSnapshots?.[uri.fsPath]
       ?? (edit.expectedContent !== undefined ? { exists: true, content: edit.expectedContent } : undefined)
     if (expected && !sameWorkspaceFile(before, expected)) {
@@ -113,19 +116,22 @@ async function restoreFile(file: PreparedTransactionFile): Promise<void> {
 
 export async function applyFileTransaction(
   transaction: FileTransactionInput,
-  expectedSnapshots?: Record<string, WorkspaceFileSnapshot>
+  expectedSnapshots?: Record<string, WorkspaceFileSnapshot>,
+  token?: vscode.CancellationToken
 ): Promise<PreparedTransactionFile[]> {
-  const prepared = await prepareFileTransaction(transaction, expectedSnapshots)
+  const prepared = await prepareFileTransaction(transaction, expectedSnapshots, token)
   const changed = prepared.filter(file => !sameWorkspaceFile(file.before, { exists: true, content: file.after }))
   const applied: PreparedTransactionFile[] = []
 
   try {
     for (const file of changed) {
-      await atomicWriteFile(file.uri, Buffer.from(file.after, 'utf8'), file.before)
+      throwIfCancelled(token)
+      await atomicWriteFile(file.uri, Buffer.from(file.after, 'utf8'), file.before, token)
       applied.push(file)
     }
     for (const file of changed) {
-      const current = await readWorkspaceFile(file.uri)
+      throwIfCancelled(token)
+      const current = await readWorkspaceFile(file.uri, token)
       if (!sameWorkspaceFile(current, { exists: true, content: file.after })) {
         throw new Error(`Transaction verification failed for ${file.path}`)
       }

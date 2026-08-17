@@ -19,6 +19,7 @@ import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
 import { assertNoUnsavedEditorChanges, readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
+import { awaitCancellable } from './cancellation'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -62,8 +63,8 @@ function resultText(result: vscode.LanguageModelToolResult): string {
     .join('\n')
 }
 
-async function readCurrentFile(filePath: string): Promise<WorkspaceFileSnapshot> {
-  return readWorkspaceFile(resolveWorkspacePath(filePath))
+async function readCurrentFile(filePath: string, token: vscode.CancellationToken): Promise<WorkspaceFileSnapshot> {
+  return readWorkspaceFile(resolveWorkspacePath(filePath), token)
 }
 
 function expectedSnapshot(options: { expectedContent?: string; expectedFileExists?: boolean }): WorkspaceFileSnapshot | undefined {
@@ -82,12 +83,13 @@ function assertCurrentSnapshot(current: WorkspaceFileSnapshot, expected: Workspa
   }
 }
 
-async function confirmAction(title: string, message: string): Promise<boolean> {
-  const selection = await vscode.window.showWarningMessage(
+async function confirmAction(title: string, message: string, token: vscode.CancellationToken): Promise<boolean> {
+  if (token.isCancellationRequested) return false
+  const selection = await awaitCancellable(vscode.window.showWarningMessage(
     title,
     { modal: true, detail: message },
     ALLOW_ACTION
-  )
+  ), token).catch(() => undefined)
 
   return selection === ALLOW_ACTION
 }
@@ -103,6 +105,13 @@ export class LocalToolExecutor {
   private readonly completionRecordTool = new CompletionRecordTool()
 
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
+    return awaitCancellable(this.executeInternal(call, token, options), token).catch(error => {
+      if (token.isCancellationRequested) return 'Tool call cancelled by the user.'
+      throw error
+    })
+  }
+
+  private async executeInternal(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
     }
@@ -181,7 +190,8 @@ export class LocalToolExecutor {
         assertNoUnsavedEditorChanges([resolveWorkspacePath(input.path)])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to write a file?',
-          `Replace the complete contents of ${input.path}?`
+          `Replace the complete contents of ${input.path}?`,
+          token
         )
 
         if (!allowed) {
@@ -189,7 +199,7 @@ export class LocalToolExecutor {
         }
 
         if (options.alreadyApplied) {
-          const current = await readCurrentFile(input.path)
+          const current = await readCurrentFile(input.path, token)
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
@@ -197,14 +207,14 @@ export class LocalToolExecutor {
         }
 
         const expected = expectedSnapshot(options)
-        const current = await readCurrentFile(input.path)
+        const current = await readCurrentFile(input.path, token)
         assertCurrentSnapshot(current, expected)
         if (current.content === input.content && current.exists) {
           return `${input.path}: no changes needed.`
         }
 
-        await atomicWriteFile(resolveWorkspacePath(input.path), Buffer.from(input.content, 'utf8'), expected ?? current)
-        await verifyWorkspaceFile(resolveWorkspacePath(input.path), { exists: true, content: input.content })
+        await atomicWriteFile(resolveWorkspacePath(input.path), Buffer.from(input.content, 'utf8'), expected ?? current, token)
+        await verifyWorkspaceFile(resolveWorkspacePath(input.path), { exists: true, content: input.content }, token)
         return `${input.path}: wrote ${input.content.length} characters.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_edit': {
@@ -212,14 +222,15 @@ export class LocalToolExecutor {
         assertNoUnsavedEditorChanges([resolveWorkspacePath(edit.path)])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply an edit?',
-          summarizeGhostEdit(edit)
+          summarizeGhostEdit(edit),
+          token
         )
         if (!allowed) {
           return 'User denied the file edit.'
         }
 
         if (options.alreadyApplied) {
-          const current = await readCurrentFile(edit.path)
+          const current = await readCurrentFile(edit.path, token)
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
@@ -227,7 +238,7 @@ export class LocalToolExecutor {
         }
 
         const expected = expectedSnapshot(options)
-        const current = await readCurrentFile(edit.path)
+        const current = await readCurrentFile(edit.path, token)
         assertCurrentSnapshot(current, expected)
         if (edit.expectedContent !== undefined && current.content !== edit.expectedContent) {
           throw new Error('Edit expected different file content')
@@ -237,8 +248,8 @@ export class LocalToolExecutor {
         if (updated === current.content) {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
-        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current)
-        await verifyWorkspaceFile(resolveWorkspacePath(edit.path), { exists: true, content: updated })
+        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current, token)
+        await verifyWorkspaceFile(resolveWorkspacePath(edit.path), { exists: true, content: updated }, token)
         return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_transaction': {
@@ -246,12 +257,13 @@ export class LocalToolExecutor {
         assertNoUnsavedEditorChanges(transactionInput.edits.map(edit => resolveWorkspacePath(edit.path)))
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply a file transaction?',
-          `Apply and verify ${transactionInput.edits.length} files together?`
+          `Apply and verify ${transactionInput.edits.length} files together?`,
+          token
         )
         if (!allowed) {
           return 'User denied the file transaction.'
         }
-        const applied = await applyFileTransaction(transactionInput, options.expectedFiles)
+        const applied = await applyFileTransaction(transactionInput, options.expectedFiles, token)
         return `${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`
       }
       case 'ghost_run_terminal_command': {
@@ -265,7 +277,8 @@ export class LocalToolExecutor {
         }
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to run a terminal command?',
-          `${formatTerminalAudit(audit)}\n\n${input.cwd ? `Working directory: ${input.cwd}` : 'Working directory: the workspace'}\n\n${input.command}`
+          `${formatTerminalAudit(audit)}\n\n${input.cwd ? `Working directory: ${input.cwd}` : 'Working directory: the workspace'}\n\n${input.command}`,
+          token
         )
 
         if (!allowed) {

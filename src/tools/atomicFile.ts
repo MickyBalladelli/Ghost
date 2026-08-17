@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
 import { isFileNotFound, readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+import { awaitCancellable, throwIfCancelled } from './cancellation'
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) {
@@ -26,15 +27,17 @@ async function deleteIfPresent(uri: vscode.Uri): Promise<void> {
 export async function atomicWriteFile(
   uri: vscode.Uri,
   content: Uint8Array,
-  expected?: WorkspaceFileSnapshot
+  expected?: WorkspaceFileSnapshot,
+  token?: vscode.CancellationToken
 ): Promise<void> {
   const parent = vscode.Uri.file(path.dirname(uri.fsPath))
   const suffix = randomBytes(8).toString('hex')
   const baseName = path.basename(uri.fsPath)
   const temporary = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.tmp`)
   const backup = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.bak`)
+  throwIfCancelled(token)
   await vscode.workspace.fs.createDirectory(parent)
-  const initial = await readWorkspaceFile(uri)
+  const initial = await readWorkspaceFile(uri, token)
   if (expected && !sameWorkspaceFile(initial, expected)) {
     throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
   }
@@ -44,27 +47,32 @@ export async function atomicWriteFile(
 
   try {
     if (targetExists) {
+      throwIfCancelled(token)
       await vscode.workspace.fs.copy(uri, backup)
       backupCreated = true
     }
 
+    throwIfCancelled(token)
     await vscode.workspace.fs.writeFile(temporary, content)
-    const temporaryContent = await vscode.workspace.fs.readFile(temporary)
+    throwIfCancelled(token)
+    const temporaryContent = await awaitCancellable(vscode.workspace.fs.readFile(temporary), token)
     if (!sameBytes(temporaryContent, content)) {
       throw new Error(`Atomic write verification failed for ${uri.fsPath}`)
     }
 
     if (expected) {
-      const latest = await readWorkspaceFile(uri)
+      const latest = await readWorkspaceFile(uri, token)
       if (!sameWorkspaceFile(latest, expected)) {
         throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
       }
     }
 
+    throwIfCancelled(token)
     await vscode.workspace.fs.rename(temporary, uri, { overwrite: true })
     targetReplaced = true
+    throwIfCancelled(token)
 
-    const savedContent = await vscode.workspace.fs.readFile(uri)
+    const savedContent = await awaitCancellable(vscode.workspace.fs.readFile(uri), token)
     if (!sameBytes(savedContent, content)) {
       throw new Error(`Atomic write verification failed for ${uri.fsPath}`)
     }

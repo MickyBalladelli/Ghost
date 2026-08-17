@@ -34,6 +34,7 @@ import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 import { parseTaskPlanMarker } from '../agent/taskPlan'
 import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
+import { awaitCancellable } from '../tools/cancellation'
 
 interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -703,12 +704,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       type: 'warning',
       message: `Ghost reached ${toolCallCount} tool calls. Choose Continue or Stop.`
     })
-    const choice = await vscode.window.showWarningMessage(
+    const choice = await awaitCancellable(vscode.window.showWarningMessage(
       `Ghost reached ${toolCallCount} tool calls. Continue working?`,
       { modal: true, detail: 'Choose Continue to allow another batch of tool calls, or Stop to end this request.' },
       'Continue',
       'Stop'
-    )
+    ), request.cancellation.token).catch(() => undefined)
     return choice === 'Continue'
   }
 
@@ -1138,9 +1139,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           toolCallId: pending.toolCallId
         })
       : undefined
+    if (request.cancellation.token.isCancellationRequested) {
+      return { decision: 'reject', reason: 'The request was cancelled.' }
+    }
     const expectedFiles = isFileEditTool && !blockedByPolicy
       ? await this.getExpectedFileSnapshots(call)
       : undefined
+    if (request.cancellation.token.isCancellationRequested) {
+      return { decision: 'reject', reason: 'The request was cancelled.' }
+    }
     if (isFileEditTool && !blockedByPolicy && !expectedFiles) {
       return { decision: 'reject', reason: 'Ghost could not read the file safely. Refresh the file and retry.' }
     }
