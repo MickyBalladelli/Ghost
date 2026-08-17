@@ -617,7 +617,7 @@ app.innerHTML = `
     </div>
     <div class="modal-backdrop" id="settings-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <div class="modal-header"><h2 id="settings-title">Composer controls</h2><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div>
+        <div class="modal-header"><h2 id="settings-title">Composer controls</h2><div><button type="button" class="secondary" id="privacy-page">Privacy</button><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div></div>
         <div class="modal-scroll">
           <div class="settings-grid">
           <label for="temperature" title="Temperature controls randomness. Lower values make answers more predictable; higher values make them more varied. Range: 0 to 2.">Temperature <output id="temperature-value">0.3</output></label>
@@ -684,6 +684,26 @@ app.innerHTML = `
           </div>
         </div>
         <div class="modal-footer"><button type="button" id="save-preset">Save</button><button type="button" class="secondary" data-close-modal="settings-modal">Close</button></div>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="privacy-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+        <div class="modal-header"><h2 id="privacy-title">Ghost privacy</h2><button type="button" class="icon-button" data-close-modal="privacy-modal" aria-label="Close privacy page">×</button></div>
+        <div class="modal-scroll privacy-content">
+          <h3>Providers</h3>
+          <p>Ollama and MLX/VLM use the configured local server by default. An OpenAI-compatible provider may be local or external. Ghost sends your prompt and the context you enable to that provider.</p>
+          <h3>Provider keys</h3>
+          <p>Provider API keys are stored in VS Code SecretStorage. Ghost does not put them in settings, URLs, webview messages, logs, exports, or saved conversations.</p>
+          <h3>Workspace and terminal access</h3>
+          <p>Ghost can read the active file, selected files, workspace context, and attachments when those context controls are enabled. File changes require approval unless you choose an auto-accept scope. Terminal commands are audited, use a masked environment, have bounded output, and dangerous commands still require approval.</p>
+          <h3>Storage</h3>
+          <p>Conversation persistence is off by default. When enabled, VS Code stores redacted conversations and preferences in its global and workspace storage. Turning it off clears the saved Ghost state.</p>
+          <h3>Exports</h3>
+          <p>Export creates a JSON file at the location you choose. Ghost redacts detected secrets before export, but you should review the file before sharing it.</p>
+          <h3>Redaction</h3>
+          <p>Ghost redacts common API keys, bearer tokens, cookies, secret URLs, cloud credentials, JWTs, and private keys before model context, display, diagnostics, persistence, and export. Redaction cannot guarantee detection of every secret, so do not paste credentials into prompts.</p>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="privacy-modal">Close</button></div>
       </section>
     </div>
     <div class="modal-backdrop" id="context-modal" hidden>
@@ -762,6 +782,7 @@ const workspaceSettingsElement = document.getElementById('workspace-settings') a
 const systemInstructionsElement = document.getElementById('system-instructions') as HTMLTextAreaElement
 const resetSystemInstructionsElement = document.getElementById('reset-system-instructions') as HTMLButtonElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
+const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
 const contextPreviewElement = document.getElementById('context-preview-list') as HTMLElement
@@ -2891,6 +2912,10 @@ workspaceSettingsElement.addEventListener('change', () => {
 
 document.getElementById('settings')?.addEventListener('click', () => {
   setModalVisibility(settingsModalElement, true)
+})
+document.getElementById('privacy-page')?.addEventListener('click', () => {
+  setModalVisibility(settingsModalElement, false)
+  setModalVisibility(privacyModalElement, true)
 })
 document.getElementById('context-preview')?.addEventListener('click', () => {
   renderContextPreview()

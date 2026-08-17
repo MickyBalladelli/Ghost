@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Enforced request and conversation ownership for cancellation and failed-tool retry actions.
 - Added warned auto-accept scopes for one edit, current file, request, session, workspace, or always; terminal and other dangerous tools still require explicit approval.
 - Added verified undo for applied writes, structured edits, and multi-file transactions, including removal of newly created files.
+- Added an in-app privacy page covering providers, keys, workspace and terminal access, storage, exports, and redaction.
 
 ## 1.0.85 - 2026-08-17
 

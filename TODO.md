@@ -29,7 +29,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Validate every webview message through one protocol decoder. Check origin/source, schema, request ownership, payload size, and unknown message types.
 - [x] Add a warning and scope selector for auto-accept: one edit, current file, request, session, workspace, or always. Make dangerous tools never auto-accepted by default.
 - [x] Add undo for every applied edit and a visible recovery path after a failed verification.
-- [ ] Add a privacy page that explains local providers, external providers, terminal access, storage, export, and redaction.
+- [x] Add a privacy page that explains local providers, external providers, terminal access, storage, export, and redaction.
 
 ## P1 — make the agent finish work reliably
 
