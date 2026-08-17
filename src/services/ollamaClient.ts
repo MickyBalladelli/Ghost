@@ -381,7 +381,8 @@ export class OllamaClient {
 
   private getHealthEndpoints(): string[] {
     if (this.mode === 'ollama') {
-      return [`${getOllamaBaseUrl(this.baseUrl)}/api/tags`]
+      const baseUrl = getOllamaBaseUrl(this.baseUrl)
+      return [`${baseUrl}/api/tags`, baseUrl]
     }
 
     if (this.mode === 'openai-compatible' || isExplicitOpenAiUrl(this.baseUrl)) {
@@ -395,6 +396,9 @@ export class OllamaClient {
   }
 
   private getModelEndpoints(): string[] {
+    if (this.mode === 'ollama') {
+      return [`${getOllamaBaseUrl(this.baseUrl)}/api/tags`]
+    }
     return this.getHealthEndpoints()
   }
 

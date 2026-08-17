@@ -2,9 +2,21 @@
 
 All notable changes to this extension are documented here.
 
-## 1.0.87 - 2026-08-17
+## 1.0.90 - 2026-08-17
+
+- Finished stale-edit recovery cleanly when the requested change was already present, instead of showing a failed tool after successful verification.
+
+## 1.0.89 - 2026-08-17
+
+- Refreshed provider health and model controls when the webview finishes loading, preventing the initial live Ollama status from being lost before the message listener is ready.
+
+## 1.0.88 - 2026-08-17
 
 - Prevented false Ollama-offline indicators when model discovery fails, checks race, or a non-network request error occurs; health checks now have a longer window and stale results are ignored.
+- Added Ollama root-endpoint health fallback so a live server is not marked offline when `/api/tags` is unavailable.
+
+## 1.0.87 - 2026-08-17
+
 - Blocked binary, generated, vendored, ignored, and over-1 MiB files before model reads, with safe search or bounded-read alternatives.
 - Added safe read modes for head, tail, line, byte, symbol, and matching-line views with UTF-8 metadata, line endings, size, line count, and SHA-256 content hashes.
 

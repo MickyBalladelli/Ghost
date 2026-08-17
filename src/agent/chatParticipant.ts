@@ -981,6 +981,7 @@ export function createChatParticipantHandler(
       let missingToolRetries = 0
       let invalidToolRetries = 0
       let staleEditRetries = 0
+      const staleEditRecoveryPaths = new Set<string>()
       let emptyProviderRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const budget: RequestBudget = {
@@ -1208,6 +1209,24 @@ export function createChatParticipantHandler(
 
         toolResult = limitToolResult(toolCall.name, toolResult)
 
+        const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
+        const editNoOp = /no changes needed/i.test(toolResult)
+        if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < MAX_STALE_EDIT_RETRIES) {
+          staleEditRetries += 1
+          for (const path of editPaths) {
+            staleEditRecoveryPaths.add(path)
+          }
+          response.progress('Edit was stale. Asking Ghost to refresh the file and rebase the change.')
+          messages.push({
+            role: 'assistant',
+            content: generated
+          }, {
+            role: 'user',
+            content: `Tool result for ${toolCall.name}:\n${toolResult}\nThe edit is stale. Do not retry the same hunk. Use ghost_read_file on the current file, then create a fresh small ghost_apply_edit with new oldText, oldHash, beforeContext, or afterContext. Preserve the user’s existing changes.`
+          })
+          continue
+        }
+
         response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult)}`)
 
         messages.push(
@@ -1215,23 +1234,16 @@ export function createChatParticipantHandler(
           { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolResult}` }
         )
 
-        const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
-        const editNoOp = /no changes needed/i.test(toolResult)
-        if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < MAX_STALE_EDIT_RETRIES) {
-          staleEditRetries += 1
-          response.progress('Edit was stale. Asking Ghost to refresh the file and rebase the change.')
-          messages.push({
-            role: 'user',
-            content: 'The edit is stale. Do not retry the same hunk. Use ghost_read_file on the current file, then create a fresh small ghost_apply_edit with new oldText, oldHash, beforeContext, or afterContext. Preserve the user’s existing changes.'
-          })
-          continue
-        }
         if (editFailed) {
           requestOptions.onStop?.('failed-tool', toolResult)
           response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
           return
         }
         if (editPath && editNoOp) {
+          if (editPaths.some(path => staleEditRecoveryPaths.has(path))) {
+            response.markdown(`The requested change is already present in ${editPaths.join(', ')}. Keeping the current file.`)
+            return
+          }
           const message = `Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`
           requestOptions.onStop?.('failed-tool', message)
           response.markdown(message)

@@ -1738,6 +1738,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'ready':
         await this.sendPersistedState()
         this.postState()
+        await this.sendControlsState()
         return
       case 'reset':
         await this.reset()
