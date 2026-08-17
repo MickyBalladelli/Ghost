@@ -9,6 +9,8 @@ All notable changes to this extension are documented here.
 - Added refresh and rebase guidance for stale edits, including auto-accepted and staged editor changes.
 - Added old-text, SHA-256, and nearby-context validation for structured edit hunks.
 - Stopped no-op, repeated, undo/reapply, alternating, and overlapping edit loops per file.
+- Replaced the per-file edit cap with request budgets for files, changed lines, bytes, commands, time, and estimated model tokens.
+- Reported the budget category and usage when Ghost stops.
 
 ## 1.0.83 - 2026-08-17
 

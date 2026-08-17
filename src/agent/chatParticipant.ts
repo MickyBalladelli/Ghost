@@ -30,11 +30,18 @@ const SYSTEM_PROMPT = [
 ].join(' ')
 
 const MAX_TOOL_ROUNDS = 128
-const MAX_EDITS_PER_FILE = 8
 const MIN_TOOL_CALL_TOKENS = 4096
 const MAX_MISSING_TOOL_RETRIES = 2
 const MAX_EMPTY_PROVIDER_RETRIES = 2
 const MAX_TOOL_RESULT_CHARACTERS = 16000
+const REQUEST_BUDGET_LIMITS = {
+  files: 24,
+  changedLines: 4000,
+  changedBytes: 1_000_000,
+  commands: 32,
+  timeMs: 30 * 60 * 1000,
+  modelTokens: 64_000
+} as const
 
 interface EditRecord {
   signature: string
@@ -44,9 +51,22 @@ interface EditRecord {
 }
 
 interface FileEditState {
-  count: number
   signatures: Set<string>
   history: EditRecord[]
+}
+
+interface EditCost {
+  changedLines: number
+  changedBytes: number
+}
+
+interface RequestBudget {
+  startedAt: number
+  files: Set<string>
+  changedLines: number
+  changedBytes: number
+  commands: number
+  modelTokens: number
 }
 
 function summarizeToolResult(value: string): string {
@@ -100,6 +120,74 @@ function getEditRecord(call: LocalToolCall): EditRecord | undefined {
   } catch {
     return undefined
   }
+}
+
+function getEditCost(call: LocalToolCall, selectedHunkIndexes?: number[]): EditCost | undefined {
+  if (call.name === 'ghost_write_file') {
+    const content = typeof call.arguments.content === 'string' ? call.arguments.content : ''
+    return {
+      changedLines: Math.max(1, content.split('\n').length),
+      changedBytes: Math.max(1, Buffer.byteLength(content, 'utf8'))
+    }
+  }
+  if (call.name !== 'ghost_apply_edit') {
+    return undefined
+  }
+
+  try {
+    const edit = parseGhostEdit(call.arguments)
+    const selected = selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined
+    return edit.hunks.reduce((cost, hunk, index) => {
+      if (selected && !selected.has(index)) {
+        return cost
+      }
+      const replacementLines = hunk.replacement.split('\n').length
+      const oldLines = hunk.oldText?.split('\n').length ?? hunk.endLine - hunk.startLine + 1
+      const oldBytes = hunk.oldText ? Buffer.byteLength(hunk.oldText, 'utf8') : 0
+      const replacementBytes = Buffer.byteLength(hunk.replacement, 'utf8')
+      return {
+        changedLines: cost.changedLines + Math.max(1, oldLines, replacementLines),
+        changedBytes: cost.changedBytes + Math.max(1, oldBytes, replacementBytes)
+      }
+    }, { changedLines: 0, changedBytes: 0 })
+  } catch {
+    return undefined
+  }
+}
+
+function getBudgetStopReason(budget: RequestBudget, call?: LocalToolCall, selectedHunkIndexes?: number[]): string | undefined {
+  const elapsedMs = Date.now() - budget.startedAt
+  if (elapsedMs >= REQUEST_BUDGET_LIMITS.timeMs) {
+    return `time (${Math.ceil(elapsedMs / 60000)} minutes used of ${REQUEST_BUDGET_LIMITS.timeMs / 60000})`
+  }
+  if (budget.modelTokens >= REQUEST_BUDGET_LIMITS.modelTokens) {
+    return `model tokens (${budget.modelTokens} used of ${REQUEST_BUDGET_LIMITS.modelTokens})`
+  }
+  if (!call) {
+    return undefined
+  }
+  if (call.name === 'ghost_run_terminal_command' && budget.commands >= REQUEST_BUDGET_LIMITS.commands) {
+    return `commands (${budget.commands} used of ${REQUEST_BUDGET_LIMITS.commands})`
+  }
+  const path = getEditPath(call)
+  const cost = getEditCost(call, selectedHunkIndexes)
+  if (!path || !cost) {
+    return undefined
+  }
+  if (!budget.files.has(path) && budget.files.size >= REQUEST_BUDGET_LIMITS.files) {
+    return `files (${budget.files.size} used of ${REQUEST_BUDGET_LIMITS.files})`
+  }
+  if (budget.changedLines + cost.changedLines > REQUEST_BUDGET_LIMITS.changedLines) {
+    return `changed lines (${budget.changedLines + cost.changedLines} requested of ${REQUEST_BUDGET_LIMITS.changedLines})`
+  }
+  if (budget.changedBytes + cost.changedBytes > REQUEST_BUDGET_LIMITS.changedBytes) {
+    return `changed bytes (${budget.changedBytes + cost.changedBytes} requested of ${REQUEST_BUDGET_LIMITS.changedBytes})`
+  }
+  return undefined
+}
+
+function stopForBudget(response: vscode.ChatResponseStream, reason: string): void {
+  response.markdown(`Ghost stopped because the request budget was reached: ${reason}. Review the partial changes and retry with a smaller request.`)
 }
 
 function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
@@ -528,8 +616,9 @@ async function streamModelTurn(
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean }> {
+): Promise<{ generated: string; streamed: boolean; modelTokens: number }> {
   let generated = ''
+  let modelCharacters = 0
   let decided = false
   let bufferingToolCall = false
   let hidingReasoning = false
@@ -570,8 +659,9 @@ async function streamModelTurn(
   }
 
   for await (const chunk of llmFactory.streamChatCompletion(options)) {
+    modelCharacters += chunk.length
     if (token.isCancellationRequested) {
-      return { generated: '', streamed: false }
+      return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4) }
     }
 
     if (bufferForToolCall) {
@@ -600,7 +690,11 @@ async function streamModelTurn(
     }
   }
 
-  return { generated: generated.trim(), streamed: decided && !bufferingToolCall }
+  return {
+    generated: generated.trim(),
+    streamed: decided && !bufferingToolCall,
+    modelTokens: Math.ceil(modelCharacters / 4)
+  }
 }
 
 export function createChatParticipantHandler(
@@ -621,6 +715,7 @@ export function createChatParticipantHandler(
       return
     }
 
+    const requestStartedAt = Date.now()
     const settings = configuration.getSettings()
     const requestOptions = getRequestOptions(request)
     const effectiveSettings = {
@@ -669,7 +764,20 @@ export function createChatParticipantHandler(
       let missingToolRetries = 0
       let emptyProviderRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
+      const budget: RequestBudget = {
+        startedAt: requestStartedAt,
+        files: new Set<string>(),
+        changedLines: 0,
+        changedBytes: 0,
+        commands: 0,
+        modelTokens: 0
+      }
       while (true) {
+        const beforeModelBudget = getBudgetStopReason(budget)
+        if (beforeModelBudget) {
+          stopForBudget(response, beforeModelBudget)
+          return
+        }
         const turn = await streamModelTurn(
           llmFactory,
           {
@@ -692,6 +800,13 @@ export function createChatParticipantHandler(
           requestOptions.showReasoning === true,
           toolsEnabled
         )
+
+        budget.modelTokens += turn.modelTokens
+        const afterModelBudget = getBudgetStopReason(budget)
+        if (afterModelBudget) {
+          stopForBudget(response, afterModelBudget)
+          return
+        }
 
         if (token.isCancellationRequested || turn.streamed) {
           return
@@ -753,6 +868,12 @@ export function createChatParticipantHandler(
         }
         toolCallCount += 1
 
+        const beforeApprovalBudget = getBudgetStopReason(budget, toolCall)
+        if (beforeApprovalBudget) {
+          stopForBudget(response, beforeApprovalBudget)
+          return
+        }
+
         const toolArgumentError = getToolArgumentError(toolCall)
         if (toolArgumentError) {
           response.progress(`Invalid tool call: ${toolArgumentError}`)
@@ -786,7 +907,7 @@ export function createChatParticipantHandler(
         const editRecord = getEditRecord(toolCall)
         const editSignature = editRecord?.signature
         const editState = editPath
-          ? fileEditStates.get(editPath) ?? { count: 0, signatures: new Set<string>(), history: [] }
+          ? fileEditStates.get(editPath) ?? { signatures: new Set<string>(), history: [] }
           : undefined
         if (editPath && editState && editSignature && editState.signatures.has(editSignature)) {
           response.markdown(`Ghost stopped because it tried to apply the same edit to ${editPath} again. Review the file and retry with a more specific request.`)
@@ -799,10 +920,6 @@ export function createChatParticipantHandler(
             return
           }
         }
-        if (editPath && editState && editState.count >= MAX_EDITS_PER_FILE) {
-          response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
-          return
-        }
         if (approval.decision === 'reject') {
           const rejection = approval.reason ?? 'User rejected this tool call.'
           response.progress(`Tool result: ${toolCall.name}: ${rejection}`)
@@ -811,6 +928,14 @@ export function createChatParticipantHandler(
             { role: 'user', content: `Tool result for ${toolCall.name}:\n${rejection}` }
           )
           continue
+        }
+        const afterApprovalBudget = getBudgetStopReason(budget, toolCall, approval.selectedHunkIndexes)
+        if (afterApprovalBudget) {
+          stopForBudget(response, afterApprovalBudget)
+          return
+        }
+        if (toolCall.name === 'ghost_run_terminal_command') {
+          budget.commands += 1
         }
         let toolResult: string
 
@@ -845,13 +970,14 @@ export function createChatParticipantHandler(
           return
         }
         if (editPath && editState && editRecord && editSignature && !editFailed) {
-          editState.count += 1
           editState.signatures.add(editSignature)
           editState.history.push(editRecord)
           fileEditStates.set(editPath, editState)
-          if (editState.count >= MAX_EDITS_PER_FILE) {
-            response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
-            return
+          const cost = getEditCost(toolCall, approval.selectedHunkIndexes)
+          if (cost) {
+            budget.files.add(editPath)
+            budget.changedLines += cost.changedLines
+            budget.changedBytes += cost.changedBytes
           }
         }
       }

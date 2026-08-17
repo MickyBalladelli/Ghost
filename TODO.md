@@ -15,7 +15,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Detect disk changes between read, approval, and apply. Refuse stale edits and offer refresh/rebase instead of overwriting user work.
 - [x] Make structured edits context-aware. Include old text, a content hash, or nearby anchor lines, not only line numbers.
 - [x] Detect no-op, undo/reapply, alternating, and overlapping edits. Stop the request when the model oscillates on one file.
-- [ ] Replace the current edit-count guard with a request budget for files, changed lines, bytes, commands, time, and model tokens. Show the limit and why Ghost stopped.
+- [x] Replace the current edit-count guard with a request budget for files, changed lines, bytes, commands, time, and model tokens. Show the limit and why Ghost stopped.
 - [ ] Add one transaction for a multi-file change: preview one combined diff, apply atomically, verify, and roll back the group on failure.
 - [ ] Add an explicit verification phase after edits. Run only relevant checks, report their exit status, and do not claim success without evidence.
 - [ ] Add a clear stopped state: failed tool, invalid model response, cancellation, timeout, approval rejection, context limit, and budget limit must look different.
