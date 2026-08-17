@@ -62,6 +62,17 @@ export interface GhostContinuation {
   remainingPlan?: GhostTaskPlan
 }
 
+export type GhostRequestEventType = 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'task-plan' | 'warning' | 'error' | 'request-completed'
+
+export interface GhostRequestEvent {
+  timestamp: number
+  elapsedMs: number
+  type: GhostRequestEventType
+  status: GhostRequestStatus
+  phase?: GhostProgressPhase
+  detail?: string
+}
+
 export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
@@ -166,7 +177,7 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'task-plan'; sequence: number; plan: GhostTaskPlan })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string; stopReason?: GhostStopReason })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string; completionRecord?: GhostCompletionRecord })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string; completionRecord?: GhostCompletionRecord; eventLog?: GhostRequestEvent[] })
 
 interface GhostRequestEnvelopeBase {
   requestId: string

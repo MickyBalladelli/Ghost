@@ -21,6 +21,7 @@ import {
   GhostContinuation,
   GhostExtensionMessage,
   GhostPersistedState,
+  GhostRequestEvent,
   GhostSettingsUpdate,
   GhostStreamEvent,
   GhostToolArguments,
@@ -51,6 +52,7 @@ interface GhostRequestState {
   stopMessage?: string
   model: string
   outputTokens: number
+  eventLog: GhostRequestEvent[]
   completionRecord?: CompletionRecord
   autoAcceptFilePath?: string
   pendingTool?: { toolCallId: string; name: string }
@@ -259,7 +261,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       lastActivityAt: Date.now(),
       timedOut: false,
       model: options.model?.trim() || getGhostSettings().chatModel,
-      outputTokens: 0
+      outputTokens: 0,
+      eventLog: []
     }
     this.requests.set(requestId, request)
     this.postStreamEvent(requestId, request, {
@@ -596,7 +599,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       lastActivityAt: Date.now(),
       timedOut: false,
       model: getGhostSettings().chatModel,
-      outputTokens: 0
+      outputTokens: 0,
+      eventLog: []
     }
     this.requests.set(requestId, request)
     this.postStreamEvent(requestId, request, { type: 'request-started' })
@@ -1431,13 +1435,54 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     })
   }
 
+  private appendRequestEvent(
+    request: GhostRequestState,
+    event: { type: GhostStreamEvent['type']; [key: string]: unknown },
+    status: GhostRequestStatus,
+    timestamp: number
+  ): void {
+    const previous = request.eventLog.at(-1)
+    const isDelta = event.type === 'text-delta' || event.type === 'code-delta'
+    if (isDelta && previous?.status === status) {
+      return
+    }
+    const detail = event.type === 'thinking' || event.type === 'warning' || event.type === 'error'
+      ? typeof event.detail === 'string'
+        ? event.detail
+        : typeof event.message === 'string'
+          ? event.message
+          : undefined
+      : event.type === 'tool-requested'
+        ? typeof event.tool === 'string' ? `Requested ${event.tool}` : 'Tool requested'
+        : event.type === 'tool-result'
+          ? `${typeof event.tool === 'string' ? event.tool : 'Tool'} ${typeof event.resultStatus === 'string' ? event.resultStatus : 'completed'}`
+          : event.type === 'task-plan'
+            ? 'Task plan updated'
+            : event.type === 'request-completed'
+              ? `Request ${typeof event.status === 'string' ? event.status : status}`
+              : undefined
+    request.eventLog.push({
+      timestamp,
+      elapsedMs: Math.max(0, timestamp - request.startedAt),
+      type: event.type,
+      status,
+      ...(typeof event.phase === 'string' ? { phase: event.phase as GhostStreamEvent['phase'] } : {}),
+      ...(detail ? { detail: redactSensitiveText(detail).slice(0, 500) } : {})
+    })
+    if (request.eventLog.length > 100) {
+      request.eventLog.splice(0, request.eventLog.length - 100)
+    }
+  }
+
   private postStreamEvent(
     requestId: string,
     request: GhostRequestState,
     event: { type: GhostStreamEvent['type']; [key: string]: unknown }
   ): void {
-    request.lastActivityAt = Date.now()
+    const timestamp = Date.now()
+    request.lastActivityAt = timestamp
     request.status = getRequestStatusForEvent(event, request.status)
+    this.appendRequestEvent(request, event, request.status, timestamp)
     request.sequence += 1
     if (event.type === 'tool-requested' && typeof event.toolCallId === 'string' && typeof event.tool === 'string') {
       request.pendingTool = { toolCallId: event.toolCallId, name: event.tool }
@@ -1458,7 +1503,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
         : {}),
       ...redactSensitiveValue(Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))),
-      ...(event.type === 'request-completed' && request.completionRecord ? { completionRecord: request.completionRecord } : {})
+      ...(event.type === 'request-completed' && request.completionRecord ? { completionRecord: request.completionRecord } : {}),
+      ...(event.type === 'request-completed' ? { eventLog: request.eventLog } : {})
     } as GhostStreamEvent)
   }
 

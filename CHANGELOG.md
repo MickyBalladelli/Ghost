@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Added bounded recovery for oversized streamed edit calls, asking for smaller hunks or one file at a time before execution.
 - Added clear no-tool failure reasons and always-visible Retry and Regenerate actions for failed replies.
 - Added workspace-relative model paths with host-side workspace validation while preserving absolute path compatibility.
+- Added bounded, redacted per-request event logs with timestamps and status transitions for display and export.
 
 ## 1.0.92 - 2026-08-18
 

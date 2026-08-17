@@ -100,6 +100,7 @@ interface ChatMessage {
   status?: 'streaming' | 'error'
   requestStatus?: RequestStatus
   stopReason?: StopReason
+  eventLog?: RequestEvent[]
   requestId?: string
   createdAt: number
   updatedAt: number
@@ -148,6 +149,15 @@ interface CompletionRecord {
   failures: string[]
   remainingWork: string[]
   recordedAt: number
+}
+
+interface RequestEvent {
+  timestamp: number
+  elapsedMs: number
+  type: string
+  status: RequestStatus
+  phase?: ProgressPhase
+  detail?: string
 }
 
 interface ContinuationResume {
@@ -248,6 +258,7 @@ type GhostExtensionMessage =
       resultStatus?: 'completed' | 'rejected' | 'failed'
       plan?: TaskPlan
       completionRecord?: CompletionRecord
+      eventLog?: RequestEvent[]
       status?: 'completed' | 'cancelled' | 'failed'
       stopReason?: StopReason
     }
@@ -375,6 +386,27 @@ const addPromptToHistory = (history: readonly string[], prompt: string): string[
 
 const textPart = (text: string): MessagePart => ({ kind: 'text', text })
 
+const normalizeRequestEventLog = (value: unknown): RequestEvent[] => {
+  if (!Array.isArray(value)) return []
+  const statuses: RequestStatus[] = ['idle', 'preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval', 'completed', 'cancelled', 'failed']
+  const phases: ProgressPhase[] = ['context', 'provider', 'thinking', 'streaming', 'tool', 'complete', 'error']
+  return value.slice(-100).flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const event = item as Record<string, unknown>
+    if (typeof event.timestamp !== 'number' || !Number.isFinite(event.timestamp) || typeof event.elapsedMs !== 'number' || !Number.isFinite(event.elapsedMs) || typeof event.type !== 'string' || !statuses.includes(event.status as RequestStatus)) {
+      return []
+    }
+    return [{
+      timestamp: event.timestamp,
+      elapsedMs: Math.max(0, event.elapsedMs),
+      type: event.type.slice(0, 64),
+      status: event.status as RequestStatus,
+      ...(phases.includes(event.phase as ProgressPhase) ? { phase: event.phase as ProgressPhase } : {}),
+      ...(typeof event.detail === 'string' ? { detail: redactSensitiveText(event.detail).slice(0, 500) } : {})
+    }]
+  })
+}
+
 const createMessage = (role: MessageRole, content = '', requestId?: string): ChatMessage => {
   const timestamp = Date.now()
   return {
@@ -413,6 +445,7 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
     ...(value.status ? { status: value.status } : {}),
     ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
     ...(value.stopReason ? { stopReason: value.stopReason } : {}),
+    ...(normalizeRequestEventLog(value.eventLog).length > 0 ? { eventLog: normalizeRequestEventLog(value.eventLog) } : {}),
     ...(value.requestId ? { requestId: value.requestId } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
@@ -1642,6 +1675,19 @@ const renderResponseStats = (message: ChatMessage): string => {
   return `<div class="message-response-stats">${formatElapsed(elapsedMs)} · ${tokenCount} tok · ${tokensPerSecond.toFixed(1)} tok/s${modelLabel}</div>`
 }
 
+const renderRequestEventLog = (message: ChatMessage): string => {
+  const events = message.eventLog?.slice(-100) ?? []
+  if (events.length === 0) {
+    return ''
+  }
+  const rows = events.map(event => {
+    const timestamp = Number.isFinite(event.timestamp) ? new Date(event.timestamp).toLocaleTimeString() : '--:--:--'
+    const detail = event.detail ? ` · ${escapeHtml(event.detail)}` : ''
+    return `<div class="message-progress"><strong>${escapeHtml(event.status)}</strong> · ${escapeHtml(event.type)} · ${timestamp} · ${(Math.max(0, event.elapsedMs) / 1000).toFixed(1)}s${detail}</div>`
+  }).join('')
+  return `<details class="progress-details"><summary>Request log (${events.length})</summary>${rows}</details>`
+}
+
 const toolActionText = (toolCall: ToolCall): string => {
   let args: Record<string, unknown> = {}
   if (toolCall.arguments) {
@@ -1691,7 +1737,8 @@ const toolActionText = (toolCall: ToolCall): string => {
 const renderMessagePartSummary = (message: ChatMessage): string => {
   const parts = message.parts.filter(part => part.kind !== 'text')
   if (parts.length === 0) {
-    return ''
+    const eventLog = renderRequestEventLog(message)
+    return eventLog ? `<div class="message-part-summary">${eventLog}</div>` : ''
   }
   const progressParts = parts.filter((part): part is Extract<MessagePart, { kind: 'progress' | 'reasoning' }> => part.kind === 'progress' || part.kind === 'reasoning')
   const toolParts = parts.filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
@@ -1752,7 +1799,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
-  return `<div class="message-part-summary">${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
+  return `<div class="message-part-summary">${renderRequestEventLog(message)}${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
 }
 
 const stateCard = (): string => {
@@ -2778,6 +2825,7 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'request-completed') {
     const status = message.status ?? 'failed'
     const completionRecord = normalizeCompletionRecord(message.completionRecord)
+    const eventLog = normalizeRequestEventLog(message.eventLog)
     conversation.completionRecord = completionRecord ?? {
       changedFiles: [],
       checksRun: [],
@@ -2788,6 +2836,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
+    if (eventLog.length > 0) {
+      assistantMessage.eventLog = eventLog
+    }
     if (message.stopReason) {
       request.stopReason = message.stopReason
       assistantMessage.stopReason = message.stopReason
