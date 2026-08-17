@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.92 - 2026-08-18
+
+- Added a Continue action for failed requests that sends the last failed tool, fresh current file state, and remaining task plan without replaying the conversation.
+
 ## 1.0.91 - 2026-08-17
 
 - Fixed Ghost continuing to request more tools after a workspace edit completed and verification finished.

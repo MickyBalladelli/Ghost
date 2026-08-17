@@ -18,6 +18,7 @@ import {
   GHOST_WEBVIEW_PROTOCOL_VERSION,
   GHOST_PERSISTENCE_SCHEMA_VERSION,
   GhostAttachment,
+  GhostContinuation,
   GhostExtensionMessage,
   GhostPersistedState,
   GhostSettingsUpdate,
@@ -237,7 +238,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     conversationId: string,
     prompt: string,
     options: GhostWebviewRequestOptions = {},
-    attachments: GhostAttachment[] = []
+    attachments: GhostAttachment[] = [],
+    continuationContext = ''
   ): Promise<void> {
     if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
       return
@@ -369,7 +371,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .join('\n\n')
     const requestOptions: GhostRequestOptions = {
       ...options,
-      additionalContext: droppedContext || undefined,
+      additionalContext: [continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
       onStop: (reason, message) => {
@@ -519,6 +521,42 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request.stopReason = 'cancelled'
     request.stopMessage = 'The request was cancelled.'
     request.cancellation.cancel()
+  }
+
+  private async continueRequest(
+    requestId: string,
+    conversationId: string,
+    resume: GhostContinuation,
+    options: GhostWebviewRequestOptions = {}
+  ): Promise<void> {
+    const sections = [
+      'Continue the previous task from the saved state. Do not replay the whole conversation.',
+      `Original request:\n${resume.prompt}`
+    ]
+    if (resume.lastFailure) {
+      sections.push(`Last failed tool:\n${JSON.stringify(resume.lastFailure)}`)
+    }
+    if (resume.remainingPlan) {
+      sections.push(`Remaining task plan:\n${JSON.stringify(resume.remainingPlan)}`)
+    }
+    for (const filePath of resume.filePaths.slice(0, 12)) {
+      try {
+        const uri = resolveWorkspacePath(filePath)
+        const snapshot = await readWorkspaceFile(uri)
+        const content = snapshot.exists ? snapshot.content.slice(0, 12000) : '[file does not exist]'
+        sections.push(`Current file state: ${uri.fsPath}${snapshot.exists && snapshot.content.length > content.length ? ' (truncated)' : ''}\n${content}`)
+      } catch {
+        sections.push(`Current file state unavailable: ${filePath}`)
+      }
+    }
+    await this.submit(
+      requestId,
+      conversationId,
+      'Continue from the saved state. Inspect and finish the original request.',
+      options,
+      [],
+      sections.join('\n\n')
+    )
   }
 
   private cancelRequests(): void {
@@ -1818,6 +1856,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         return
       case 'submit':
         await this.submit(message.requestId, message.conversationId, message.prompt, message.options, message.attachments)
+        return
+      case 'continue':
+        await this.continueRequest(message.requestId, message.conversationId, message.resume, message.options)
         return
       case 'cancel':
         this.cancel(message.requestId, message.conversationId)

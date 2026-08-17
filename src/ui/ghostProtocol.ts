@@ -51,6 +51,17 @@ export interface GhostCompletionRecord {
   recordedAt: number
 }
 
+export interface GhostContinuation {
+  prompt: string
+  lastFailure?: {
+    tool: string
+    arguments?: GhostToolArguments
+    result?: string
+  }
+  filePaths: string[]
+  remainingPlan?: GhostTaskPlan
+}
+
 export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
@@ -127,6 +138,7 @@ export type GhostWebviewMessage =
     })
   | (GhostRequestEnvelope & { type: 'cancel' })
   | (GhostRequestEnvelope & { type: 'retry-tool'; toolCallId: string; tool: string; arguments: GhostToolArguments })
+  | (GhostRequestEnvelope & { type: 'continue'; resume: GhostContinuation; options?: GhostWebviewRequestOptions })
   | (GhostRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
   | (GhostRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
   | (GhostRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostToolArguments })
@@ -362,6 +374,20 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 &&
       ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_record_completion', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
       isRecord(value.arguments)
+  }
+  if (value.type === 'continue') {
+    const resume = value.resume
+    if (!isRecord(resume) || !isNonEmptyString(resume.prompt) || resume.prompt.length > 20000 || !Array.isArray(resume.filePaths) || resume.filePaths.length > 12 || !resume.filePaths.every(item => isBoundedString(item, 4096) && item.trim().length > 0)) {
+      return false
+    }
+    if (!isOptions(value.options)) return false
+    if (resume.remainingPlan !== undefined && (!isRecord(resume.remainingPlan) || !Array.isArray(resume.remainingPlan.steps) || resume.remainingPlan.steps.length > 50)) {
+      return false
+    }
+    if (resume.lastFailure !== undefined && (!isRecord(resume.lastFailure) || !isBoundedString(resume.lastFailure.tool, 256) || resume.lastFailure.tool.trim().length === 0 || (resume.lastFailure.result !== undefined && !isBoundedString(resume.lastFailure.result, 16000)) || (resume.lastFailure.arguments !== undefined && !isRecord(resume.lastFailure.arguments)))) {
+      return false
+    }
+    return true
   }
   if (value.type === 'approve-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))

@@ -147,6 +147,13 @@ interface CompletionRecord {
   recordedAt: number
 }
 
+interface ContinuationResume {
+  prompt: string
+  lastFailure?: { tool: string; arguments?: Record<string, unknown>; result?: string }
+  filePaths: string[]
+  remainingPlan?: TaskPlan
+}
+
 interface Conversation {
   id: string
   title: string
@@ -1608,6 +1615,9 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     addAction(actions, 'Regenerate', 'regenerate', message.id)
     addAction(actions, 'Edit & resend', 'edit-resend', message.id)
   }
+  if (actions && message.role === 'assistant' && (message.status === 'error' || message.requestStatus === 'failed' || message.stopReason)) {
+    addAction(actions, 'Continue', 'continue', message.id)
+  }
   if (actions && message.role === 'user') {
     addAction(actions, 'Edit', 'edit', message.id)
   }
@@ -2046,6 +2056,89 @@ const editMessage = (messageId: string) => {
   promptElement.setSelectionRange(promptElement.value.length, promptElement.value.length)
 }
 
+const getContinuationResume = (message: ChatMessage): ContinuationResume | undefined => {
+  const conversation = getActiveConversation()
+  const messageIndex = conversation.messages.findIndex(item => item.id === message.id)
+  const previousUser = messageIndex > 0 ? conversation.messages.slice(0, messageIndex).reverse().find(item => item.role === 'user') : undefined
+  if (!previousUser) {
+    return undefined
+  }
+  const toolParts = conversation.messages
+    .slice(0, messageIndex + 1)
+    .flatMap(item => item.parts)
+    .filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
+  const failedTool = [...toolParts].reverse().find(part => part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
+  let failureArguments: Record<string, unknown> | undefined
+  if (failedTool?.toolCall.arguments) {
+    try {
+      const parsed = JSON.parse(failedTool.toolCall.arguments) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) failureArguments = parsed as Record<string, unknown>
+    } catch {
+      // Keep the failure result when saved arguments are malformed.
+    }
+  }
+  const filePaths = [...new Set(toolParts.flatMap(part => {
+    const paths: string[] = []
+    if (part.toolCall.diffPreview?.path) paths.push(part.toolCall.diffPreview.path)
+    if (part.toolCall.arguments) {
+      try {
+        const parsed = JSON.parse(part.toolCall.arguments) as { path?: unknown }
+        if (typeof parsed.path === 'string') paths.push(parsed.path)
+      } catch {
+        // Ignore malformed historical arguments.
+      }
+    }
+    return paths
+  }))].slice(-12)
+  return {
+    prompt: previousUser.content,
+    ...(failedTool ? { lastFailure: { tool: failedTool.toolCall.name, arguments: failureArguments, result: failedTool.toolCall.result?.slice(0, 16000) } } : {
+      lastFailure: { tool: 'request', result: messageText(message).slice(-16000) }
+    }),
+    filePaths,
+    ...(conversation.taskPlan ? { remainingPlan: conversation.taskPlan } : {})
+  }
+}
+
+const continueConversation = (messageId: string): void => {
+  if (activeRequest) return
+  const conversation = getActiveConversation()
+  const message = findMessage(conversation, messageId)
+  const resume = message ? getContinuationResume(message) : undefined
+  if (!message || !resume) return
+  const requestId = createId('continue')
+  const userMessage = createMessage('user', 'Continue from the saved state.')
+  const assistantMessage = createMessage('assistant', '', requestId)
+  assistantMessage.status = 'streaming'
+  assistantMessage.requestStatus = 'preparing'
+  conversation.messages.push(userMessage, assistantMessage)
+  conversation.activeRequestId = requestId
+  conversation.updatedAt = Date.now()
+  activeRequest = {
+    requestId,
+    conversationId: conversation.id,
+    assistantMessageId: assistantMessage.id,
+    lastSequence: 0,
+    status: 'preparing',
+    attempt: 1,
+    startedAt: Date.now(),
+    model: controls.chatModel,
+    phase: 'context',
+    latestDetail: 'Continuing from saved state',
+    tokenCount: 0
+  }
+  requests.set(requestId, activeRequest)
+  startProgressTimer()
+  notice = undefined
+  render(true)
+  post('continue', {
+    requestId,
+    conversationId: conversation.id,
+    resume,
+    options: buildRequestOptions()
+  })
+}
+
 const retryMessage = (messageId: string) => {
   if (activeRequest) {
     return
@@ -2242,6 +2335,8 @@ const handleMessageAction = (action: string, messageId: string) => {
   } else if (action === 'edit-resend') {
     post('edit', { ...lifecycleEnvelope('edit'), messageId, prompt: message.content })
     editAndResendMessage(messageId)
+  } else if (action === 'continue') {
+    continueConversation(messageId)
   } else if (action === 'retry' || action === 'regenerate') {
     post(action, { ...lifecycleEnvelope(action), messageId })
     retryMessage(messageId)
