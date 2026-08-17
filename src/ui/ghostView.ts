@@ -5,7 +5,7 @@ import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
-import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostProvider } from '../config'
+import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
@@ -46,6 +46,7 @@ interface GhostRequestState {
   stopMessage?: string
   model: string
   outputTokens: number
+  autoAcceptFilePath?: string
   pendingTool?: { toolCallId: string; name: string }
 }
 
@@ -936,6 +937,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
+  private shouldAutoAcceptFileEdit(
+    scope: GhostAutoAcceptScope,
+    request: GhostRequestState,
+    call: LocalToolCall
+  ): boolean {
+    if (scope === 'confirm') {
+      return false
+    }
+    if (scope === 'one-edit' || scope === 'request' || scope === 'session' || scope === 'workspace' || scope === 'always') {
+      return true
+    }
+    if (call.name === 'ghost_apply_transaction' || typeof call.arguments.path !== 'string') {
+      return false
+    }
+    if (!request.autoAcceptFilePath) {
+      request.autoAcceptFilePath = call.arguments.path
+      return true
+    }
+    return request.autoAcceptFilePath === call.arguments.path
+  }
+
   private async requestToolApproval(
     requestId: string,
     request: GhostRequestState,
@@ -999,7 +1021,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const deniedTools = settings.toolDenylist ?? []
     const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
     const isFileEditTool = this.isFileEditTool(call.name)
-    const autoAcceptedFileEdit = isFileEditTool && settings.fileEditApproval === 'auto' && !blockedByPolicy
+    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
     const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
     const needsInteractiveApproval = requiresApproval && (isFileEditTool
@@ -1475,7 +1497,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         repeatPenalty: settings.repeatPenalty,
         responseLength: settings.responseLength,
         mode: settings.mode,
-        fileEditApproval: settings.fileEditApproval,
+        autoAcceptScope: settings.autoAcceptScope,
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
@@ -1573,8 +1595,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (update.mode) {
       await ghostConfig.update('mode', update.mode, target)
     }
-    if (update.fileEditApproval) {
+    if (update.autoAcceptScope) {
+      if (update.autoAcceptScope !== 'confirm' && getGhostSettings().autoAcceptScope !== update.autoAcceptScope) {
+        const choice = await vscode.window.showWarningMessage(
+          `Auto-accept can change workspace files without asking. Scope: ${update.autoAcceptScope}. Terminal and other dangerous tools still require approval.`,
+          { modal: true },
+          'Enable auto-accept'
+        )
+        if (choice !== 'Enable auto-accept') {
+          await this.sendControlsState()
+          return
+        }
+      }
+      await ghostConfig.update('autoAcceptScope', update.autoAcceptScope, target)
+      await ghostConfig.update('fileEditApproval', update.autoAcceptScope === 'confirm' ? 'confirm' : 'auto', target)
+    } else if (update.fileEditApproval) {
       await ghostConfig.update('fileEditApproval', update.fileEditApproval, target)
+      await ghostConfig.update('autoAcceptScope', update.fileEditApproval === 'auto' ? 'always' : 'confirm', target)
     }
     if (typeof update.enableConversationPersistence === 'boolean') {
       await ghostConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)

@@ -239,6 +239,29 @@
           "default": "confirm",
           "description": "Default approval behavior for Ghost file writes and structured edits."
         },
+        "ghost.autoAcceptScope": {
+          "type": "string",
+          "enum": [
+            "confirm",
+            "one-edit",
+            "current-file",
+            "request",
+            "session",
+            "workspace",
+            "always"
+          ],
+          "enumDescriptions": [
+            "Ask before every file edit.",
+            "Auto-accept one file edit, then ask again.",
+            "Auto-accept edits to one file during the current request.",
+            "Auto-accept file edits during the current request.",
+            "Auto-accept file edits during this Ghost session.",
+            "Auto-accept file edits in this workspace.",
+            "Auto-accept file edits everywhere. Use with care."
+          ],
+          "default": "confirm",
+          "description": "Scope for automatic file-edit approval. Terminal and other dangerous tools always require explicit approval."
+        },
         "ghost.enableConversationPersistence": {
           "type": "boolean",
           "default": false,

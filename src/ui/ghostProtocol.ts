@@ -6,6 +6,7 @@ export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = 8 * 1024 * 1024
 
 export type GhostViewStatus = 'ready' | 'offline'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
@@ -65,6 +66,7 @@ export interface GhostSettingsUpdate {
   responseLength?: GhostResponseLength
   mode?: GhostMode
   fileEditApproval?: 'confirm' | 'auto'
+  autoAcceptScope?: GhostAutoAcceptScope
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
   ollamaUrl?: string
@@ -168,7 +170,7 @@ export type GhostExtensionMessage =
         repeatPenalty: number
         responseLength: GhostResponseLength
         mode: GhostMode
-        fileEditApproval: 'confirm' | 'auto'
+        autoAcceptScope: GhostAutoAcceptScope
         enableConversationPersistence: boolean
         ollamaUrl: string
         mlxUrl: string
@@ -285,6 +287,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.fileEditApproval === undefined || ['confirm', 'auto'].includes(value.fileEditApproval as string)) &&
+    (value.autoAcceptScope === undefined || ['confirm', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.autoAcceptScope as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
     (value.ollamaUrl === undefined || isBoundedString(value.ollamaUrl, 4096))

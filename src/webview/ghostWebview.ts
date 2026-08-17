@@ -2,6 +2,7 @@ type GhostViewStatus = 'ready' | 'offline'
 type NoticeKind = 'error' | 'no-model' | 'info'
 type MessageRole = 'user' | 'assistant'
 type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
@@ -46,7 +47,7 @@ interface ControlSettings {
   repeatPenalty: number
   responseLength: ResponseLength
   mode: GhostMode
-  fileEditApproval: 'confirm' | 'auto'
+  fileEditApproval: AutoAcceptScope
   enableConversationPersistence: boolean
 }
 
@@ -163,7 +164,7 @@ type GhostExtensionMessage =
       source: 'ghost-extension'
       version: 1
       type: 'controls-state'
-      settings: ControlSettings
+      settings: Omit<ControlSettings, 'fileEditApproval'> & { autoAcceptScope: AutoAcceptScope }
       models: string[]
       connection: 'online' | 'offline' | 'unknown'
       context: Omit<ContextData, 'tools'>
@@ -638,7 +639,8 @@ app.innerHTML = `
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent — implement changes</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
           <label for="file-edit-approval">File edit approval</label>
-          <select id="file-edit-approval"><option value="confirm">Confirm each edit</option><option value="auto">Auto-accept edits</option></select>
+          <select id="file-edit-approval"><option value="confirm">Confirm each edit</option><option value="one-edit">Auto-accept one edit</option><option value="current-file">Auto-accept current file</option><option value="request">Auto-accept this request</option><option value="session">Auto-accept this session</option><option value="workspace">Auto-accept this workspace</option><option value="always">Always auto-accept file edits</option></select>
+          <p class="settings-help">Auto-accept can change files without asking. Terminal and other dangerous tools always need approval.</p>
           <label for="composer-height">Composer size</label>
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
           <label for="prompt-rows">Prompt rows</label>
@@ -827,7 +829,7 @@ const createPersistedState = () => ({
     repeatPenalty: controls.repeatPenalty,
     responseLength: controls.responseLength,
     mode: controls.mode,
-    fileEditApproval: controls.fileEditApproval,
+    autoAcceptScope: controls.fileEditApproval,
     enableConversationPersistence: controls.enableConversationPersistence,
     composerHeight,
     promptRows,
@@ -936,7 +938,7 @@ const sendSettingsUpdate = () => {
         repeatPenalty: controls.repeatPenalty,
         responseLength: controls.responseLength,
         mode: controls.mode,
-        fileEditApproval: controls.fileEditApproval,
+        autoAcceptScope: controls.fileEditApproval,
         enableConversationPersistence: controls.enableConversationPersistence,
         workspaceOnly: uiPreferences.workspaceOnly,
         enableDebugLogging: controls.enableDebugLogging
@@ -2213,8 +2215,10 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (preferences.mode === 'ask' || preferences.mode === 'edit' || preferences.mode === 'agent' || preferences.mode === 'explain' || preferences.mode === 'inline') {
         controls.mode = preferences.mode
       }
-      if (preferences.fileEditApproval === 'confirm' || preferences.fileEditApproval === 'auto') {
-        controls.fileEditApproval = preferences.fileEditApproval
+      if (preferences.autoAcceptScope === 'confirm' || preferences.autoAcceptScope === 'one-edit' || preferences.autoAcceptScope === 'current-file' || preferences.autoAcceptScope === 'request' || preferences.autoAcceptScope === 'session' || preferences.autoAcceptScope === 'workspace' || preferences.autoAcceptScope === 'always') {
+        controls.fileEditApproval = preferences.autoAcceptScope
+      } else if (preferences.fileEditApproval === 'confirm' || preferences.fileEditApproval === 'auto') {
+        controls.fileEditApproval = preferences.fileEditApproval === 'auto' ? 'always' : 'confirm'
       }
       if (typeof preferences.enableConversationPersistence === 'boolean') {
         controls.enableConversationPersistence = preferences.enableConversationPersistence
@@ -2308,7 +2312,10 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'controls-state') {
-    controls = message.settings
+    controls = {
+      ...message.settings,
+      fileEditApproval: message.settings.autoAcceptScope
+    }
     availableModels = message.models
     const configuredModel = controls.chatModel
     if (availableModels.length > 0 && !availableModels.includes(configuredModel)) {
@@ -2795,7 +2802,8 @@ modeElement.addEventListener('change', () => {
   sendSettingsUpdate()
 })
 fileEditApprovalElement.addEventListener('change', () => {
-  controls.fileEditApproval = fileEditApprovalElement.value === 'auto' ? 'auto' : 'confirm'
+  const value = fileEditApprovalElement.value
+  controls.fileEditApproval = value === 'one-edit' || value === 'current-file' || value === 'request' || value === 'session' || value === 'workspace' || value === 'always' ? value : 'confirm'
   sendSettingsUpdate()
   saveState()
 })
