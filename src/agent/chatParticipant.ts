@@ -20,7 +20,7 @@ const SYSTEM_PROMPT = [
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
   'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
-  'When using a tool, do not explain the plan first; emit the tool call as the complete response.',
+  'When using a tool, do not explain the plan first; emit the tool call as the complete response. Keep each ghost_apply_edit hunk small: do not put an entire large component into one replacement. Split large work into several focused tool calls and inspect the file between them.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, or ghost_write_file.',
   'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
   'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text"}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
@@ -29,6 +29,7 @@ const SYSTEM_PROMPT = [
 
 const MAX_TOOL_ROUNDS = 128
 const MAX_EDITS_PER_FILE = 8
+const MIN_TOOL_CALL_TOKENS = 4096
 const MAX_MISSING_TOOL_RETRIES = 2
 const MAX_EMPTY_PROVIDER_RETRIES = 2
 const MAX_TOOL_RESULT_CHARACTERS = 16000
@@ -598,7 +599,9 @@ export function createChatParticipantHandler(
             minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
             presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
             repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
-            maxTokens: requestOptions.maxTokens,
+            maxTokens: toolsEnabled
+              ? Math.max(requestOptions.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
+              : requestOptions.maxTokens,
             signal: cancellation.signal
           },
           response,
@@ -641,7 +644,7 @@ export function createChatParticipantHandler(
             messages.push(
               { role: 'assistant', content: generated },
               { role: 'user', content: malformedToolCall
-                ? 'Your previous tool call was malformed or truncated. Retry with exactly one complete valid JSON tool call. Keep the edit small: use ghost_apply_edit with concise hunks, or use ghost_write_file only when replacing the complete file.'
+                ? 'Your previous tool call was malformed or truncated. Retry with exactly one complete valid JSON tool call. Do not repeat a large replacement. Use ghost_read_file in chunks first, then use ghost_apply_edit with a small focused hunk. Split a large component across several tool calls, and never end a replacement halfway through a function or JSON string.'
                 : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
             )
             continue

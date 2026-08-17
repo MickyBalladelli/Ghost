@@ -2,7 +2,7 @@
 
 All notable changes to this extension are documented here.
 
-## 1.0.81 - 2026-08-17
+## 1.0.82 - 2026-08-17
 
 - Added “Apply to all files” approval for the current session.
 - Added Confirm or Auto-accept as the default file-edit behavior.
@@ -21,6 +21,7 @@ All notable changes to this extension are documented here.
 - Added concise failure reasons to compact tool progress; successful commands remain short.
 - Added chunked large-file reads, no-op edit detection, repeated-edit detection, and an eight-edit per-file safety limit.
 - Reduced the per-batch tool-call limit from 512 to 128 so looping requests stop sooner.
+- Increased tool-enabled response capacity to 4096 tokens and instructed Ghost to split large edits, preventing truncated JSON tool calls.
 
 ## 1.0.67 - 2026-08-16
 
