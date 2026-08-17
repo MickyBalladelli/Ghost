@@ -13,7 +13,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 - [x] Add atomic writes: write to a temporary file, flush, then rename. Keep a backup and restore it when verification fails.
 - [x] Detect disk changes between read, approval, and apply. Refuse stale edits and offer refresh/rebase instead of overwriting user work.
-- [ ] Make structured edits context-aware. Include old text, a content hash, or nearby anchor lines, not only line numbers.
+- [x] Make structured edits context-aware. Include old text, a content hash, or nearby anchor lines, not only line numbers.
 - [ ] Detect no-op, undo/reapply, alternating, and overlapping edits. Stop the request when the model oscillates on one file.
 - [ ] Replace the current edit-count guard with a request budget for files, changed lines, bytes, commands, time, and model tokens. Show the limit and why Ghost stopped.
 - [ ] Add one transaction for a multi-file change: preview one combined diff, apply atomically, verify, and roll back the group on failure.

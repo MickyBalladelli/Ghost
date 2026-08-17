@@ -7,8 +7,8 @@ suite('Reviewed edit workflow', () => {
     const edit = parseGhostEdit({
       path: `${process.cwd()}/example.ts`,
       hunks: [
-        { startLine: 1, endLine: 1, replacement: 'first' },
-        { startLine: 3, endLine: 3, replacement: 'third' }
+        { startLine: 1, endLine: 1, replacement: 'first', oldText: 'one' },
+        { startLine: 3, endLine: 3, replacement: 'third', oldText: 'three' }
       ]
     })
 
@@ -20,13 +20,26 @@ suite('Reviewed edit workflow', () => {
     assert.throws(() => parseGhostEdit({
       path: `${process.cwd()}/example.ts`,
       hunks: [
-        { startLine: 1, endLine: 2, replacement: 'new' },
-        { startLine: 2, endLine: 3, replacement: 'overlap' }
+        { startLine: 1, endLine: 2, replacement: 'new', oldText: 'one\ntwo' },
+        { startLine: 2, endLine: 3, replacement: 'overlap', oldText: 'two\nthree' }
       ]
     }), /sorted and non-overlapping/)
     assert.throws(() => parseGhostEdit({
       path: '/tmp/outside-workspace.ts',
-      hunks: [{ startLine: 1, endLine: 1, replacement: 'blocked' }]
+      hunks: [{ startLine: 1, endLine: 1, replacement: 'blocked', oldText: 'old' }]
     }), /inside the workspace/)
+    assert.throws(() => parseGhostEdit({
+      path: `${process.cwd()}/example.ts`,
+      hunks: [{ startLine: 1, endLine: 1, replacement: 'blocked' }]
+    }), /must include oldText/)
+  })
+
+  test('rejects stale hunk context before changing the file', () => {
+    const edit = parseGhostEdit({
+      path: `${process.cwd()}/example.ts`,
+      hunks: [{ startLine: 1, endLine: 1, replacement: 'new', oldText: 'old' }]
+    })
+
+    assert.throws(() => applyGhostEdit('one\ntwo', edit), /old text does not match/)
   })
 })

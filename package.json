@@ -355,7 +355,7 @@
         "displayName": "Ghost Apply Edit",
         "toolReferenceName": "ghost_apply_edit",
         "userDescription": "Apply reviewed, structured edits inside the current workspace.",
-        "modelDescription": "Proposes line-based edits to a workspace file. The user must approve the edit before it is applied. Paths must be absolute and inside the workspace.",
+        "modelDescription": "Proposes context-aware edits to a workspace file. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against current file content. The user must approve the edit before it is applied. Paths must be absolute and inside the workspace.",
         "canBeReferencedInPrompt": true,
         "icon": "$(edit)",
         "when": "true",
@@ -386,8 +386,31 @@
                   },
                   "replacement": {
                     "type": "string"
+                  },
+                  "oldText": {
+                    "type": "string",
+                    "description": "Optional exact text currently replaced by this hunk. Use it to detect shifted or stale line numbers."
+                  },
+                  "oldHash": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{64}$",
+                    "description": "Optional SHA-256 hash of the current text replaced by this hunk."
+                  },
+                  "beforeContext": {
+                    "type": "string",
+                    "description": "Optional exact nearby text immediately before the hunk."
+                  },
+                  "afterContext": {
+                    "type": "string",
+                    "description": "Optional exact nearby text immediately after the hunk."
                   }
                 },
+                "anyOf": [
+                  { "required": ["oldText"] },
+                  { "required": ["oldHash"] },
+                  { "required": ["beforeContext"] },
+                  { "required": ["afterContext"] }
+                ],
                 "required": [
                   "startLine",
                   "endLine",

@@ -22,7 +22,15 @@ export interface WriteFileInput {
 export interface ApplyEditInput {
   path: string
   expectedContent?: string
-  hunks: Array<{ startLine: number; endLine: number; replacement: string }>
+  hunks: Array<{
+    startLine: number
+    endLine: number
+    replacement: string
+    oldText?: string
+    oldHash?: string
+    beforeContext?: string
+    afterContext?: string
+  }>
 }
 
 export interface ListDirectoryInput {

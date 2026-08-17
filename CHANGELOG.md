@@ -7,6 +7,7 @@ All notable changes to this extension are documented here.
 - Added atomic file writes with temporary-file verification, backups, and restore on failed verification.
 - Refused stale file edits when disk content changes between reading, approval, and applying.
 - Added refresh and rebase guidance for stale edits, including auto-accepted and staged editor changes.
+- Added old-text, SHA-256, and nearby-context validation for structured edit hunks.
 
 ## 1.0.83 - 2026-08-17
 
