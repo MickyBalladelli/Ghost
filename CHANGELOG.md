@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.92 - 2026-08-18
 
+- Added bounded incremental tool-call assembly that stops at complete JSON and keeps long tool arguments out of visible chat output.
 - Added distinct parser states and retry feedback for empty, explanatory-only, malformed, truncated, and unknown-tool model responses.
 - Added centralized bounded retry policies, jittered provider reconnect delays, and a two-attempt cap for manual failed-tool retries.
 - Strengthened request cancellation across file writes, verification, transactions, approval dialogs, timers, and tool execution.

@@ -12,7 +12,7 @@ import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
-import { classifyLocalToolResponse, LocalToolCall } from './toolCallParser'
+import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler } from './toolCallParser'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 
@@ -840,6 +840,7 @@ async function streamModelTurn(
   let modelCharacters = 0
   let decided = false
   let bufferingToolCall = false
+  const toolCallAssembler = new LocalToolCallStreamAssembler()
   let hidingReasoning = false
   let hiddenReasoningNotified = false
 
@@ -883,8 +884,15 @@ async function streamModelTurn(
       return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4) }
     }
 
-    if (bufferForToolCall) {
-      generated += chunk
+    if (bufferingToolCall) {
+      const update = toolCallAssembler.append(chunk)
+      if (update.complete || update.overflowed) {
+        return {
+          generated: toolCallAssembler.getText(),
+          streamed: false,
+          modelTokens: Math.ceil(modelCharacters / 4)
+        }
+      }
       continue
     }
 
@@ -901,6 +909,15 @@ async function streamModelTurn(
       if (firstContent.startsWith('{') || firstContent.startsWith('<tool_call>')) {
         decided = true
         bufferingToolCall = true
+        const update = toolCallAssembler.append(generated)
+        generated = ''
+        if (update.complete || update.overflowed) {
+          return {
+            generated: toolCallAssembler.getText(),
+            streamed: false,
+            modelTokens: Math.ceil(modelCharacters / 4)
+          }
+        }
       } else if (firstContent) {
         decided = true
         emitVisibleChunk(generated)

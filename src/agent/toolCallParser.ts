@@ -52,6 +52,36 @@ export interface LocalToolParseResult {
   detail?: string
 }
 
+const MAX_STREAMED_TOOL_ARGUMENTS = 200000
+
+export class LocalToolCallStreamAssembler {
+  private value = ''
+  private complete = false
+  private overflowed = false
+
+  append(chunk: string): { complete: boolean; overflowed: boolean } {
+    if (this.complete || this.overflowed) {
+      return { complete: this.complete, overflowed: this.overflowed }
+    }
+    this.value += chunk
+    if (this.value.length > MAX_STREAMED_TOOL_ARGUMENTS) {
+      this.overflowed = true
+      return { complete: false, overflowed: true }
+    }
+    const trimmed = this.value.trimStart()
+    if (/<tool_call>/i.test(trimmed)) {
+      this.complete = /<\/tool_call>/i.test(trimmed)
+    } else if (trimmed.startsWith('{')) {
+      this.complete = hasCompleteJsonObject(trimmed)
+    }
+    return { complete: this.complete, overflowed: this.overflowed }
+  }
+
+  getText(): string {
+    return this.value.trim()
+  }
+}
+
 function isLocalToolName(value: unknown): value is LocalToolName {
   return typeof value === 'string' && (LOCAL_TOOL_NAMES as readonly string[]).includes(value)
 }
@@ -336,6 +366,26 @@ function hasUnclosedJsonObject(text: string): boolean {
     else if (character === '}') depth -= 1
   }
   return depth > 0 || inString
+}
+
+function hasCompleteJsonObject(text: string): boolean {
+  const start = text.indexOf('{')
+  if (start < 0) return false
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (const character of text.slice(start)) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === '{') depth += 1
+    else if (character === '}' && --depth === 0) return true
+  }
+  return false
 }
 
 function rawToolName(value: unknown): string | undefined {
