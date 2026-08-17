@@ -125,7 +125,10 @@ export class LocalToolExecutor {
       case 'ghost_list_directory': {
         const input: ListDirectoryInput = {
           path: requiredString(call.arguments, 'path'),
-          recursive: call.arguments.recursive === true
+          recursive: call.arguments.recursive === true,
+          ...(typeof call.arguments.cursor === 'string' ? { cursor: call.arguments.cursor } : {}),
+          ...(typeof call.arguments.pageSize === 'number' ? { pageSize: call.arguments.pageSize } : {}),
+          ...(typeof call.arguments.maxDepth === 'number' ? { maxDepth: call.arguments.maxDepth } : {})
         }
         return resultText(await this.listDirectoryTool.invoke({ input, toolInvocationToken: undefined }, token))
       }

@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.91 - 2026-08-17
+
+- Added bounded directory pages with continuation cursors, recursive depth limits, and entry limits for large workspace trees.
+
 ## 1.0.90 - 2026-08-17
 
 - Finished stale-edit recovery cleanly when the requested change was already present, instead of showing a failed tool after successful verification.

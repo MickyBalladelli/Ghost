@@ -47,6 +47,9 @@ export interface ApplyEditInput {
 export interface ListDirectoryInput {
   path: string
   recursive?: boolean
+  cursor?: string
+  pageSize?: number
+  maxDepth?: number
 }
 
 function decodeText(bytes: Uint8Array): string {
@@ -516,6 +519,8 @@ async function collectDirectoryEntries(
   directory: vscode.Uri,
   relativePrefix: string,
   recursive: boolean,
+  depth: number,
+  maxDepth: number,
   token: vscode.CancellationToken,
   entries: string[],
   limit: number
@@ -540,11 +545,13 @@ async function collectDirectoryEntries(
     const isDirectory = type === vscode.FileType.Directory
     entries.push(`${isDirectory ? '[dir] ' : '[file]'}${relativePath}${isDirectory ? '/' : ''}`)
 
-    if (recursive && isDirectory) {
+    if (recursive && isDirectory && depth < maxDepth) {
       await collectDirectoryEntries(
         vscode.Uri.joinPath(directory, name),
         relativePath,
         true,
+        depth + 1,
+        maxDepth,
         token,
         entries,
         limit
@@ -561,15 +568,36 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
     const entries: string[] = []
+    const recursive = options.input.recursive ?? false
+    const cursor = options.input.cursor === undefined ? 0 : Number(options.input.cursor)
+    const pageSize = Math.min(options.input.pageSize ?? 100, 100)
+    const maxDepth = recursive ? options.input.maxDepth ?? 3 : 0
 
-    await collectDirectoryEntries(uri, '', options.input.recursive ?? false, token, entries, 500)
+    if (!Number.isInteger(cursor) || cursor < 0 || cursor > 5000) {
+      throw new Error('cursor must be an integer from 0 through 5000')
+    }
+    if (!Number.isInteger(pageSize) || pageSize < 1) {
+      throw new Error('pageSize must be a positive integer')
+    }
+    if (!Number.isInteger(maxDepth) || maxDepth < 0 || maxDepth > 10) {
+      throw new Error('maxDepth must be an integer from 0 through 10')
+    }
+
+    const scanLimit = Math.min(5000, cursor + pageSize + 1)
+
+    await collectDirectoryEntries(uri, '', recursive, 0, maxDepth, token, entries, scanLimit)
 
     if (token.isCancellationRequested) {
       throw new Error('Tool invocation cancelled')
     }
 
-    const suffix = entries.length === 500 ? '\n\n[Directory listing truncated at 500 entries]' : ''
-    return textResult(`Directory: ${uri.fsPath}\n\n${entries.join('\n') || '[empty]'}${suffix}`)
+    const page = entries.slice(cursor, cursor + pageSize)
+    const hasMore = entries.length > cursor + pageSize
+    const nextCursor = cursor + page.length
+    const suffix = hasMore
+      ? `\n\n[Directory page truncated. Continue with ghost_list_directory({"path":"${uri.fsPath}","recursive":${recursive},"pageSize":${pageSize},"maxDepth":${maxDepth},"cursor":"${nextCursor}"}).]`
+      : ''
+    return textResult(`Directory: ${uri.fsPath}\nDepth limit: ${maxDepth}\nEntries ${page.length === 0 ? 0 : cursor + 1}-${cursor + page.length}${hasMore ? '+' : ''}\n\n${page.join('\n') || '[empty]'}${suffix}`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ListDirectoryInput>): vscode.PreparedToolInvocation {
