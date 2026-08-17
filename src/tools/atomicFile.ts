@@ -3,6 +3,8 @@ import { randomBytes } from 'node:crypto'
 
 import * as vscode from 'vscode'
 
+import { isFileNotFound, readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) {
     return false
@@ -11,36 +13,36 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.every((byte, index) => byte === right[index])
 }
 
-async function fileExists(uri: vscode.Uri): Promise<boolean> {
-  try {
-    await vscode.workspace.fs.stat(uri)
-    return true
-  } catch (error) {
-    if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') {
-      return false
-    }
-    throw error
-  }
-}
-
 async function deleteIfPresent(uri: vscode.Uri): Promise<void> {
-  if (await fileExists(uri)) {
+  try {
     await vscode.workspace.fs.delete(uri, { useTrash: false })
+  } catch (error) {
+    if (!isFileNotFound(error)) {
+      throw error
+    }
   }
 }
 
-export async function atomicWriteFile(uri: vscode.Uri, content: Uint8Array): Promise<void> {
+export async function atomicWriteFile(
+  uri: vscode.Uri,
+  content: Uint8Array,
+  expected?: WorkspaceFileSnapshot
+): Promise<void> {
   const parent = vscode.Uri.file(path.dirname(uri.fsPath))
   const suffix = randomBytes(8).toString('hex')
   const baseName = path.basename(uri.fsPath)
   const temporary = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.tmp`)
   const backup = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.bak`)
-  const targetExists = await fileExists(uri)
+  await vscode.workspace.fs.createDirectory(parent)
+  const initial = await readWorkspaceFile(uri)
+  if (expected && !sameWorkspaceFile(initial, expected)) {
+    throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
+  }
+  const targetExists = initial.exists
   let backupCreated = false
   let targetReplaced = false
 
   try {
-    await vscode.workspace.fs.createDirectory(parent)
     if (targetExists) {
       await vscode.workspace.fs.copy(uri, backup)
       backupCreated = true
@@ -50,6 +52,13 @@ export async function atomicWriteFile(uri: vscode.Uri, content: Uint8Array): Pro
     const temporaryContent = await vscode.workspace.fs.readFile(temporary)
     if (!sameBytes(temporaryContent, content)) {
       throw new Error(`Atomic write verification failed for ${uri.fsPath}`)
+    }
+
+    if (expected) {
+      const latest = await readWorkspaceFile(uri)
+      if (!sameWorkspaceFile(latest, expected)) {
+        throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
+      }
     }
 
     await vscode.workspace.fs.rename(temporary, uri, { overwrite: true })

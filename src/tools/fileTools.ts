@@ -6,6 +6,7 @@ import * as vscode from 'vscode'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { atomicWriteFile } from './atomicFile'
+import { readWorkspaceFile } from './workspaceFile'
 
 export interface ReadFileInput {
   path: string
@@ -124,7 +125,8 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
-    await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'))
+    const current = await readWorkspaceFile(uri)
+    await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'), current)
 
     return textResult(`Wrote ${options.input.content.length} characters to ${uri.fsPath}`)
   }
@@ -156,7 +158,7 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     if (updated === current) {
       return textResult(`${summarizeGhostEdit(edit)}\nNo changes needed.`)
     }
-    await atomicWriteFile(uri, Buffer.from(updated, 'utf8'))
+    await atomicWriteFile(uri, Buffer.from(updated, 'utf8'), { exists: true, content: current })
     return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.`)
   }
 

@@ -7,12 +7,12 @@ import {
   ReadFileInput,
   ReadFileTool,
   WriteFileInput,
-  WriteFileTool
 } from './fileTools'
 import { RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
+import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -49,11 +49,23 @@ function resultText(result: vscode.LanguageModelToolResult): string {
     .join('\n')
 }
 
-async function readCurrentFile(filePath: string): Promise<string> {
-  try {
-    return Buffer.from(await vscode.workspace.fs.readFile(resolveWorkspacePath(filePath))).toString('utf8')
-  } catch {
-    return ''
+async function readCurrentFile(filePath: string): Promise<WorkspaceFileSnapshot> {
+  return readWorkspaceFile(resolveWorkspacePath(filePath))
+}
+
+function expectedSnapshot(options: { expectedContent?: string; expectedFileExists?: boolean }): WorkspaceFileSnapshot | undefined {
+  if (options.expectedContent === undefined && options.expectedFileExists === undefined) {
+    return undefined
+  }
+  return {
+    exists: options.expectedFileExists ?? true,
+    content: options.expectedContent ?? ''
+  }
+}
+
+function assertCurrentSnapshot(current: WorkspaceFileSnapshot, expected: WorkspaceFileSnapshot | undefined): void {
+  if (expected && !sameWorkspaceFile(current, expected)) {
+    throw new Error('File changed externally. Refresh and rebase the edit before retrying.')
   }
 }
 
@@ -69,11 +81,10 @@ async function confirmAction(title: string, message: string): Promise<boolean> {
 
 export class LocalToolExecutor {
   private readonly readFileTool = new ReadFileTool()
-  private readonly writeFileTool = new WriteFileTool()
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
 
-  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
+  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
     }
@@ -115,25 +126,21 @@ export class LocalToolExecutor {
 
         if (options.alreadyApplied) {
           const current = await readCurrentFile(input.path)
-          if (options.appliedContent !== undefined && current !== options.appliedContent) {
+          if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
           return `${input.path}: file already updated.\nApplied successfully.`
         }
 
-        if (options.expectedContent !== undefined) {
-          const current = await readCurrentFile(input.path)
-          if (current !== options.expectedContent) {
-            throw new Error('File changed externally since the edit was proposed')
-          }
-        }
-
+        const expected = expectedSnapshot(options)
         const current = await readCurrentFile(input.path)
-        if (current === input.content) {
+        assertCurrentSnapshot(current, expected)
+        if (current.content === input.content && current.exists) {
           return `${input.path}: no changes needed.`
         }
 
-        return resultText(await this.writeFileTool.invoke({ input, toolInvocationToken: undefined }, token))
+        await atomicWriteFile(resolveWorkspacePath(input.path), Buffer.from(input.content, 'utf8'), expected ?? current)
+        return `${input.path}: wrote ${input.content.length} characters.`
       }
       case 'ghost_apply_edit': {
         const edit = parseGhostEdit(call.arguments)
@@ -147,25 +154,24 @@ export class LocalToolExecutor {
 
         if (options.alreadyApplied) {
           const current = await readCurrentFile(edit.path)
-          if (options.appliedContent !== undefined && current !== options.appliedContent) {
+          if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
           return `${summarizeGhostEdit(edit)}\nApplied successfully.`
         }
 
+        const expected = expectedSnapshot(options)
         const current = await readCurrentFile(edit.path)
-        if (options.expectedContent !== undefined && current !== options.expectedContent) {
-          throw new Error('File changed externally since the edit was proposed')
-        }
-        if (edit.expectedContent !== undefined && current !== edit.expectedContent) {
+        assertCurrentSnapshot(current, expected)
+        if (edit.expectedContent !== undefined && current.content !== edit.expectedContent) {
           throw new Error('Edit expected different file content')
         }
         const selectedHunks = options.selectedHunkIndexes ? new Set(options.selectedHunkIndexes) : undefined
-        const updated = applyGhostEdit(current, edit, selectedHunks)
-        if (updated === current) {
+        const updated = applyGhostEdit(current.content, edit, selectedHunks)
+        if (updated === current.content) {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
-        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'))
+        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current)
         return `${summarizeGhostEdit(edit)}\nApplied successfully.`
       }
       case 'ghost_run_terminal_command': {

@@ -9,6 +9,7 @@ import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
 import { atomicWriteFile } from '../tools/atomicFile'
+import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from '../tools/workspaceFile'
 import { isExternalEndpoint, redactSensitiveText } from '../privacy/redact'
 import {
   GHOST_WEBVIEW_PROTOCOL_VERSION,
@@ -49,6 +50,7 @@ interface PendingToolApproval {
   toolCallId: string
   call: LocalToolCall
   expectedContent?: string
+  expectedFileExists?: boolean
   resolve: (approval: GhostToolApproval) => void
 }
 
@@ -553,12 +555,20 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       if (document.getText() !== staged.after) {
         throw new Error('The source file changed while Ghost was waiting for edit approval.')
       }
+      const current = await readWorkspaceFile(staged.uri)
+      if (!sameWorkspaceFile(current, { exists: true, content: staged.before })) {
+        throw new Error('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.')
+      }
       const edit = new vscode.WorkspaceEdit()
       edit.replace(staged.uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), staged.before)
       if (!await vscode.workspace.applyEdit(edit)) {
         throw new Error('Ghost could not restore the source file.')
       }
       await document.save()
+      const restored = await readWorkspaceFile(staged.uri)
+      if (!sameWorkspaceFile(restored, { exists: true, content: staged.before })) {
+        throw new Error('Ghost could not verify the restored source file.')
+      }
     } finally {
       this.stagedEdits.delete(staged.toolCallId)
       this.stagedEditChanges.fire()
@@ -601,17 +611,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private async getExpectedFileContent(call: LocalToolCall): Promise<string | undefined> {
+  private async getExpectedFileSnapshot(call: LocalToolCall): Promise<WorkspaceFileSnapshot | undefined> {
     if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
       return undefined
     }
     try {
-      const uri = resolveWorkspacePath(call.arguments.path)
-      try {
-        return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
-      } catch {
-        return ''
-      }
+      return await readWorkspaceFile(resolveWorkspacePath(call.arguments.path))
     } catch {
       return undefined
     }
@@ -678,13 +683,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     try {
       const uri = resolveWorkspacePath(record.path)
-      let current = ''
-      try {
-        current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
-      } catch {
-        current = ''
-      }
-      if (current !== record.after) {
+      const current = await readWorkspaceFile(uri)
+      if (!current.exists || current.content !== record.after) {
         await vscode.window.showErrorMessage('Ghost cannot restore this file because it changed after the edit.')
         return
       }
@@ -761,7 +761,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           toolCallId: pending.toolCallId
         })
       : undefined
-    const expectedContent = requiresApproval ? await this.getExpectedFileContent(call) : undefined
+    const expectedSnapshot = isFileEditTool && !blockedByPolicy
+      ? await this.getExpectedFileSnapshot(call)
+      : undefined
+    if (isFileEditTool && !blockedByPolicy && !expectedSnapshot) {
+      return { decision: 'reject', reason: 'Ghost could not read the file safely. Refresh the file and retry.' }
+    }
+    const expectedContent = expectedSnapshot?.content
+    const expectedFileExists = expectedSnapshot?.exists
     this.postStreamEvent(requestId, request, {
       type: 'tool-requested',
       tool: call.name,
@@ -781,7 +788,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (!needsInteractiveApproval) {
       await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedContent)
-      return { decision: 'once', expectedContent }
+      return { decision: 'once', expectedContent, expectedFileExists }
     }
 
     return new Promise(resolve => {
@@ -791,6 +798,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         toolCallId: pending.toolCallId,
         call,
         expectedContent,
+        expectedFileExists,
         resolve
       })
     })
@@ -876,10 +884,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       throw new Error('The source file changed while Ghost was waiting for edit approval.')
     }
 
+    const beforeSave = await readWorkspaceFile(staged.uri)
+    if (!sameWorkspaceFile(beforeSave, { exists: true, content: staged.before })) {
+      throw new Error('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.')
+    }
+
     await document.save()
-    const savedContent = Buffer.from(await vscode.workspace.fs.readFile(staged.uri)).toString('utf8')
-    if (savedContent !== staged.after) {
-      await atomicWriteFile(staged.uri, Buffer.from(staged.after, 'utf8'))
+    const savedContent = await readWorkspaceFile(staged.uri)
+    if (!sameWorkspaceFile(savedContent, { exists: true, content: staged.after })) {
+      if (!sameWorkspaceFile(savedContent, beforeSave)) {
+        throw new Error('File changed externally while Ghost was being saved. Refresh and rebase the edit before retrying.')
+      }
+      await atomicWriteFile(staged.uri, Buffer.from(staged.after, 'utf8'), beforeSave)
     }
   }
 
@@ -891,8 +907,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     try {
       const uri = resolveWorkspacePath(pending.call.arguments.path)
-      const current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
-      if (current !== approval.appliedContent) {
+      const current = await readWorkspaceFile(uri)
+      if (!current.exists || current.content !== approval.appliedContent) {
         pending.resolve({ decision: 'reject', reason: 'The accepted edit changed before Ghost could finish the request.' })
         return
       }
@@ -912,22 +928,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async verifyExternalEdit(pending: PendingToolApproval, approval: GhostToolApproval): Promise<void> {
     const expected = pending.expectedContent
-    if (expected === undefined || typeof pending.call.arguments.path !== 'string') {
+    const expectedFileExists = pending.expectedFileExists
+    if ((expected === undefined && expectedFileExists === undefined) || typeof pending.call.arguments.path !== 'string') {
       this.pendingApprovals.delete(pending.toolCallId)
       pending.resolve(approval)
       return
     }
     try {
       const uri = resolveWorkspacePath(pending.call.arguments.path)
-      let current = ''
-      try {
-        current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
-      } catch {
-        current = ''
-      }
+      const current = await readWorkspaceFile(uri)
       this.pendingApprovals.delete(pending.toolCallId)
-      if (current !== expected) {
-        pending.resolve({ decision: 'reject', reason: 'File changed externally since the diff was shown.' })
+      if ((expectedFileExists !== undefined && current.exists !== expectedFileExists)
+        || (expected !== undefined && current.content !== expected)) {
+        pending.resolve({ decision: 'reject', reason: 'File changed externally since the diff was shown. Refresh and rebase the edit before retrying.' })
         return
       }
       await this.rememberRecovery(
@@ -938,7 +951,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         expected,
         approval.selectedHunkIndexes
       )
-      pending.resolve({ ...approval, expectedContent: expected })
+      pending.resolve({ ...approval, expectedContent: expected, expectedFileExists })
     } catch {
       this.pendingApprovals.delete(pending.toolCallId)
       pending.resolve({ decision: 'reject', reason: 'Edit path is outside the workspace.' })
@@ -978,7 +991,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     pending.call.arguments = argumentsPayload
-    pending.expectedContent = await this.getExpectedFileContent(pending.call)
+    const expectedSnapshot = this.isFileEditTool(pending.call.name)
+      ? await this.getExpectedFileSnapshot(pending.call)
+      : undefined
+    if (this.isFileEditTool(pending.call.name) && !expectedSnapshot) {
+      pending.resolve({ decision: 'reject', reason: 'Ghost could not read the file safely. Refresh the file and retry.' })
+      return
+    }
+    pending.expectedContent = expectedSnapshot?.content
+    pending.expectedFileExists = expectedSnapshot?.exists
     const request = this.requests.get(requestId)
     if (!request) {
       return
