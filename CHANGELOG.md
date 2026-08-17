@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.84 - 2026-08-17
+
+- Added atomic file writes with temporary-file verification, backups, and restore on failed verification.
+
 ## 1.0.83 - 2026-08-17
 
 - Added `TODO.md` with a prioritized roadmap for safety, reliability, UX, performance, provider support, testing, and release quality.

@@ -8,6 +8,7 @@ import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
+import { atomicWriteFile } from '../tools/atomicFile'
 import { isExternalEndpoint, redactSensitiveText } from '../privacy/redact'
 import {
   GHOST_WEBVIEW_PROTOCOL_VERSION,
@@ -687,7 +688,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await vscode.window.showErrorMessage('Ghost cannot restore this file because it changed after the edit.')
         return
       }
-      await vscode.workspace.fs.writeFile(uri, Buffer.from(record.before, 'utf8'))
+      await atomicWriteFile(uri, Buffer.from(record.before, 'utf8'))
       record.applied = false
       await vscode.window.showInformationMessage(`Restored ${uri.fsPath}.`)
     } catch (error) {
@@ -878,7 +879,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     await document.save()
     const savedContent = Buffer.from(await vscode.workspace.fs.readFile(staged.uri)).toString('utf8')
     if (savedContent !== staged.after) {
-      await vscode.workspace.fs.writeFile(staged.uri, Buffer.from(staged.after, 'utf8'))
+      await atomicWriteFile(staged.uri, Buffer.from(staged.after, 'utf8'))
     }
   }
 
@@ -1328,7 +1329,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       chatModel: settings.chatModel,
       state: exportState
     }
-    await vscode.workspace.fs.writeFile(target, Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'))
+    await atomicWriteFile(target, Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'))
     await vscode.window.showInformationMessage(`Ghost interface exported to ${target.fsPath}.`)
   }
 

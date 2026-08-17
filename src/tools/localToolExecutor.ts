@@ -12,6 +12,7 @@ import {
 import { RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
+import { atomicWriteFile } from './atomicFile'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -164,7 +165,7 @@ export class LocalToolExecutor {
         if (updated === current) {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
-        await vscode.workspace.fs.writeFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'))
+        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'))
         return `${summarizeGhostEdit(edit)}\nApplied successfully.`
       }
       case 'ghost_run_terminal_command': {
