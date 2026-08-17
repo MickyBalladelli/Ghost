@@ -44,6 +44,14 @@ export interface LocalToolCall {
   arguments: Record<string, unknown>
 }
 
+export type LocalToolParseState = 'empty' | 'explanatory-only' | 'malformed-json' | 'truncated-json' | 'unknown-tool' | 'tool-call'
+
+export interface LocalToolParseResult {
+  state: LocalToolParseState
+  call?: LocalToolCall
+  detail?: string
+}
+
 function isLocalToolName(value: unknown): value is LocalToolName {
   return typeof value === 'string' && (LOCAL_TOOL_NAMES as readonly string[]).includes(value)
 }
@@ -174,8 +182,13 @@ function parseCandidate(value: unknown): LocalToolCall | undefined {
 }
 
 function parseLooseToolName(text: string): LocalToolName | undefined {
+  const rawName = parseLooseRawToolName(text)
+  return normalizeLocalToolName(rawName)
+}
+
+function parseLooseRawToolName(text: string): string | undefined {
   const match = /["'](?:tool|name|tool_name)["']\s*:\s*["']?([A-Za-z0-9_-]+)/.exec(text)
-  return normalizeLocalToolName(match?.[1])
+  return match?.[1]
 }
 
 function decodeLooseString(value: string): string {
@@ -305,26 +318,80 @@ export function hasLocalToolCallIntent(text: string): boolean {
   return parseLooseToolName(text) !== undefined
 }
 
-export function parseLocalToolCall(text: string): LocalToolCall | undefined {
-  for (const candidate of getJsonCandidates(text)) {
-    try {
-      const call = parseCandidate(JSON.parse(candidate) as unknown)
+function hasUnclosedJsonObject(text: string): boolean {
+  const start = text.indexOf('{')
+  if (start < 0) return false
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (const character of text.slice(start)) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') inString = true
+    else if (character === '{') depth += 1
+    else if (character === '}') depth -= 1
+  }
+  return depth > 0 || inString
+}
 
-      if (call) {
-        return call
-      }
+function rawToolName(value: unknown): string | undefined {
+  if (!isObject(value)) return undefined
+  const nested = isObject(value.tool_call)
+    ? value.tool_call
+    : isObject(value.toolCall)
+      ? value.toolCall
+      : isObject(value.function)
+        ? value.function
+        : value
+  const name = nested.name ?? nested.tool ?? nested.tool_name
+  return typeof name === 'string' ? name : undefined
+}
+
+export function classifyLocalToolResponse(text: string): LocalToolParseResult {
+  const trimmed = text.trim()
+  if (!trimmed) return { state: 'empty', detail: 'The provider returned no content.' }
+
+  let sawMalformedJson = false
+  let unknownName: string | undefined
+  for (const candidate of getJsonCandidates(trimmed)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(candidate) as unknown
     } catch {
       try {
-        const repaired = parseCandidate(JSON.parse(escapeRawJsonStringControls(candidate)) as unknown)
-
-        if (repaired) {
-          return repaired
-        }
+        parsed = JSON.parse(escapeRawJsonStringControls(candidate)) as unknown
       } catch {
-        // Continue searching if the model emitted another JSON object first.
+        sawMalformedJson = true
+        continue
       }
     }
+    const name = rawToolName(parsed)
+    if (name && !normalizeLocalToolName(name)) {
+      unknownName = name
+      continue
+    }
+    const call = parseCandidate(parsed)
+    if (call) return { state: 'tool-call', call }
   }
 
-  return parseLooseWriteFile(text) ?? parseLooseApplyEdit(text)
+  const looseName = parseLooseRawToolName(trimmed)
+  const looseCall = parseLooseWriteFile(trimmed) ?? parseLooseApplyEdit(trimmed)
+  if (looseCall) return { state: 'tool-call', call: looseCall }
+  if (looseName && !normalizeLocalToolName(looseName)) {
+    return { state: 'unknown-tool', detail: `Unknown tool name: ${looseName}` }
+  }
+  if (unknownName) return { state: 'unknown-tool', detail: `Unknown tool name: ${unknownName}` }
+  if (hasUnclosedJsonObject(trimmed) || (/<tool_call>/i.test(trimmed) && !/<\/tool_call>/i.test(trimmed))) {
+    return { state: 'truncated-json', detail: 'The tool JSON ended before it was complete.' }
+  }
+  if (sawMalformedJson) return { state: 'malformed-json', detail: 'The tool response contained invalid JSON.' }
+  return { state: 'explanatory-only', detail: 'The model explained an action without emitting a tool call.' }
+}
+
+export function parseLocalToolCall(text: string): LocalToolCall | undefined {
+  return classifyLocalToolResponse(text).call
 }

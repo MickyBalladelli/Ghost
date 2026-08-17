@@ -47,7 +47,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add a “continue from last state” action that sends the last failed tool, current file state, and remaining plan without replaying the whole conversation.
 - [x] Add request-level cancellation to every provider, tool, file operation, timer, and pending approval.
 - [x] Add bounded retry policies per failure class. Do not retry invalid arguments forever; retry network disconnects with backoff and jitter.
-- [ ] Make empty output, explanatory-only output, malformed JSON, truncated JSON, and unknown tool names separate parser states.
+- [x] Make empty output, explanatory-only output, malformed JSON, truncated JSON, and unknown tool names separate parser states.
 - [ ] Add tool-call streaming support so long tool arguments are assembled safely instead of waiting for a large final text block.
 - [ ] Add JSON Schema validation and repair feedback for every tool call. Return the exact missing or invalid field.
 - [ ] Add a safe “split this edit” recovery that asks for smaller hunks/files when output approaches the provider limit.

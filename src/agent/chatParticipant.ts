@@ -12,7 +12,7 @@ import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
-import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
+import { classifyLocalToolResponse, LocalToolCall } from './toolCallParser'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 
@@ -1062,28 +1062,42 @@ export function createChatParticipantHandler(
           return
         }
 
-        const toolCall = parseLocalToolCall(generated)
+        const parsedResponse = classifyLocalToolResponse(generated)
+        const toolCall = parsedResponse.call
 
         if (!toolCall) {
-          const malformedToolCall = hasLocalToolCallIntent(generated)
-          const expectsWorkspaceTool = toolsEnabled && !successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated) || malformedToolCall)
+          const malformedToolCall = parsedResponse.state === 'malformed-json' || parsedResponse.state === 'truncated-json' || parsedResponse.state === 'unknown-tool'
+          const expectsWorkspaceTool = toolsEnabled && (malformedToolCall || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
           if (expectsWorkspaceTool && missingToolRetries < GHOST_RETRY_POLICIES.missingTool.maxRetries) {
             missingToolRetries += 1
-            response.progress(malformedToolCall
-              ? 'The model returned a malformed or truncated tool call. Asking it to retry with valid JSON.'
-              : 'The model described a workspace change without calling a tool. Asking it to perform the change.')
+            const retryMessage = parsedResponse.state === 'unknown-tool'
+              ? 'The model named an unknown tool. Asking it to use an available tool.'
+              : parsedResponse.state === 'truncated-json'
+                ? 'The model returned truncated tool JSON. Asking it to emit a complete call.'
+                : parsedResponse.state === 'malformed-json'
+                  ? 'The model returned malformed tool JSON. Asking it to emit valid JSON.'
+                  : 'The model described a workspace change without calling a tool. Asking it to perform the change.'
+            response.progress(retryMessage)
             messages.push(
               { role: 'assistant', content: generated },
-              { role: 'user', content: malformedToolCall
-                ? 'Your previous tool call was malformed or truncated. Retry with exactly one complete valid JSON tool call. Do not repeat a large replacement. Use ghost_read_file in chunks first, then use ghost_apply_edit with a small focused hunk. Split a large component across several tool calls, and never end a replacement halfway through a function or JSON string.'
-                : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
+              { role: 'user', content: parsedResponse.state === 'unknown-tool'
+                ? 'Your previous response used an unknown tool name. Use one of the available Ghost tools and emit exactly one valid JSON tool call now.'
+                : parsedResponse.state === 'truncated-json'
+                  ? 'Your previous tool call was truncated. Emit exactly one complete valid JSON tool call now. Do not repeat a large replacement.'
+                  : parsedResponse.state === 'malformed-json'
+                    ? 'Your previous tool call was malformed JSON. Emit exactly one complete valid JSON tool call now.'
+                    : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
             )
             continue
           }
           if (expectsWorkspaceTool) {
-            const message = malformedToolCall
-              ? 'The model kept returning a malformed or truncated tool call after retries.'
-              : 'The model did not return a workspace tool call after retries.'
+            const message = parsedResponse.state === 'unknown-tool'
+              ? 'The model kept returning an unknown tool name after retries.'
+              : parsedResponse.state === 'truncated-json'
+                ? 'The model kept returning truncated tool JSON after retries.'
+                : parsedResponse.state === 'malformed-json'
+                  ? 'The model kept returning malformed tool JSON after retries.'
+                  : 'The model did not return a workspace tool call after retries.'
             requestOptions.onStop?.('invalid-model-response', message)
           }
           response.markdown(redactSensitiveText(generated))
