@@ -11,6 +11,7 @@ import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
+import { auditTerminalCommand } from '../tools/terminalTools'
 import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
 import type { GhostStopReason } from '../ui/ghostState'
 
@@ -278,15 +279,9 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
     }
 
     const command = call.arguments.command as string
-    const writesFiles = [
-      /(?:^|[;&|]\s*)(?:cat|tee|printf|echo)\b[\s\S]*(?:>>?|<<-?)/i,
-      /(?:>>?|<<-?)\s*["']?(?:\/|\.\/|[a-z]:[\\/])/i,
-      /\b(?:sed|perl)\b[^;&|]*\s-i(?:\s|$)/i,
-      /\b(?:python|python3|node|ruby|php)\b[\s\S]*(?:write_text|writeFile(?:Sync)?|open\s*\([^)]*["'][wa])/i
-    ].some(pattern => pattern.test(command))
-
-    if (writesFiles) {
-      return 'Terminal file writes are disabled for workspace edits. Retry with one ghost_read_file, ghost_apply_edit, or ghost_write_file call. Use ghost_run_terminal_command only for inspection, builds, tests, or commands explicitly requested by the user.'
+    const audit = auditTerminalCommand(command)
+    if (audit.blocked) {
+      return `${audit.blockReason} Retry with one ghost_read_file, ghost_apply_edit, or ghost_write_file call. Use ghost_run_terminal_command only for inspection, builds, tests, or commands explicitly requested by the user.`
     }
 
     return undefined

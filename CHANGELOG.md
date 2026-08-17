@@ -16,6 +16,8 @@ All notable changes to this extension are documented here.
 - Added distinct stopped states for tool failure, invalid model output, cancellation, timeout, approval rejection, context limits, and request budgets.
 - Added separate rejected and failed statuses to tool progress, with retry guidance after failed tools.
 - Added a Retry tool action that reuses the last valid tool arguments through a fresh approval flow.
+- Added shared terminal command auditing for file writes, destructive actions, network access, package installs, and privilege changes.
+- Blocked terminal file-writing commands and showed audit classifications before other terminal commands run.
 
 ## 1.0.83 - 2026-08-17
 

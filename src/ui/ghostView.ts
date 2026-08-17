@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 
 import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
 import { LocalToolExecutor } from '../tools/localToolExecutor'
+import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
@@ -966,6 +967,26 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return { decision: 'reject', reason }
     }
 
+    const terminalAudit = call.name === 'ghost_run_terminal_command' && typeof call.arguments.command === 'string'
+      ? auditTerminalCommand(call.arguments.command)
+      : undefined
+    if (terminalAudit?.blocked) {
+      const pending = { toolCallId: this.createToolCallId(), name: call.name }
+      request.pendingTool = pending
+      this.failedToolRetries.set(pending.toolCallId, { requestId, conversationId: request.conversationId, call })
+      const reason = formatTerminalAudit(terminalAudit)
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-requested',
+        tool: call.name,
+        toolCallId: pending.toolCallId,
+        arguments: call.arguments,
+        requiresApproval: false,
+        detail: reason,
+        phase: 'tool'
+      })
+      return { decision: 'reject', reason }
+    }
+
     const pending = request.pendingTool?.name === call.name
       ? request.pendingTool
       : { toolCallId: this.createToolCallId(), name: call.name }
@@ -1009,6 +1030,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...(diffPreview ? { diffPreview } : {}),
       detail: blockedByPolicy
         ? 'Blocked by workspace tool policy'
+        : terminalAudit ? formatTerminalAudit(terminalAudit)
         : autoAcceptedFileEdit ? 'Auto-accepting file edit'
         : requiresApproval ? 'Waiting for approval' : 'Running safe workspace tool',
       phase: 'tool'

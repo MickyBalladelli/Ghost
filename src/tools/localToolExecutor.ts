@@ -8,7 +8,7 @@ import {
   ReadFileTool,
   WriteFileInput,
 } from './fileTools'
-import { RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
+import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
@@ -199,9 +199,13 @@ export class LocalToolExecutor {
           command: requiredString(call.arguments, 'command'),
           cwd: typeof call.arguments.cwd === 'string' ? call.arguments.cwd : undefined
         }
+        const audit = auditTerminalCommand(input.command)
+        if (audit.blocked) {
+          return formatTerminalAudit(audit)
+        }
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to run a terminal command?',
-          input.cwd ? `${input.command}\n\nWorking directory: ${input.cwd}` : input.command
+          `${formatTerminalAudit(audit)}\n\n${input.cwd ? `Working directory: ${input.cwd}` : 'Working directory: the workspace'}\n\n${input.command}`
         )
 
         if (!allowed) {
