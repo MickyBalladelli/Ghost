@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.86",
+  "version": "1.0.87",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -388,7 +388,9 @@
               "default": 100
             }
           },
-          "required": ["query"],
+          "required": [
+            "query"
+          ],
           "additionalProperties": false
         }
       },
@@ -397,7 +399,7 @@
         "displayName": "Ghost Read File",
         "toolReferenceName": "ghost_read_file",
         "userDescription": "Read a text file from the current workspace.",
-        "modelDescription": "Reads a text file in chunks from the current workspace. The path must be absolute and inside the workspace. For large files, use optional startLine and endLine and read every relevant chunk before editing. Do not use it for binary files.",
+        "modelDescription": "Reads a UTF-8 text file from the current workspace with metadata, encoding, line endings, size, and SHA-256 content hash. Use mode head, tail, lines, bytes, symbol, or matches. The path must be absolute and inside the workspace. Do not use it for binary files.",
         "canBeReferencedInPrompt": true,
         "icon": "$(file)",
         "when": "true",
@@ -409,6 +411,19 @@
               "minLength": 1,
               "description": "Absolute path of the text file to read. The path must be inside the current workspace."
             },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "head",
+                "tail",
+                "lines",
+                "bytes",
+                "symbol",
+                "matches"
+              ],
+              "default": "head",
+              "description": "Read mode. Use head or tail with lineCount, lines with startLine/endLine, bytes with startByte/endByte, symbol with symbol, or matches with match."
+            },
             "startLine": {
               "type": "integer",
               "minimum": 1,
@@ -418,6 +433,44 @@
               "type": "integer",
               "minimum": 1,
               "description": "Optional last line to read. Keep each read chunk to about 400 lines."
+            },
+            "lineCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 400,
+              "description": "Number of lines for head or tail mode."
+            },
+            "startByte": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Inclusive UTF-8 byte offset for bytes mode. Use character boundaries."
+            },
+            "endByte": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Exclusive UTF-8 byte offset for bytes mode. Use character boundaries."
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Symbol name for symbol mode, such as a class, function, type, or variable."
+            },
+            "match": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Fixed text to find in matching-lines mode."
+            },
+            "caseSensitive": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether matching-lines mode treats case as significant."
+            },
+            "maxMatches": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "description": "Maximum matching lines to return."
             }
           },
           "required": [

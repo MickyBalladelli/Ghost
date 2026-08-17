@@ -108,8 +108,16 @@ export class LocalToolExecutor {
       case 'ghost_read_file': {
         const input: ReadFileInput = {
           path: requiredString(call.arguments, 'path'),
+          ...(typeof call.arguments.mode === 'string' ? { mode: call.arguments.mode as ReadFileInput['mode'] } : {}),
           ...(typeof call.arguments.startLine === 'number' ? { startLine: call.arguments.startLine } : {}),
-          ...(typeof call.arguments.endLine === 'number' ? { endLine: call.arguments.endLine } : {})
+          ...(typeof call.arguments.endLine === 'number' ? { endLine: call.arguments.endLine } : {}),
+          ...(typeof call.arguments.lineCount === 'number' ? { lineCount: call.arguments.lineCount } : {}),
+          ...(typeof call.arguments.startByte === 'number' ? { startByte: call.arguments.startByte } : {}),
+          ...(typeof call.arguments.endByte === 'number' ? { endByte: call.arguments.endByte } : {}),
+          ...(typeof call.arguments.symbol === 'string' ? { symbol: call.arguments.symbol } : {}),
+          ...(typeof call.arguments.match === 'string' ? { match: call.arguments.match } : {}),
+          ...(typeof call.arguments.caseSensitive === 'boolean' ? { caseSensitive: call.arguments.caseSensitive } : {}),
+          ...(typeof call.arguments.maxMatches === 'number' ? { maxMatches: call.arguments.maxMatches } : {})
         }
         return resultText(await this.readFileTool.invoke({ input, toolInvocationToken: undefined }, token))
       }

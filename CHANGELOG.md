@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.87 - 2026-08-17
+
+- Added safe read modes for head, tail, line, byte, symbol, and matching-line views with UTF-8 metadata, line endings, size, line count, and SHA-256 content hashes.
+
 ## 1.0.86 - 2026-08-17
 
 - Retried stale edit conflicts by refreshing current file context and rebasing instead of stopping after a successful earlier tool step.

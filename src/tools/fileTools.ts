@@ -1,4 +1,5 @@
 import * as path from 'node:path'
+import { createHash } from 'node:crypto'
 import { TextDecoder } from 'node:util'
 
 import * as vscode from 'vscode'
@@ -11,8 +12,16 @@ import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summa
 
 export interface ReadFileInput {
   path: string
+  mode?: 'head' | 'tail' | 'lines' | 'bytes' | 'symbol' | 'matches'
   startLine?: number
   endLine?: number
+  lineCount?: number
+  startByte?: number
+  endByte?: number
+  symbol?: string
+  match?: string
+  caseSensitive?: boolean
+  maxMatches?: number
 }
 
 export interface WriteFileInput {
@@ -63,32 +72,60 @@ function assertNotCancelled(token: vscode.CancellationToken): void {
 
 const MAX_READ_LINES = 400
 const MAX_READ_CHARACTERS = 12000
+const MAX_READ_BYTES = 12000
 
-function readFileWindow(content: string, input: ReadFileInput, filePath: string): string {
-  const lines = content.split(/\r?\n/)
-  const hasRange = input.startLine !== undefined || input.endLine !== undefined
-  const startLine = input.startLine ?? 1
-  const endLine = input.endLine ?? startLine + MAX_READ_LINES - 1
+interface FileMetadata {
+  encoding: 'utf-8'
+  lineEndings: 'LF' | 'CRLF' | 'CR' | 'mixed' | 'none'
+  sizeBytes: number
+  lineCount: number
+  contentHash: string
+}
 
-  if (!Number.isInteger(startLine) || startLine < 1) {
-    throw new Error('startLine must be a positive integer')
+function getLineEndings(content: string): FileMetadata['lineEndings'] {
+  const endings = content.match(/\r\n|\n|\r/g) ?? []
+  if (endings.length === 0) {
+    return 'none'
   }
-  if (!Number.isInteger(endLine) || endLine < startLine) {
-    throw new Error('endLine must be an integer greater than or equal to startLine')
+  const unique = new Set(endings)
+  if (unique.size > 1) {
+    return 'mixed'
   }
-  if (startLine > lines.length) {
-    throw new Error(`startLine ${startLine} exceeds the file length of ${lines.length} lines`)
-  }
+  return endings[0] === '\r\n' ? 'CRLF' : endings[0] === '\r' ? 'CR' : 'LF'
+}
 
-  const requestedEnd = Math.min(endLine, startLine + MAX_READ_LINES - 1, lines.length)
+function getFileMetadata(bytes: Uint8Array, content: string): FileMetadata {
+  return {
+    encoding: 'utf-8',
+    lineEndings: getLineEndings(content),
+    sizeBytes: bytes.byteLength,
+    lineCount: content.split(/\r\n|\n|\r/).length,
+    contentHash: `sha256:${createHash('sha256').update(bytes).digest('hex')}`
+  }
+}
+
+function assertInteger(value: number | undefined, name: string, minimum: number): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new Error(`${name} must be an integer greater than or equal to ${minimum}`)
+  }
+  return value
+}
+
+function splitLines(content: string): string[] {
+  return content.split(/\r\n|\n|\r/)
+}
+
+function formatLineSelection(lines: string[], startLine: number, endLine: number, maxCharacters = MAX_READ_CHARACTERS): { content: string; actualEnd: number } {
   const selected: string[] = []
   let characterCount = 0
   let actualEnd = startLine - 1
 
-  for (let lineNumber = startLine; lineNumber <= requestedEnd; lineNumber += 1) {
-    const line = lines[lineNumber - 1]
-    const numberedLine = `${lineNumber}: ${line}`
-    if (selected.length > 0 && characterCount + numberedLine.length > MAX_READ_CHARACTERS) {
+  for (let lineNumber = startLine; lineNumber <= endLine; lineNumber += 1) {
+    const numberedLine = `${lineNumber}: ${lines[lineNumber - 1]}`
+    if (selected.length > 0 && characterCount + numberedLine.length > maxCharacters) {
       break
     }
     selected.push(numberedLine)
@@ -96,17 +133,131 @@ function readFileWindow(content: string, input: ReadFileInput, filePath: string)
     actualEnd = lineNumber
   }
 
-  const truncated = actualEnd < lines.length
-  const nextStart = actualEnd + 1
-  const nextHint = truncated
-    ? `\n\n[File output truncated. Read the next chunk with ghost_read_file({"path":"${filePath}","startLine":${nextStart},"endLine":${Math.min(nextStart + MAX_READ_LINES - 1, lines.length)}}).]`
-    : ''
+  return { content: selected.join('\n'), actualEnd }
+}
 
-  if (!hasRange && !truncated) {
-    return `File: ${filePath}\n\n${content}`
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function findSymbolRange(lines: string[], symbol: string): { startLine: number; endLine: number } {
+  const symbolPattern = new RegExp(`\\b${escapeRegExp(symbol)}\\b`)
+  const declarationPattern = new RegExp(`\\b(?:class|interface|enum|function|def|type|namespace|module|struct|trait|object|const|let|var)\\s+${escapeRegExp(symbol)}\\b`)
+  const startIndex = lines.findIndex(line => declarationPattern.test(line))
+  const fallbackIndex = startIndex >= 0 ? startIndex : lines.findIndex(line => symbolPattern.test(line))
+
+  if (fallbackIndex < 0) {
+    throw new Error(`Symbol '${symbol}' was not found in the file`)
   }
 
-  return `File: ${filePath}\nLines ${startLine}-${actualEnd} of ${lines.length}\n\n${selected.join('\n')}${nextHint}`
+  const startLine = fallbackIndex + 1
+  let braceDepth = 0
+  let sawBrace = false
+
+  for (let index = fallbackIndex; index < lines.length; index += 1) {
+    const line = lines[index]
+    const opens = (line.match(/{/g) ?? []).length
+    const closes = (line.match(/}/g) ?? []).length
+    if (opens > 0 || closes > 0) {
+      sawBrace = true
+      braceDepth += opens - closes
+      if (index > fallbackIndex && braceDepth <= 0) {
+        return { startLine, endLine: index + 1 }
+      }
+    }
+  }
+
+  if (sawBrace && braceDepth > 0) {
+    return { startLine, endLine: lines.length }
+  }
+
+  const baseIndent = lines[fallbackIndex].match(/^\s*/)?.[0].length ?? 0
+  for (let index = fallbackIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (line.trim() && (line.match(/^\s*/)?.[0].length ?? 0) <= baseIndent) {
+      return { startLine, endLine: index }
+    }
+  }
+  return { startLine, endLine: lines.length }
+}
+
+function isUtf8Boundary(bytes: Uint8Array, offset: number): boolean {
+  return offset === 0 || offset === bytes.length || (bytes[offset] & 0xc0) !== 0x80
+}
+
+function readFileWindow(content: string, bytes: Uint8Array, input: ReadFileInput, filePath: string): string {
+  const lines = splitLines(content)
+  const metadata = getFileMetadata(bytes, content)
+  const mode = input.mode ?? (input.startByte !== undefined || input.endByte !== undefined
+    ? 'bytes'
+    : input.symbol !== undefined
+      ? 'symbol'
+      : input.match !== undefined
+        ? 'matches'
+        : input.startLine !== undefined || input.endLine !== undefined ? 'lines' : 'head')
+  if (!['head', 'tail', 'lines', 'bytes', 'symbol', 'matches'].includes(mode)) {
+    throw new Error(`Unsupported read mode '${mode}'`)
+  }
+  const metadataText = JSON.stringify(metadata)
+
+  if (mode === 'bytes') {
+    const startByte = assertInteger(input.startByte ?? 0, 'startByte', 0) as number
+    const endByte = Math.min(assertInteger(input.endByte ?? startByte + MAX_READ_BYTES, 'endByte', startByte) as number, bytes.length)
+    if (startByte > bytes.length) {
+      throw new Error(`startByte ${startByte} exceeds the file size of ${bytes.length} bytes`)
+    }
+    if (!isUtf8Boundary(bytes, startByte) || !isUtf8Boundary(bytes, endByte)) {
+      throw new Error('Byte range must start and end on UTF-8 character boundaries')
+    }
+    const selected = decodeText(bytes.subarray(startByte, endByte))
+    const nextHint = endByte < bytes.length ? `\n\n[Byte output truncated. Read the next chunk with ghost_read_file({"path":"${filePath}","mode":"bytes","startByte":${endByte},"endByte":${Math.min(endByte + MAX_READ_BYTES, bytes.length)}}).]` : ''
+    return `File: ${filePath}\nMetadata: ${metadataText}\nRead mode: bytes ${startByte}-${endByte} of ${bytes.length}\n\n${selected}${nextHint}`
+  }
+
+  if (mode === 'matches') {
+    if (!input.match) {
+      throw new Error("match is required when mode is 'matches'")
+    }
+    const maxMatches = Math.min(assertInteger(input.maxMatches ?? 100, 'maxMatches', 1) as number, 200)
+    const needle = input.caseSensitive === false ? input.match.toLocaleLowerCase() : input.match
+    const matchingLines = lines.flatMap((line, index) => {
+      const value = input.caseSensitive === false ? line.toLocaleLowerCase() : line
+      return value.includes(needle) ? [{ lineNumber: index + 1, line }] : []
+    })
+    const selected = matchingLines.slice(0, maxMatches).map(item => `${item.lineNumber}: ${item.line}`).join('\n') || '[no matching lines]'
+    const nextHint = matchingLines.length > maxMatches ? `\n\n[Matching lines truncated at ${maxMatches}. Use a narrower match or maxMatches.]` : ''
+    return `File: ${filePath}\nMetadata: ${metadataText}\nRead mode: matching lines (${matchingLines.length} matches)\n\n${selected}${nextHint}`
+  }
+
+  let startLine = 1
+  let endLine = lines.length
+  if (mode === 'symbol') {
+    if (!input.symbol?.trim()) {
+      throw new Error("symbol is required when mode is 'symbol'")
+    }
+    const range = findSymbolRange(lines, input.symbol.trim())
+    startLine = range.startLine
+    endLine = range.endLine
+  } else if (mode === 'tail') {
+    const lineCount = Math.min(assertInteger(input.lineCount ?? MAX_READ_LINES, 'lineCount', 1) as number, MAX_READ_LINES)
+    startLine = Math.max(1, lines.length - lineCount + 1)
+    endLine = lines.length
+  } else {
+    startLine = assertInteger(input.startLine ?? 1, 'startLine', 1) as number
+    endLine = assertInteger(input.endLine ?? startLine + MAX_READ_LINES - 1, 'endLine', startLine) as number
+    endLine = Math.min(endLine, startLine + MAX_READ_LINES - 1, lines.length)
+  }
+
+  if (startLine > lines.length) {
+    throw new Error(`startLine ${startLine} exceeds the file length of ${lines.length} lines`)
+  }
+  const selection = formatLineSelection(lines, startLine, endLine)
+  const truncated = selection.actualEnd < endLine || endLine < lines.length
+  const nextStart = selection.actualEnd + 1
+  const nextHint = truncated && nextStart <= lines.length
+    ? `\n\n[File output truncated. Read the next chunk with ghost_read_file({"path":"${filePath}","mode":"lines","startLine":${nextStart},"endLine":${Math.min(nextStart + MAX_READ_LINES - 1, lines.length)}}).]`
+    : ''
+  return `File: ${filePath}\nMetadata: ${metadataText}\nRead mode: ${mode}, lines ${startLine}-${selection.actualEnd} of ${lines.length}\n\n${selection.content}${nextHint}`
 }
 
 export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
@@ -116,8 +267,9 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
-    const content = decodeText(await vscode.workspace.fs.readFile(uri))
-    return textResult(readFileWindow(content, options.input, uri.fsPath))
+    const bytes = await vscode.workspace.fs.readFile(uri)
+    const content = decodeText(bytes)
+    return textResult(readFileWindow(content, bytes, options.input, uri.fsPath))
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileInput>): vscode.PreparedToolInvocation {
