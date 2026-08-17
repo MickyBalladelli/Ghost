@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.91",
+  "version": "1.0.92",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -510,24 +510,52 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "id": { "type": "string", "minLength": 1, "maxLength": 100 },
-                  "title": { "type": "string", "minLength": 1, "maxLength": 500 },
-                  "checked": { "type": "boolean" },
-                  "evidence": { "type": "string", "maxLength": 1000 }
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "checked": {
+                    "type": "boolean"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
                 },
-                "required": ["id", "title", "checked"],
+                "required": [
+                  "id",
+                  "title",
+                  "checked"
+                ],
                 "additionalProperties": false
               }
             },
-            "currentStep": { "type": "string", "maxLength": 100 },
-            "blockedReason": { "type": "string", "maxLength": 1000 },
+            "currentStep": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "blockedReason": {
+              "type": "string",
+              "maxLength": 1000
+            },
             "completionEvidence": {
               "type": "array",
               "maxItems": 10,
-              "items": { "type": "string", "maxLength": 1000 }
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
             }
           },
-          "required": ["steps"],
+          "required": [
+            "steps"
+          ],
           "additionalProperties": false
         }
       },
@@ -543,12 +571,45 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "changedFiles": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
-            "checksRun": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
-            "failures": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
-            "remainingWork": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } }
+            "changedFiles": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "checksRun": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "failures": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "remainingWork": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            }
           },
-          "required": ["changedFiles", "checksRun", "failures", "remainingWork"],
+          "required": [
+            "changedFiles",
+            "checksRun",
+            "failures",
+            "remainingWork"
+          ],
           "additionalProperties": false
         }
       },

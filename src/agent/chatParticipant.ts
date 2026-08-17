@@ -991,6 +991,7 @@ export function createChatParticipantHandler(
       let invalidToolRetries = 0
       let staleEditRetries = 0
       const staleEditRecoveryPaths = new Set<string>()
+      let successfulWorkspaceChange = false
       let emptyProviderRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const budget: RequestBudget = {
@@ -1067,7 +1068,7 @@ export function createChatParticipantHandler(
 
         if (!toolCall) {
           const malformedToolCall = hasLocalToolCallIntent(generated)
-          const expectsWorkspaceTool = toolsEnabled && (workspaceChangeRequested || describesWorkspaceChange(generated) || malformedToolCall)
+          const expectsWorkspaceTool = toolsEnabled && !successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated) || malformedToolCall)
           if (expectsWorkspaceTool && missingToolRetries < MAX_MISSING_TOOL_RETRIES) {
             missingToolRetries += 1
             response.progress(malformedToolCall
@@ -1264,6 +1265,7 @@ export function createChatParticipantHandler(
           fileEditStates.set(editPath, editState)
         }
         if (editPaths.length > 0 && !editFailed && !editNoOp) {
+          successfulWorkspaceChange = true
           const cost = getEditCost(toolCall, approval.selectedHunkIndexes)
           if (cost) {
             for (const path of editPaths) {

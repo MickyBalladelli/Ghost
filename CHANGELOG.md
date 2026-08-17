@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.91 - 2026-08-17
 
+- Fixed Ghost continuing to request more tools after a workspace edit completed and verification finished.
 - Added required structured completion records for changed files, checks run, failures, and remaining work, with a persisted conversation summary.
 - Added `ghost_update_task_plan` to persist checked steps, the current step, blockers, and completion evidence in each conversation.
 - Added explicit editor-buffer or disk read sources, paused ambiguous dirty-file reads, and blocked file edits that could overwrite unsaved editor changes.
