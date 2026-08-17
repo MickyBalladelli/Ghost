@@ -106,6 +106,7 @@ export type GhostWebviewMessage =
       attachments?: GhostAttachment[]
     })
   | (GhostRequestEnvelope & { type: 'cancel' })
+  | (GhostRequestEnvelope & { type: 'retry-tool'; toolCallId: string; tool: string; arguments: GhostToolArguments })
   | (GhostRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
   | (GhostRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
   | (GhostRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostToolArguments })
@@ -304,6 +305,11 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
   if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate') {
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
+  }
+  if (value.type === 'retry-tool') {
+    return isNonEmptyString(value.toolCallId) &&
+      ['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
+      isRecord(value.arguments)
   }
   if (value.type === 'approve-tool') {
     return isNonEmptyString(value.toolCallId) && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))

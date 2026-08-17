@@ -369,6 +369,7 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
     ...(responseStats ? { responseStats } : {}),
     ...(value.status ? { status: value.status } : {}),
     ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
+    ...(value.stopReason ? { stopReason: value.stopReason } : {}),
     ...(value.requestId ? { requestId: value.requestId } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
@@ -1624,8 +1625,14 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const restoreAction = part.toolCall.status === 'completed' && (part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit')
       ? `<button type="button" class="secondary" data-tool-action="restore" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Restore</button>`
       : ''
+    const retryToolAction = part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected') && part.toolCall.arguments
+      ? `<button type="button" data-tool-action="retry-tool" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Retry tool</button>`
+      : ''
+    const rerunRequestAction = part.toolCall.result && part.toolCall.status !== 'failed' && part.toolCall.status !== 'rejected'
+      ? `<button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>`
+      : ''
     const resultActions = part.toolCall.result || fileAction || restoreAction
-      ? `<div class="tool-result-actions">${fileAction}${restoreAction}${selectedHunkAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button><button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>` : ''}</div>`
+      ? `<div class="tool-result-actions">${fileAction}${restoreAction}${selectedHunkAction}${retryToolAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button>${rerunRequestAction}` : ''}</div>`
       : ''
     const verboseStatus = uiPreferences.showToolProgress ? ` · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}` : ''
     const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
@@ -1948,6 +1955,60 @@ const findToolCall = (toolCallId: string): { message: ChatMessage; toolCall: Too
   return undefined
 }
 
+const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): void => {
+  if (activeRequest || !found.toolCall.arguments) {
+    return
+  }
+  let argumentsPayload: unknown
+  try {
+    argumentsPayload = JSON.parse(found.toolCall.arguments)
+  } catch {
+    setNotice('error', 'Ghost cannot retry this tool because its saved arguments are not valid JSON.')
+    return
+  }
+  if (!argumentsPayload || typeof argumentsPayload !== 'object' || Array.isArray(argumentsPayload)) {
+    setNotice('error', 'Ghost cannot retry this tool because its saved arguments are not a JSON object.')
+    return
+  }
+  const retryableTools = ['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
+  if (!retryableTools.includes(found.toolCall.name)) {
+    setNotice('error', 'Ghost cannot retry this unknown tool.')
+    return
+  }
+  const conversation = getActiveConversation()
+  const requestId = createId('request')
+  const assistantMessage = createMessage('assistant', '', requestId)
+  assistantMessage.status = 'streaming'
+  assistantMessage.requestStatus = 'preparing'
+  conversation.messages.push(assistantMessage)
+  conversation.activeRequestId = requestId
+  conversation.updatedAt = Date.now()
+  activeRequest = {
+    requestId,
+    conversationId: conversation.id,
+    assistantMessageId: assistantMessage.id,
+    lastSequence: 0,
+    status: 'preparing',
+    attempt: 1,
+    startedAt: Date.now(),
+    model: controls.chatModel,
+    phase: 'context',
+    latestDetail: `Retrying ${found.toolCall.name}`,
+    tokenCount: 0
+  }
+  requests.set(requestId, activeRequest)
+  startProgressTimer()
+  notice = undefined
+  render(true)
+  post('retry-tool', {
+    requestId,
+    conversationId: conversation.id,
+    toolCallId: found.toolCall.id,
+    tool: found.toolCall.name,
+    arguments: argumentsPayload
+  })
+}
+
 const handleToolAction = (action: string, toolCallId: string, line?: number): void => {
   const found = findToolCall(toolCallId)
   if (!found) {
@@ -1955,6 +2016,10 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
   }
   if (action === 'rerun') {
     retryMessage(found.message.id)
+    return
+  }
+  if (action === 'retry-tool') {
+    submitToolRetry(found)
     return
   }
   const requestId = found.message.requestId ?? activeRequest?.requestId
@@ -2286,7 +2351,7 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (!request || request.conversationId !== message.conversationId) {
     return
   }
-  if (!('sequence' in message) || typeof message.sequence !== 'number' || message.sequence <= request.lastSequence || ['completed', 'cancelled', 'failed'].includes(request.status)) {
+  if (!('sequence' in message) || typeof message.sequence !== 'number' || message.sequence <= request.lastSequence || (['completed', 'cancelled', 'failed'].includes(request.status) && message.type !== 'request-completed')) {
     return
   }
   request.lastSequence = message.sequence

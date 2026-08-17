@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
 import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
-import type { LocalToolCall } from '../agent/toolCallParser'
+import { LocalToolExecutor } from '../tools/localToolExecutor'
+import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
@@ -68,6 +69,12 @@ interface RecoveryRecord {
   applied: boolean
 }
 
+interface FailedToolRetry {
+  requestId: string
+  conversationId: string
+  call: LocalToolCall
+}
+
 interface StagedEdit {
   requestId: string
   conversationId: string
@@ -109,6 +116,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly stagedEdits = new Map<string, StagedEdit>()
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
   private readonly recoveryRecords = new Map<string, RecoveryRecord>()
+  private readonly failedToolRetries = new Map<string, FailedToolRetry>()
   private readonly sessionApprovedTools = new Set<string>()
   private sessionApprovedFileEdits = false
   private readonly globalState?: vscode.Memento
@@ -254,6 +262,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       markdown: (delta: string) => {
         if (pendingTool) {
           this.markRecoveryApplied(pendingTool.toolCallId, `${pendingTool.name} completed`)
+          this.failedToolRetries.delete(pendingTool.toolCallId)
           this.postStreamEvent(requestId, request, {
             type: 'tool-result',
             tool: pendingTool.name,
@@ -295,6 +304,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
               : /error|failed|cancelled/i.test(result[2])
                 ? 'failed'
                 : 'completed'
+            if (resultStatus === 'completed') {
+              this.failedToolRetries.delete(pendingTool.toolCallId)
+            }
             this.postStreamEvent(requestId, request, {
               type: 'tool-result',
               tool: pendingTool.name,
@@ -499,6 +511,135 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private createToolCallId(): string {
     return `tool-${Date.now()}-${randomBytes(6).toString('hex')}`
+  }
+
+  private async retryFailedTool(
+    requestId: string,
+    conversationId: string,
+    failedToolCallId: string,
+    fallbackCall: LocalToolCall
+  ): Promise<void> {
+    if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
+      return
+    }
+    const stored = this.failedToolRetries.get(failedToolCallId)
+    if (stored && (stored.conversationId !== conversationId || stored.call.name !== fallbackCall.name)) {
+      return
+    }
+    const call = stored?.call ?? fallbackCall
+    const cancellation = new vscode.CancellationTokenSource()
+    const request: GhostRequestState = {
+      cancellation,
+      conversationId,
+      sequence: 0,
+      codeMode: false,
+      status: 'preparing',
+      attempt: 1,
+      startedAt: Date.now(),
+      lastActivityAt: Date.now(),
+      timedOut: false,
+      model: getGhostSettings().chatModel,
+      outputTokens: 0
+    }
+    this.requests.set(requestId, request)
+    this.postStreamEvent(requestId, request, { type: 'request-started' })
+
+    try {
+      const approval = await this.requestToolApproval(requestId, request, call)
+      if (cancellation.token.isCancellationRequested) {
+        request.status = 'cancelled'
+        this.postStreamEvent(requestId, request, {
+          type: 'request-completed',
+          status: 'cancelled',
+          stopReason: 'cancelled',
+          message: 'The tool retry was cancelled.'
+        })
+        return
+      }
+      const toolCallId = request.pendingTool?.toolCallId ?? this.createToolCallId()
+      const toolExecutor = new LocalToolExecutor()
+      if (approval.decision === 'reject') {
+        const message = approval.reason ?? 'User rejected this tool retry.'
+        this.postStreamEvent(requestId, request, {
+          type: 'tool-result',
+          tool: call.name,
+          toolCallId,
+          detail: message,
+          resultStatus: 'rejected',
+          phase: 'tool'
+        })
+        this.postStreamEvent(requestId, request, {
+          type: 'request-completed',
+          status: 'failed',
+          stopReason: 'approval-rejected',
+          message
+        })
+        return
+      }
+
+      const result = await toolExecutor.execute(call, cancellation.token, {
+        approved: true,
+        expectedContent: approval.expectedContent,
+        expectedFileExists: approval.expectedFileExists,
+        expectedFiles: approval.expectedFiles,
+        alreadyApplied: approval.alreadyApplied,
+        appliedContent: approval.appliedContent,
+        selectedHunkIndexes: approval.selectedHunkIndexes
+      })
+      const detail = redactSensitiveText(result).slice(0, 16000)
+      const failed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected|no changes needed/i.test(detail)
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-result',
+        tool: call.name,
+        toolCallId,
+        detail,
+        resultStatus: failed ? 'failed' : 'completed',
+        phase: 'tool'
+      })
+      if (failed) {
+        this.failedToolRetries.set(toolCallId, { requestId, conversationId, call })
+        const message = `Ghost stopped because the tool failed: ${detail} Review the arguments and retry.`
+        this.postStreamEvent(requestId, request, {
+          type: 'error',
+          phase: 'error',
+          message,
+          stopReason: 'failed-tool'
+        })
+        this.postStreamEvent(requestId, request, {
+          type: 'request-completed',
+          status: 'failed',
+          stopReason: 'failed-tool',
+          message
+        })
+        return
+      }
+      this.failedToolRetries.delete(failedToolCallId)
+      this.failedToolRetries.delete(toolCallId)
+      this.postStreamEvent(requestId, request, {
+        type: 'request-completed',
+        phase: 'complete',
+        status: 'completed'
+      })
+    } catch (error) {
+      const message = redactSensitiveText(error instanceof Error ? error.message : 'Ghost could not retry the tool.')
+      this.postStreamEvent(requestId, request, {
+        type: 'error',
+        phase: 'error',
+        message,
+        stopReason: 'failed-tool'
+      })
+      this.postStreamEvent(requestId, request, {
+        type: 'request-completed',
+        status: 'failed',
+        stopReason: 'failed-tool',
+        message
+      })
+    } finally {
+      this.resolvePendingApprovals(requestId, { decision: 'reject' })
+      this.requests.delete(requestId)
+      this.completedRequests.add(requestId)
+      cancellation.dispose()
+    }
   }
 
   private async confirmToolLimit(requestId: string, request: GhostRequestState, toolCallCount: number): Promise<boolean> {
@@ -812,6 +953,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       const reason = `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
       const pending = { toolCallId: this.createToolCallId(), name: call.name }
       request.pendingTool = pending
+      this.failedToolRetries.set(pending.toolCallId, { requestId, conversationId: request.conversationId, call })
       this.postStreamEvent(requestId, request, {
         type: 'tool-requested',
         tool: call.name,
@@ -828,6 +970,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ? request.pendingTool
       : { toolCallId: this.createToolCallId(), name: call.name }
     request.pendingTool = pending
+    this.failedToolRetries.set(pending.toolCallId, { requestId, conversationId: request.conversationId, call })
     const settings = getGhostSettings()
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const deniedTools = settings.toolDenylist ?? []
@@ -1471,6 +1614,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.stagedEdits.clear()
     this.recoveryRecords.clear()
+    this.failedToolRetries.clear()
     this.sessionApprovedTools.clear()
     this.sessionApprovedFileEdits = false
     vscode.Disposable.from(...this.disposables).dispose()
@@ -1515,6 +1659,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         return
       case 'cancel':
         this.cancel(value.requestId)
+        return
+      case 'retry-tool':
+        await this.retryFailedTool(value.requestId, value.conversationId, value.toolCallId, {
+          name: value.tool as LocalToolName,
+          arguments: value.arguments
+        })
         return
       case 'approve-tool':
         this.decideToolApproval(value.requestId, value.conversationId, value.toolCallId, {

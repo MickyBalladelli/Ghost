@@ -15,6 +15,7 @@ All notable changes to this extension are documented here.
 - Added explicit post-edit readback verification and reported verification status in file tool results.
 - Added distinct stopped states for tool failure, invalid model output, cancellation, timeout, approval rejection, context limits, and request budgets.
 - Added separate rejected and failed statuses to tool progress, with retry guidance after failed tools.
+- Added a Retry tool action that reuses the last valid tool arguments through a fresh approval flow.
 
 ## 1.0.83 - 2026-08-17
 
