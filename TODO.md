@@ -43,7 +43,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add optional Git context: status, diff, staged diff, branch, and recent file history. Never include unrelated or ignored files by default.
 - [x] Detect unsaved editor changes and let the model read the editor buffer or disk explicitly. Prevent disk edits from silently clobbering unsaved text.
 - [x] Add a task plan object with checked steps, current step, blocked reason, and completion evidence. Persist it in the conversation.
-- [ ] Require the model to answer a final structured completion record: changed files, checks run, failures, and remaining work.
+- [x] Require the model to answer a final structured completion record: changed files, checks run, failures, and remaining work.
 - [ ] Add a “continue from last state” action that sends the last failed tool, current file state, and remaining plan without replaying the whole conversation.
 - [ ] Add request-level cancellation to every provider, tool, file operation, timer, and pending approval.
 - [ ] Add bounded retry policies per failure class. Do not retry invalid arguments forever; retry network disconnects with backoff and jitter.

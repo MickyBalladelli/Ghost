@@ -6,6 +6,7 @@ import { registerSearchTool } from './searchTool'
 import { registerDiagnosticsTool } from './diagnosticsTool'
 import { registerGitContextTool } from './gitContextTool'
 import { registerTaskPlanTool } from '../agent/taskPlan'
+import { registerCompletionRecordTool } from '../agent/completionRecord'
 
 export function registerLanguageModelTools(context: vscode.ExtensionContext): void {
   registerFileTools(context)
@@ -13,5 +14,6 @@ export function registerLanguageModelTools(context: vscode.ExtensionContext): vo
   registerDiagnosticsTool(context)
   registerGitContextTool(context)
   registerTaskPlanTool(context)
+  registerCompletionRecordTool(context)
   registerTerminalTools(context)
 }

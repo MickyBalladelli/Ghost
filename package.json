@@ -38,6 +38,7 @@
     "onLanguageModelTool:ghost_get_diagnostics",
     "onLanguageModelTool:ghost_git_context",
     "onLanguageModelTool:ghost_update_task_plan",
+    "onLanguageModelTool:ghost_record_completion",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
     "onLanguageModelTool:ghost_apply_transaction",
@@ -286,6 +287,7 @@
               "ghost_get_diagnostics",
               "ghost_git_context",
               "ghost_update_task_plan",
+              "ghost_record_completion",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -299,6 +301,7 @@
             "ghost_get_diagnostics",
             "ghost_git_context",
             "ghost_update_task_plan",
+            "ghost_record_completion",
             "ghost_write_file",
             "ghost_apply_edit",
             "ghost_apply_transaction",
@@ -317,6 +320,7 @@
               "ghost_get_diagnostics",
               "ghost_git_context",
               "ghost_update_task_plan",
+              "ghost_record_completion",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -524,6 +528,27 @@
             }
           },
           "required": ["steps"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghost_record_completion",
+        "displayName": "Ghost Record Completion",
+        "toolReferenceName": "ghost_record_completion",
+        "userDescription": "Record the structured result of the current request.",
+        "modelDescription": "Required before the final answer. Records changed files, checks actually run, failures, and remaining work. Never claim a check was run unless it really ran.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(check-all)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "changedFiles": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
+            "checksRun": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
+            "failures": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } },
+            "remainingWork": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 2000 } }
+          },
+          "required": ["changedFiles", "checksRun", "failures", "remainingWork"],
           "additionalProperties": false
         }
       },

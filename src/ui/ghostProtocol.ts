@@ -43,6 +43,14 @@ export interface GhostTaskPlan {
   updatedAt: number
 }
 
+export interface GhostCompletionRecord {
+  changedFiles: string[]
+  checksRun: string[]
+  failures: string[]
+  remainingWork: string[]
+  recordedAt: number
+}
+
 export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
@@ -146,7 +154,7 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'task-plan'; sequence: number; plan: GhostTaskPlan })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string; stopReason?: GhostStopReason })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string; completionRecord?: GhostCompletionRecord })
 
 interface GhostRequestEnvelopeBase {
   requestId: string
@@ -352,7 +360,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
   if (value.type === 'retry-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 &&
-      ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
+      ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_record_completion', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
       isRecord(value.arguments)
   }
   if (value.type === 'approve-tool') {

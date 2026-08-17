@@ -81,6 +81,7 @@ const toolDescriptions: Record<string, string> = {
   ghost_get_diagnostics: 'Read compiler and Problems-panel diagnostics.',
   ghost_git_context: 'Read safe Git status, diffs, branch, and file history.',
   ghost_update_task_plan: 'Persist the current multi-step task plan.',
+  ghost_record_completion: 'Record changed files, checks, failures, and remaining work.',
   ghost_write_file: 'Create or replace a text file in the workspace.',
   ghost_apply_edit: 'Apply reviewed, structured edits to a workspace file.',
   ghost_apply_transaction: 'Apply and verify multiple workspace edits as one transaction.',
@@ -138,6 +139,14 @@ interface TaskPlan {
   updatedAt: number
 }
 
+interface CompletionRecord {
+  changedFiles: string[]
+  checksRun: string[]
+  failures: string[]
+  remainingWork: string[]
+  recordedAt: number
+}
+
 interface Conversation {
   id: string
   title: string
@@ -145,6 +154,7 @@ interface Conversation {
   draft: string
   promptHistory: string[]
   taskPlan?: TaskPlan
+  completionRecord?: CompletionRecord
   activeRequestId?: string
   createdAt: number
   updatedAt: number
@@ -227,6 +237,7 @@ type GhostExtensionMessage =
       message?: string
       resultStatus?: 'completed' | 'rejected' | 'failed'
       plan?: TaskPlan
+      completionRecord?: CompletionRecord
       status?: 'completed' | 'cancelled' | 'failed'
       stopReason?: StopReason
     }
@@ -398,6 +409,22 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
   }
 }
 
+const normalizeCompletionRecord = (value: unknown): CompletionRecord | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Partial<CompletionRecord>
+  const list = (items: unknown): string[] => Array.isArray(items)
+    ? items.filter((item): item is string => typeof item === 'string').slice(0, 100).map(item => item.slice(0, 2000))
+    : []
+  if (!Array.isArray(record.changedFiles) || !Array.isArray(record.checksRun) || !Array.isArray(record.failures) || !Array.isArray(record.remainingWork)) return undefined
+  return {
+    changedFiles: list(record.changedFiles),
+    checksRun: list(record.checksRun),
+    failures: list(record.failures),
+    remainingWork: list(record.remainingWork),
+    recordedAt: typeof record.recordedAt === 'number' ? record.recordedAt : Date.now()
+  }
+}
+
 const normalizeConversation = (value: Partial<Conversation>): Conversation => {
   const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
   return {
@@ -407,6 +434,7 @@ const normalizeConversation = (value: Partial<Conversation>): Conversation => {
     draft: typeof value.draft === 'string' ? value.draft : '',
     promptHistory: normalizePromptHistory(value.promptHistory),
     ...(value.taskPlan && Array.isArray(value.taskPlan.steps) ? { taskPlan: value.taskPlan } : {}),
+    ...(normalizeCompletionRecord(value.completionRecord) ? { completionRecord: normalizeCompletionRecord(value.completionRecord) } : {}),
     ...(value.activeRequestId ? { activeRequestId: value.activeRequestId } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
@@ -1811,12 +1839,33 @@ const createTaskPlanElement = (plan: TaskPlan): HTMLElement => {
   return element
 }
 
+const createCompletionRecordElement = (record: CompletionRecord): HTMLElement => {
+  const element = document.createElement('section')
+  element.className = 'completion-record'
+  const heading = document.createElement('strong')
+  heading.textContent = 'Completion record'
+  element.append(heading)
+  const addList = (label: string, values: string[]) => {
+    const line = document.createElement('div')
+    line.textContent = `${label}: ${values.length > 0 ? values.join(' · ') : 'None'}`
+    element.append(line)
+  }
+  addList('Changed files', record.changedFiles)
+  addList('Checks run', record.checksRun)
+  addList('Failures', record.failures)
+  addList('Remaining work', record.remainingWork)
+  return element
+}
+
 const renderMessages = (forceScroll: boolean) => {
   const conversation = getActiveConversation()
   const previousScrollTop = messagesElement.scrollTop
   messagesElement.textContent = ''
   if (conversation.taskPlan) {
     messagesElement.append(createTaskPlanElement(conversation.taskPlan))
+  }
+  if (conversation.completionRecord) {
+    messagesElement.append(createCompletionRecordElement(conversation.completionRecord))
   }
   if (conversation.messages.length === 0) {
     messagesElement.innerHTML = stateCard()
@@ -2054,7 +2103,7 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
     setNotice('error', 'Ghost cannot retry this tool because its saved arguments are not a JSON object.')
     return
   }
-  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
+  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_git_context', 'ghost_update_task_plan', 'ghost_record_completion', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
   if (!retryableTools.includes(found.toolCall.name)) {
     setNotice('error', 'Ghost cannot retry this unknown tool.')
     return
@@ -2619,6 +2668,14 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   }
   if (message.type === 'request-completed') {
     const status = message.status ?? 'failed'
+    const completionRecord = normalizeCompletionRecord(message.completionRecord)
+    conversation.completionRecord = completionRecord ?? {
+      changedFiles: [],
+      checksRun: [],
+      failures: [status === 'completed' ? 'Model did not provide a completion record.' : `Request ended without a completion record (${status}).`],
+      remainingWork: ['Provide a structured completion record before the final answer.'],
+      recordedAt: Date.now()
+    }
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined

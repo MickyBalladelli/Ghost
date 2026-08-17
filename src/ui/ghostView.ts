@@ -32,6 +32,7 @@ import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 import { parseTaskPlanMarker } from '../agent/taskPlan'
+import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
 
 interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -47,6 +48,7 @@ interface GhostRequestState {
   stopMessage?: string
   model: string
   outputTokens: number
+  completionRecord?: CompletionRecord
   autoAcceptFilePath?: string
   pendingTool?: { toolCallId: string; name: string }
 }
@@ -310,6 +312,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
                 plan: taskPlan,
                 phase: 'tool'
               })
+            }
+            const completionRecord = parseCompletionRecordMarker(result[2])
+            if (completionRecord) {
+              request.completionRecord = completionRecord
             }
             const resultStatus = /rejected|denied/i.test(result[2])
               ? 'rejected'
@@ -1402,7 +1408,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...(request.outputTokens > 0
         ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
         : {}),
-      ...redactSensitiveValue(Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value])))
+      ...redactSensitiveValue(Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))),
+      ...(event.type === 'request-completed' && request.completionRecord ? { completionRecord: request.completionRecord } : {})
     } as GhostStreamEvent)
   }
 
