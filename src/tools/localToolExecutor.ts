@@ -20,6 +20,7 @@ import { atomicWriteFile } from './atomicFile'
 import { assertNoUnsavedEditorChanges, readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { awaitCancellable } from './cancellation'
+import { validateLocalToolCall } from '../agent/toolSchema'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -114,6 +115,11 @@ export class LocalToolExecutor {
   private async executeInternal(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
       return 'Tool call cancelled by the user.'
+    }
+
+    const validationError = validateLocalToolCall(call)
+    if (validationError) {
+      return `Tool call rejected: ${validationError} Retry with one JSON tool call correcting that field.`
     }
 
     const missingArgument = getMissingRequiredArgument(call)

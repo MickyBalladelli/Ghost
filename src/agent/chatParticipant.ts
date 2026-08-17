@@ -13,6 +13,7 @@ import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
 import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler } from './toolCallParser'
+import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 
@@ -441,34 +442,18 @@ function getEditLoopReason(state: FileEditState, record: EditRecord): string | u
 }
 
 function getToolArgumentError(call: LocalToolCall): string | undefined {
-  const pathToolNames = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
-  const requiredArgument = pathToolNames.has(call.name)
-    ? 'path'
-    : call.name === 'ghost_search_workspace'
-      ? 'query'
-    : call.name === 'ghost_run_terminal_command'
-      ? 'command'
-      : undefined
-  if (!requiredArgument) {
-    if (call.name === 'ghost_apply_transaction' && (!Array.isArray(call.arguments.edits) || call.arguments.edits.length < 2)) {
-      return 'Tool call rejected: ghost_apply_transaction requires at least two file edits. Retry with one JSON tool call containing an edits array.'
-    }
-    return undefined
+  const schemaError = validateLocalToolCall(call)
+  if (schemaError) {
+    return `Tool call rejected: ${schemaError} Retry with one JSON tool call correcting that field.`
   }
-  if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
-    if (call.name !== 'ghost_run_terminal_command') {
-      return undefined
-    }
-
+  if (call.name === 'ghost_run_terminal_command') {
     const command = call.arguments.command as string
     const audit = auditTerminalCommand(command)
     if (audit.blocked) {
       return `${audit.blockReason} Retry with one ghost_read_file, ghost_apply_edit, or ghost_write_file call. Use ghost_run_terminal_command only for inspection, builds, tests, or commands explicitly requested by the user.`
     }
-
-    return undefined
   }
-  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using a path inside the workspace.`
+  return undefined
 }
 
 export interface ChatParticipantOptions {

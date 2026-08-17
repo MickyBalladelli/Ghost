@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.93 - 2026-08-18
+
+- Added field-level JSON Schema validation and bounded repair feedback for every local tool call.
+
 ## 1.0.92 - 2026-08-18
 
 - Fixed internal task-plan and completion-record tools being blocked by older workspace tool allowlists.
