@@ -717,6 +717,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction' || toolName === 'ghost_run_terminal_command'
   }
 
+  private isConversationStateTool(toolName: string): boolean {
+    return toolName === 'ghost_update_task_plan' || toolName === 'ghost_record_completion'
+  }
+
   private isFileEditTool(toolName: string): boolean {
     return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction'
   }
@@ -1111,7 +1115,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const settings = getGhostSettings()
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const deniedTools = settings.toolDenylist ?? []
-    const blockedByPolicy = !allowedTools.includes(call.name) || deniedTools.includes(call.name)
+    const blockedByPolicy = !this.isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || deniedTools.includes(call.name))
     const isFileEditTool = this.isFileEditTool(call.name)
     const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
     if (unsavedEditorWarning) {
