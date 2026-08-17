@@ -8,6 +8,8 @@ import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
+import { parseGhostEdit } from '../tools/editWorkflow'
+import type { GhostEditHunk } from '../tools/editWorkflow'
 import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
@@ -34,6 +36,19 @@ const MAX_MISSING_TOOL_RETRIES = 2
 const MAX_EMPTY_PROVIDER_RETRIES = 2
 const MAX_TOOL_RESULT_CHARACTERS = 16000
 
+interface EditRecord {
+  signature: string
+  fingerprint: string
+  ranges: Array<{ startLine: number; endLine: number }>
+  hunks: GhostEditHunk[]
+}
+
+interface FileEditState {
+  count: number
+  signatures: Set<string>
+  history: EditRecord[]
+}
+
 function summarizeToolResult(value: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
@@ -51,6 +66,73 @@ function getEditPath(call: LocalToolCall): string | undefined {
   return isFileEditTool(call.name) && typeof call.arguments.path === 'string'
     ? call.arguments.path
     : undefined
+}
+
+function getEditRecord(call: LocalToolCall): EditRecord | undefined {
+  const path = getEditPath(call)
+  if (!path) {
+    return undefined
+  }
+
+  if (call.name === 'ghost_write_file') {
+    const content = typeof call.arguments.content === 'string' ? call.arguments.content : ''
+    return {
+      signature: `${call.name}:${path}:${JSON.stringify(call.arguments)}`,
+      fingerprint: `${call.name}:${path}:${content}`,
+      ranges: [],
+      hunks: []
+    }
+  }
+
+  try {
+    const edit = parseGhostEdit(call.arguments)
+    const shape = edit.hunks.map(hunk => ({
+      startLine: hunk.startLine,
+      endLine: hunk.endLine,
+      replacement: hunk.replacement
+    }))
+    return {
+      signature: `${call.name}:${path}:${JSON.stringify(call.arguments)}`,
+      fingerprint: `${call.name}:${path}:${JSON.stringify(shape)}`,
+      ranges: edit.hunks.map(hunk => ({ startLine: hunk.startLine, endLine: hunk.endLine })),
+      hunks: edit.hunks
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
+  return left.startLine <= right.endLine && right.startLine <= left.endLine
+}
+
+function isInverseEdit(previous: EditRecord | undefined, current: EditRecord): boolean {
+  if (!previous || previous.hunks.length === 0 || previous.hunks.length !== current.hunks.length) {
+    return false
+  }
+
+  return previous.hunks.every((previousHunk, index) => {
+    const currentHunk = current.hunks[index]
+    return previousHunk.startLine === currentHunk.startLine
+      && previousHunk.endLine === currentHunk.endLine
+      && previousHunk.oldText !== undefined
+      && currentHunk.oldText !== undefined
+      && previousHunk.replacement === currentHunk.oldText
+      && currentHunk.replacement === previousHunk.oldText
+  })
+}
+
+function getEditLoopReason(state: FileEditState, record: EditRecord): string | undefined {
+  if (state.history.some(previous => previous.fingerprint === record.fingerprint)) {
+    return 'repeated or alternating edits'
+  }
+  if (isInverseEdit(state.history.at(-1), record)) {
+    return 'an undo/reapply edit loop'
+  }
+  if (record.ranges.length > 0 && state.history.some(previous => previous.ranges.some(previousRange => record.ranges.some(range => rangesOverlap(previousRange, range))))) {
+    return 'overlapping edits'
+  }
+  return undefined
 }
 
 function getToolArgumentError(call: LocalToolCall): string | undefined {
@@ -586,7 +668,7 @@ export function createChatParticipantHandler(
       let toolCallCount = 0
       let missingToolRetries = 0
       let emptyProviderRetries = 0
-      const fileEditStates = new Map<string, { count: number; signatures: Set<string> }>()
+      const fileEditStates = new Map<string, FileEditState>()
       while (true) {
         const turn = await streamModelTurn(
           llmFactory,
@@ -701,15 +783,21 @@ export function createChatParticipantHandler(
           continue
         }
         const editPath = getEditPath(toolCall)
-        const editSignature = editPath
-          ? `${toolCall.name}:${editPath}:${JSON.stringify(toolCall.arguments)}`
-          : undefined
+        const editRecord = getEditRecord(toolCall)
+        const editSignature = editRecord?.signature
         const editState = editPath
-          ? fileEditStates.get(editPath) ?? { count: 0, signatures: new Set<string>() }
+          ? fileEditStates.get(editPath) ?? { count: 0, signatures: new Set<string>(), history: [] }
           : undefined
         if (editPath && editState && editSignature && editState.signatures.has(editSignature)) {
           response.markdown(`Ghost stopped because it tried to apply the same edit to ${editPath} again. Review the file and retry with a more specific request.`)
           return
+        }
+        if (editPath && editState && editRecord) {
+          const loopReason = getEditLoopReason(editState, editRecord)
+          if (loopReason) {
+            response.markdown(`Ghost stopped because it detected ${loopReason} on ${editPath}. Review the file and retry with a more specific request.`)
+            return
+          }
         }
         if (editPath && editState && editState.count >= MAX_EDITS_PER_FILE) {
           response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
@@ -752,9 +840,14 @@ export function createChatParticipantHandler(
         )
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
-        if (editPath && editState && editSignature && !editFailed) {
+        if (editPath && /no changes needed/i.test(toolResult)) {
+          response.markdown(`Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`)
+          return
+        }
+        if (editPath && editState && editRecord && editSignature && !editFailed) {
           editState.count += 1
           editState.signatures.add(editSignature)
+          editState.history.push(editRecord)
           fileEditStates.set(editPath, editState)
           if (editState.count >= MAX_EDITS_PER_FILE) {
             response.markdown(`Ghost stopped after ${MAX_EDITS_PER_FILE} edits to ${editPath} to prevent an edit loop. Review the file and retry.`)
