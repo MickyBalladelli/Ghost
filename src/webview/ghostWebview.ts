@@ -1612,11 +1612,17 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
-  if (actions && message.role === 'assistant' && message.content) {
-    addAction(actions, 'Copy', 'copy', message.id)
-    addAction(actions, 'Retry', 'retry', message.id)
-    addAction(actions, 'Regenerate', 'regenerate', message.id)
-    addAction(actions, 'Edit & resend', 'edit-resend', message.id)
+  if (actions && message.role === 'assistant') {
+    if (message.content) {
+      addAction(actions, 'Copy', 'copy', message.id)
+    }
+    if (message.content || message.status === 'error' || message.requestStatus === 'failed' || message.stopReason) {
+      addAction(actions, 'Retry', 'retry', message.id)
+      addAction(actions, 'Regenerate', 'regenerate', message.id)
+    }
+    if (message.content) {
+      addAction(actions, 'Edit & resend', 'edit-resend', message.id)
+    }
   }
   if (actions && message.role === 'assistant' && (message.status === 'error' || message.requestStatus === 'failed' || message.stopReason)) {
     addAction(actions, 'Continue', 'continue', message.id)

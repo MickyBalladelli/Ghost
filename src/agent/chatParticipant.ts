@@ -408,6 +408,17 @@ function stopForBudget(response: vscode.ChatResponseStream, reason: string, onSt
   response.markdown(message)
 }
 
+function noToolRecoveryMessage(state: ReturnType<typeof classifyLocalToolResponse>['state'], retries: number): string {
+  const reason = state === 'unknown-tool'
+    ? 'the model named a tool Ghost does not have'
+    : state === 'truncated-json'
+      ? 'the model returned incomplete tool JSON'
+      : state === 'malformed-json'
+        ? 'the model returned invalid tool JSON'
+        : 'the model described an edit without calling a workspace tool'
+  return `Ghost could not complete the requested edit because ${reason} after ${retries} retries. No workspace change was made. Use Retry to send the request again, or Regenerate for a fresh model response.`
+}
+
 function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
   return left.startLine <= right.endLine && right.startLine <= left.endLine
 }
@@ -1116,13 +1127,7 @@ export function createChatParticipantHandler(
             continue
           }
           if (expectsWorkspaceTool) {
-            const message = parsedResponse.state === 'unknown-tool'
-              ? 'The model kept returning an unknown tool name after retries.'
-              : parsedResponse.state === 'truncated-json'
-                ? 'The model kept returning truncated tool JSON after retries.'
-                : parsedResponse.state === 'malformed-json'
-                  ? 'The model kept returning malformed tool JSON after retries.'
-                  : 'The model did not return a workspace tool call after retries.'
+            const message = noToolRecoveryMessage(parsedResponse.state, missingToolRetries)
             requestOptions.onStop?.('invalid-model-response', message)
           }
           response.markdown(redactSensitiveText(generated))

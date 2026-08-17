@@ -6,6 +6,7 @@ All notable changes to this extension are documented here.
 
 - Added field-level JSON Schema validation and bounded repair feedback for every local tool call.
 - Added bounded recovery for oversized streamed edit calls, asking for smaller hunks or one file at a time before execution.
+- Added clear no-tool failure reasons and always-visible Retry and Regenerate actions for failed replies.
 
 ## 1.0.92 - 2026-08-18
 
