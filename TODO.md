@@ -18,7 +18,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Replace the current edit-count guard with a request budget for files, changed lines, bytes, commands, time, and model tokens. Show the limit and why Ghost stopped.
 - [x] Add one transaction for a multi-file change: preview one combined diff, apply atomically, verify, and roll back the group on failure.
 - [x] Add an explicit verification phase after edits. Run only relevant checks, report their exit status, and do not claim success without evidence.
-- [ ] Add a clear stopped state: failed tool, invalid model response, cancellation, timeout, approval rejection, context limit, and budget limit must look different.
+- [x] Add a clear stopped state: failed tool, invalid model response, cancellation, timeout, approval rejection, context limit, and budget limit must look different.
 - [ ] Give every failed tool result an actionable retry path and preserve the last valid arguments.
 - [ ] Audit all terminal commands before execution. Classify destructive commands, writes, network use, package installation, and privilege changes.
 - [ ] Replace the raw `process.env` terminal environment with a masked, configurable allowlist. Never expose API keys or secret variables to the model.

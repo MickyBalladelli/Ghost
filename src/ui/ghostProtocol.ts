@@ -1,4 +1,4 @@
-import type { GhostProgressPhase, GhostRequestStatus } from './ghostState'
+import type { GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
@@ -10,6 +10,7 @@ export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
 export type { GhostRequestStatus }
 export type { GhostProgressPhase }
+export type { GhostStopReason }
 
 export type GhostToolApprovalDecision = 'once' | 'session' | 'reject'
 
@@ -128,10 +129,10 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; diffPreview?: GhostToolDiffPreview; detail?: string })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string; resultStatus?: 'completed' | 'rejected' | 'failed' })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed' })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'error'; sequence: number; message: string; stopReason?: GhostStopReason })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-completed'; sequence: number; status: 'completed' | 'cancelled' | 'failed'; stopReason?: GhostStopReason; message?: string })
 
 interface GhostRequestEnvelopeBase {
   requestId: string

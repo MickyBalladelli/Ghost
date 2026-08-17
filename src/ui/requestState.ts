@@ -27,6 +27,13 @@ export function getRequestStatusForEvent(
   if (event.phase === 'tool') {
     return event.type === 'tool-requested' ? 'waiting-for-approval' : 'thinking'
   }
+  if (event.type === 'request-completed') {
+    return event.status === 'completed'
+      ? 'completed'
+      : event.status === 'cancelled'
+        ? 'cancelled'
+        : 'failed'
+  }
   if (event.phase === 'error') {
     return 'failed'
   }
@@ -47,13 +54,6 @@ export function getRequestStatusForEvent(
   }
   if (event.type === 'tool-result') {
     return 'thinking'
-  }
-  if (event.type === 'request-completed') {
-    return event.status === 'completed'
-      ? 'completed'
-      : event.status === 'cancelled'
-        ? 'cancelled'
-        : 'failed'
   }
   return current
 }

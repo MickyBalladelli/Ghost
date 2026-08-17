@@ -13,6 +13,8 @@ All notable changes to this extension are documented here.
 - Reported the budget category and usage when Ghost stops.
 - Added `ghost_apply_transaction` for combined multi-file previews, baseline checks, verification, and group rollback on failure.
 - Added explicit post-edit readback verification and reported verification status in file tool results.
+- Added distinct stopped states for tool failure, invalid model output, cancellation, timeout, approval rejection, context limits, and request budgets.
+- Added separate rejected and failed statuses to tool progress, with retry guidance after failed tools.
 
 ## 1.0.83 - 2026-08-17
 

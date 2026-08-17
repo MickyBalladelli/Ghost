@@ -26,7 +26,7 @@ import {
   GhostWebviewRequestOptions,
   isGhostWebviewMessage
 } from './ghostProtocol'
-import type { GhostRequestStatus } from './ghostState'
+import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 
@@ -40,6 +40,8 @@ interface GhostRequestState {
   startedAt: number
   lastActivityAt: number
   timedOut: boolean
+  stopReason?: GhostStopReason
+  stopMessage?: string
   model: string
   outputTokens: number
   pendingTool?: { toolCallId: string; name: string }
@@ -257,6 +259,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             tool: pendingTool.name,
             detail: `${pendingTool.name} completed`,
             toolCallId: pendingTool.toolCallId,
+            resultStatus: 'completed',
             phase: 'tool'
           })
           pendingTool = undefined
@@ -287,11 +290,17 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
           if (pendingTool && result) {
             this.markRecoveryApplied(pendingTool.toolCallId, result[2])
+            const resultStatus = /rejected|denied/i.test(result[2])
+              ? 'rejected'
+              : /error|failed|cancelled/i.test(result[2])
+                ? 'failed'
+                : 'completed'
             this.postStreamEvent(requestId, request, {
               type: 'tool-result',
               tool: pendingTool.name,
               toolCallId: pendingTool.toolCallId,
               detail: result[2],
+              resultStatus,
               phase: 'tool'
             })
             pendingTool = undefined
@@ -332,7 +341,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...options,
       additionalContext: droppedContext || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
-      confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount)
+      confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
+      onStop: (reason, message) => {
+        if (request.stopReason) {
+          return
+        }
+        request.stopReason = reason
+        request.stopMessage = redactSensitiveText(message)
+        request.status = reason === 'cancelled' ? 'cancelled' : 'failed'
+      }
     }
 
     const timeout = setTimeout(() => {
@@ -340,6 +357,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         return
       }
       request.timedOut = true
+      request.stopReason = 'timeout'
+      request.stopMessage = 'The provider did not respond before the request timeout.'
       request.status = 'failed'
       request.cancellation.cancel()
       this.postStreamEvent(requestId, request, {
@@ -348,7 +367,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
       this.postStreamEvent(requestId, request, {
         type: 'error',
-        message: 'The provider did not respond before the request timeout.'
+        message: request.stopMessage,
+        stopReason: request.stopReason
       })
     }, GhostViewProvider.requestTimeoutMs)
 
@@ -409,24 +429,40 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       if (lastError && !cancellation.token.isCancellationRequested) {
         throw lastError
       }
-      this.postStreamEvent(requestId, request, {
-        type: 'request-completed',
-        phase: 'complete',
-        status: request.timedOut
+      const completedStatus = request.stopReason === 'cancelled'
+        ? 'cancelled'
+        : request.stopReason
           ? 'failed'
           : cancellation.token.isCancellationRequested
             ? 'cancelled'
             : 'completed'
+      this.postStreamEvent(requestId, request, {
+        type: 'request-completed',
+        phase: 'complete',
+        status: completedStatus,
+        ...(request.stopReason ? { stopReason: request.stopReason, message: request.stopMessage } : {})
       })
     } catch (error) {
+      const message = redactSensitiveText(error instanceof Error ? error.message : 'Ghost request failed')
+      if (!request.stopReason) {
+        request.stopReason = request.timedOut
+          ? 'timeout'
+          : cancellation.token.isCancellationRequested
+            ? 'cancelled'
+            : /context|context window|maximum token|token limit|too many tokens/i.test(message)
+              ? 'context-limit'
+              : 'provider-failure'
+        request.stopMessage = message
+      }
       if (!cancellation.token.isCancellationRequested || !request.timedOut) {
-        const message = redactSensitiveText(error instanceof Error ? error.message : 'Ghost request failed')
         this.debugLog('request failed', message)
-        this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message })
+        this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message, stopReason: request.stopReason })
       }
       this.postStreamEvent(requestId, request, {
         type: 'request-completed',
-        status: request.timedOut || !cancellation.token.isCancellationRequested ? 'failed' : 'cancelled'
+        status: request.stopReason === 'cancelled' ? 'cancelled' : 'failed',
+        stopReason: request.stopReason,
+        message: request.stopMessage
       })
     } finally {
       clearTimeout(timeout)
@@ -450,6 +486,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.resolvePendingApprovals(requestId, { decision: 'reject' })
     request.status = 'cancelled'
+    request.stopReason = 'cancelled'
+    request.stopMessage = 'The request was cancelled.'
     request.cancellation.cancel()
   }
 

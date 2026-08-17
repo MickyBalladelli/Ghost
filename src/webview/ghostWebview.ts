@@ -6,6 +6,7 @@ type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
 type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
+type StopReason = 'failed-tool' | 'invalid-model-response' | 'cancelled' | 'timeout' | 'approval-rejected' | 'context-limit' | 'budget-limit' | 'provider-failure'
 
 interface Attachment {
   name: string
@@ -89,6 +90,7 @@ interface ChatMessage {
   responseStats?: ResponseStats
   status?: 'streaming' | 'error'
   requestStatus?: RequestStatus
+  stopReason?: StopReason
   requestId?: string
   createdAt: number
   updatedAt: number
@@ -208,7 +210,9 @@ type GhostExtensionMessage =
       requiresApproval?: boolean
       diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
       message?: string
+      resultStatus?: 'completed' | 'rejected' | 'failed'
       status?: 'completed' | 'cancelled' | 'failed'
+      stopReason?: StopReason
     }
 
 interface GhostWebviewApi {
@@ -230,6 +234,7 @@ interface ActiveRequest {
   latestDetail: string
   tokenCount: number
   tokensPerSecond?: number
+  stopReason?: StopReason
 }
 
 interface ModelMetadata {
@@ -1479,6 +1484,21 @@ const addAction = (container: HTMLElement, label: string, action: string, messag
   container.append(button)
 }
 
+const stopReasonLabels: Record<StopReason, string> = {
+  'failed-tool': 'Tool failed',
+  'invalid-model-response': 'Invalid model response',
+  cancelled: 'Request cancelled',
+  timeout: 'Request timed out',
+  'approval-rejected': 'Approval rejected',
+  'context-limit': 'Context limit reached',
+  'budget-limit': 'Request budget reached',
+  'provider-failure': 'Provider failed'
+}
+
+const stopReasonLabel = (reason: StopReason | undefined): string => (
+  reason ? stopReasonLabels[reason] : 'Ghost request failed'
+)
+
 const createMessageElement = (message: ChatMessage): HTMLElement => {
   const article = document.createElement('article')
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
@@ -1489,6 +1509,8 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     ? 'Thinking...'
     : message.requestStatus === 'waiting-for-approval'
       ? 'Waiting for approval...'
+      : message.stopReason
+        ? stopReasonLabel(message.stopReason)
       : ''
   article.innerHTML = `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
@@ -2278,6 +2300,10 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = message.state
     assistantMessage.requestStatus = message.state
   }
+  if (message.stopReason) {
+    request.stopReason = message.stopReason
+    assistantMessage.stopReason = message.stopReason
+  }
   if (message.phase) {
     request.phase = message.phase
   }
@@ -2364,10 +2390,12 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && (message.toolCallId ? part.toolCall.id === message.toolCallId : part.toolCall.status !== 'completed'))
     if (toolPart) {
       const detail = redactSensitiveText(message.detail ?? 'Tool completed').slice(0, 16000)
-      const failed = /rejected|denied|cancelled|error|failed/i.test(detail)
-      toolPart.toolCall.status = failed
-        ? /rejected|denied/i.test(detail) ? 'rejected' : 'failed'
-        : 'completed'
+      const failed = message.resultStatus === 'failed' || /rejected|denied|cancelled|error|failed/i.test(detail)
+      toolPart.toolCall.status = message.resultStatus === 'rejected' || /rejected|denied/i.test(detail)
+        ? 'rejected'
+        : failed
+          ? 'failed'
+          : 'completed'
       toolPart.toolCall.approval = toolPart.toolCall.approval === 'rejected' ? 'rejected' : 'approved'
       toolPart.toolCall.result = detail
       toolPart.toolCall.completedAt = Date.now()
@@ -2399,12 +2427,17 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'error') {
-    request.status = 'failed'
+    request.status = message.stopReason === 'cancelled' ? 'cancelled' : 'failed'
     assistantMessage.status = 'error'
     assistantMessage.requestStatus = request.status
     const error = message.message ?? 'Ghost request failed'
-    appendErrorPart(assistantMessage, error, true)
-    notice = { kind: 'error', message: error }
+    if (message.stopReason) {
+      request.stopReason = message.stopReason
+      assistantMessage.stopReason = message.stopReason
+    }
+    const displayedError = message.stopReason ? `${stopReasonLabel(message.stopReason)}: ${error}` : error
+    appendErrorPart(assistantMessage, displayedError, true)
+    notice = { kind: 'error', message: displayedError }
     updateMessageElement(assistantMessage)
     return
   }
@@ -2413,10 +2446,19 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
-    if (status === 'cancelled' && assistantMessage.content.length === 0) {
-      appendErrorPart(assistantMessage, 'Request cancelled.')
+    if (message.stopReason) {
+      request.stopReason = message.stopReason
+      assistantMessage.stopReason = message.stopReason
     }
-    if (status === 'failed' && assistantMessage.content.length === 0) {
+    if (message.stopReason && message.message) {
+      const displayedError = `${stopReasonLabel(message.stopReason)}: ${message.message}`
+      const alreadyShown = assistantMessage.parts.some(part => part.kind === 'error' && part.message === displayedError)
+      if (!alreadyShown) {
+        appendErrorPart(assistantMessage, displayedError, true)
+      }
+    } else if (status === 'cancelled' && assistantMessage.content.length === 0) {
+      appendErrorPart(assistantMessage, 'Request cancelled.')
+    } else if (status === 'failed' && assistantMessage.content.length === 0) {
       appendErrorPart(assistantMessage, 'Ghost request failed.')
     }
     if (/model.*(not found|missing)|ollama pull/i.test(assistantMessage.content)) {
@@ -2479,7 +2521,8 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
     (message.model === undefined || typeof message.model === 'string') &&
     (message.tokenCount === undefined || typeof message.tokenCount === 'number') &&
     (message.tokensPerSecond === undefined || typeof message.tokensPerSecond === 'number') &&
-    (message.startedAt === undefined || typeof message.startedAt === 'number')
+    (message.startedAt === undefined || typeof message.startedAt === 'number') &&
+    (message.stopReason === undefined || ['failed-tool', 'invalid-model-response', 'cancelled', 'timeout', 'approval-rejected', 'context-limit', 'budget-limit', 'provider-failure'].includes(message.stopReason as string))
   )
 }
 

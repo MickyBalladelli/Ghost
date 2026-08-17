@@ -12,6 +12,7 @@ import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
+import type { GhostStopReason } from '../ui/ghostState'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -219,8 +220,10 @@ function getBudgetStopReason(budget: RequestBudget, call?: LocalToolCall, select
   return undefined
 }
 
-function stopForBudget(response: vscode.ChatResponseStream, reason: string): void {
-  response.markdown(`Ghost stopped because the request budget was reached: ${reason}. Review the partial changes and retry with a smaller request.`)
+function stopForBudget(response: vscode.ChatResponseStream, reason: string, onStop?: GhostRequestOptions['onStop']): void {
+  const message = `Ghost stopped because the request budget was reached: ${reason}. Review the partial changes and retry with a smaller request.`
+  onStop?.('budget-limit', message)
+  response.markdown(message)
 }
 
 function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
@@ -325,6 +328,7 @@ export interface GhostRequestOptions {
   customSystemInstructions?: string
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
+  onStop?: (reason: GhostStopReason, message: string) => void
 }
 
 export interface GhostToolApproval {
@@ -799,6 +803,7 @@ export function createChatParticipantHandler(
       response.progress('Preparing model request')
       let toolCallCount = 0
       let missingToolRetries = 0
+      let invalidToolRetries = 0
       let emptyProviderRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const budget: RequestBudget = {
@@ -812,7 +817,7 @@ export function createChatParticipantHandler(
       while (true) {
         const beforeModelBudget = getBudgetStopReason(budget)
         if (beforeModelBudget) {
-          stopForBudget(response, beforeModelBudget)
+          stopForBudget(response, beforeModelBudget, requestOptions.onStop)
           return
         }
         const turn = await streamModelTurn(
@@ -841,7 +846,7 @@ export function createChatParticipantHandler(
         budget.modelTokens += turn.modelTokens
         const afterModelBudget = getBudgetStopReason(budget)
         if (afterModelBudget) {
-          stopForBudget(response, afterModelBudget)
+          stopForBudget(response, afterModelBudget, requestOptions.onStop)
           return
         }
 
@@ -861,8 +866,10 @@ export function createChatParticipantHandler(
             )
             continue
           }
+          const message = 'The provider returned no content after 2 retries. Check the model response or connection, then retry.'
+          requestOptions.onStop?.('invalid-model-response', message)
           response.progress('Provider returned an empty response')
-          response.markdown('The provider returned no content after 2 retries. Check the model response or connection, then retry.')
+          response.markdown(message)
           return
         }
 
@@ -884,6 +891,12 @@ export function createChatParticipantHandler(
             )
             continue
           }
+          if (expectsWorkspaceTool) {
+            const message = malformedToolCall
+              ? 'The model kept returning a malformed or truncated tool call after retries.'
+              : 'The model did not return a workspace tool call after retries.'
+            requestOptions.onStop?.('invalid-model-response', message)
+          }
           response.markdown(generated)
           return
         }
@@ -898,7 +911,9 @@ export function createChatParticipantHandler(
                 'Stop'
               ) === 'Continue'
           if (!shouldContinue) {
-            response.markdown('Ghost stopped after reaching the tool-call limit.')
+            const message = 'Ghost stopped after reaching the tool-call limit.'
+            requestOptions.onStop?.('budget-limit', message)
+            response.markdown(message)
             return
           }
           toolCallCount = 0
@@ -907,13 +922,20 @@ export function createChatParticipantHandler(
 
         const beforeApprovalBudget = getBudgetStopReason(budget, toolCall)
         if (beforeApprovalBudget) {
-          stopForBudget(response, beforeApprovalBudget)
+          stopForBudget(response, beforeApprovalBudget, requestOptions.onStop)
           return
         }
 
         const toolArgumentError = getToolArgumentError(toolCall)
         if (toolArgumentError) {
+          invalidToolRetries += 1
           response.progress(`Invalid tool call: ${toolArgumentError}`)
+          if (invalidToolRetries > MAX_MISSING_TOOL_RETRIES) {
+            const message = 'The model kept returning invalid tool arguments after retries.'
+            requestOptions.onStop?.('invalid-model-response', message)
+            response.markdown(message)
+            return
+          }
           messages.push(
             { role: 'assistant', content: generated },
             { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolArgumentError}` }
@@ -933,7 +955,14 @@ export function createChatParticipantHandler(
         }
         const approvedToolArgumentError = getToolArgumentError(toolCall)
         if (approvedToolArgumentError) {
+          invalidToolRetries += 1
           response.progress(`Invalid tool call: ${approvedToolArgumentError}`)
+          if (invalidToolRetries > MAX_MISSING_TOOL_RETRIES) {
+            const message = 'The model kept returning invalid tool arguments after retries.'
+            requestOptions.onStop?.('invalid-model-response', message)
+            response.markdown(message)
+            return
+          }
           messages.push(
             { role: 'assistant', content: generated },
             { role: 'user', content: `Tool result for ${toolCall.name}:\n${approvedToolArgumentError}` }
@@ -948,28 +977,33 @@ export function createChatParticipantHandler(
           ? fileEditStates.get(editPath) ?? { signatures: new Set<string>(), history: [] }
           : undefined
         if (editPath && editState && editSignature && editState.signatures.has(editSignature)) {
-          response.markdown(`Ghost stopped because it tried to apply the same edit to ${editPath} again. Review the file and retry with a more specific request.`)
+          const message = `Ghost stopped because it tried to apply the same edit to ${editPath} again. Review the file and retry with a more specific request.`
+          requestOptions.onStop?.('invalid-model-response', message)
+          response.markdown(message)
           return
         }
         if (editPath && editState && editRecord) {
           const loopReason = getEditLoopReason(editState, editRecord)
           if (loopReason) {
-            response.markdown(`Ghost stopped because it detected ${loopReason} on ${editPath}. Review the file and retry with a more specific request.`)
+            const message = `Ghost stopped because it detected ${loopReason} on ${editPath}. Review the file and retry with a more specific request.`
+            requestOptions.onStop?.('invalid-model-response', message)
+            response.markdown(message)
             return
           }
         }
         if (approval.decision === 'reject') {
           const rejection = approval.reason ?? 'User rejected this tool call.'
           response.progress(`Tool result: ${toolCall.name}: ${rejection}`)
+          requestOptions.onStop?.('approval-rejected', rejection)
           messages.push(
             { role: 'assistant', content: generated },
             { role: 'user', content: `Tool result for ${toolCall.name}:\n${rejection}` }
           )
-          continue
+          return
         }
         const afterApprovalBudget = getBudgetStopReason(budget, toolCall, approval.selectedHunkIndexes)
         if (afterApprovalBudget) {
-          stopForBudget(response, afterApprovalBudget)
+          stopForBudget(response, afterApprovalBudget, requestOptions.onStop)
           return
         }
         if (toolCall.name === 'ghost_run_terminal_command') {
@@ -1005,8 +1039,15 @@ export function createChatParticipantHandler(
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)
+        if (editFailed) {
+          requestOptions.onStop?.('failed-tool', toolResult)
+          response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
+          return
+        }
         if (editPath && editNoOp) {
-          response.markdown(`Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`)
+          const message = `Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`
+          requestOptions.onStop?.('failed-tool', message)
+          response.markdown(message)
           return
         }
         if (editPath && editState && editRecord && editSignature && !editFailed) {

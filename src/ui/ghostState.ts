@@ -9,6 +9,16 @@ export type GhostRequestStatus =
   | 'cancelled'
   | 'failed'
 
+export type GhostStopReason =
+  | 'failed-tool'
+  | 'invalid-model-response'
+  | 'cancelled'
+  | 'timeout'
+  | 'approval-rejected'
+  | 'context-limit'
+  | 'budget-limit'
+  | 'provider-failure'
+
 export type GhostProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
 
 export type GhostMessageRole = 'user' | 'assistant' | 'system' | 'tool'
@@ -79,6 +89,7 @@ export interface GhostMessage {
   parts: GhostMessagePart[]
   requestId?: string
   status?: GhostRequestStatus
+  stopReason?: GhostStopReason
   createdAt: number
   updatedAt: number
 }
