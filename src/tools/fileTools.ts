@@ -6,7 +6,7 @@ import * as vscode from 'vscode'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { atomicWriteFile } from './atomicFile'
-import { readWorkspaceFile } from './workspaceFile'
+import { readWorkspaceFile, verifyWorkspaceFile } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 
 export interface ReadFileInput {
@@ -136,8 +136,9 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
     const uri = resolveWorkspacePath(options.input.path)
     const current = await readWorkspaceFile(uri)
     await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'), current)
+    await verifyWorkspaceFile(uri, { exists: true, content: options.input.content })
 
-    return textResult(`Wrote ${options.input.content.length} characters to ${uri.fsPath}`)
+    return textResult(`Wrote ${options.input.content.length} characters to ${uri.fsPath}\nVerification: passed (readback matched).`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<WriteFileInput>): vscode.PreparedToolInvocation {
@@ -168,7 +169,8 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
       return textResult(`${summarizeGhostEdit(edit)}\nNo changes needed.`)
     }
     await atomicWriteFile(uri, Buffer.from(updated, 'utf8'), { exists: true, content: current })
-    return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.`)
+    await verifyWorkspaceFile(uri, { exists: true, content: updated })
+    return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ApplyEditInput>): vscode.PreparedToolInvocation {

@@ -12,7 +12,7 @@ import { RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
 import { atomicWriteFile } from './atomicFile'
-import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+import { readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 
 const ALLOW_ACTION = 'Allow'
@@ -135,7 +135,7 @@ export class LocalToolExecutor {
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
-          return `${input.path}: file already updated.\nApplied successfully.`
+          return `${input.path}: file already updated.\nApplied successfully.\nVerification: passed (accepted content read back).`
         }
 
         const expected = expectedSnapshot(options)
@@ -146,7 +146,8 @@ export class LocalToolExecutor {
         }
 
         await atomicWriteFile(resolveWorkspacePath(input.path), Buffer.from(input.content, 'utf8'), expected ?? current)
-        return `${input.path}: wrote ${input.content.length} characters.`
+        await verifyWorkspaceFile(resolveWorkspacePath(input.path), { exists: true, content: input.content })
+        return `${input.path}: wrote ${input.content.length} characters.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_edit': {
         const edit = parseGhostEdit(call.arguments)
@@ -163,7 +164,7 @@ export class LocalToolExecutor {
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
-          return `${summarizeGhostEdit(edit)}\nApplied successfully.`
+          return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (accepted content read back).`
         }
 
         const expected = expectedSnapshot(options)
@@ -178,7 +179,8 @@ export class LocalToolExecutor {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
         await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current)
-        return `${summarizeGhostEdit(edit)}\nApplied successfully.`
+        await verifyWorkspaceFile(resolveWorkspacePath(edit.path), { exists: true, content: updated })
+        return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_transaction': {
         const transactionInput: FileTransactionInput = parseFileTransaction(call.arguments)

@@ -26,3 +26,10 @@ export async function readWorkspaceFile(uri: vscode.Uri): Promise<WorkspaceFileS
 export function sameWorkspaceFile(left: WorkspaceFileSnapshot, right: WorkspaceFileSnapshot): boolean {
   return left.exists === right.exists && left.content === right.content
 }
+
+export async function verifyWorkspaceFile(uri: vscode.Uri, expected: WorkspaceFileSnapshot): Promise<void> {
+  const actual = await readWorkspaceFile(uri)
+  if (!sameWorkspaceFile(actual, expected)) {
+    throw new Error(`Verification failed: ${uri.fsPath} does not contain the expected content`)
+  }
+}
