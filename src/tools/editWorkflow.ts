@@ -1,4 +1,3 @@
-import * as path from 'node:path'
 import { createHash } from 'node:crypto'
 
 import { resolveWorkspacePath } from './workspacePath'
@@ -29,10 +28,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 )
 
 export function parseGhostEdit(value: Record<string, unknown>): GhostFileEdit {
-  if (typeof value.path !== 'string' || !path.isAbsolute(value.path)) {
-    throw new Error('Edit path must be an absolute path inside the workspace')
+  if (typeof value.path !== 'string' || !value.path.trim()) {
+    throw new Error('Edit path must be a non-empty relative or absolute path inside the workspace')
   }
-  resolveWorkspacePath(value.path)
+  const resolvedPath = resolveWorkspacePath(value.path).fsPath
   if (!Array.isArray(value.hunks) || value.hunks.length === 0 || value.hunks.length > MAX_HUNKS) {
     throw new Error(`Edit must contain between 1 and ${MAX_HUNKS} hunks`)
   }
@@ -94,7 +93,7 @@ export function parseGhostEdit(value: Record<string, unknown>): GhostFileEdit {
   })
 
   return {
-    path: value.path,
+    path: resolvedPath,
     hunks,
     ...(typeof value.expectedContent === 'string' ? { expectedContent: value.expectedContent } : {}),
     ...(typeof value.description === 'string' ? { description: value.description.slice(0, 500) } : {})

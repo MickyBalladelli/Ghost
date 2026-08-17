@@ -166,7 +166,7 @@ export class GitContextTool implements vscode.LanguageModelTool<GitContextInput>
       ? scope.filePath ?? scope.workspacePath
       : scope.filePath
     if ((input.operation === 'diff' || input.operation === 'stagedDiff' || input.operation === 'history') && !pathSpec) {
-      return textResult('Git context needs a file path for this operation. Open or select a workspace file, then retry with its absolute path.')
+      return textResult('Git context needs a file path for this operation. Open or select a workspace file, then retry with its workspace-relative or absolute path.')
     }
 
     let args: string[]

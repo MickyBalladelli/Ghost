@@ -1,6 +1,5 @@
-import * as path from 'node:path'
-
 import { LocalToolCall } from './toolCallParser'
+import { resolveWorkspacePath } from '../tools/workspacePath'
 
 type Arguments = Record<string, unknown>
 
@@ -24,13 +23,17 @@ function checkAllowedFields(input: Arguments, fields: readonly string[]): string
   return unknown ? invalid(unknown, 'field is not allowed.') : undefined
 }
 
-function requiredString(input: Arguments, field: string, options: { absolute?: boolean; maxLength?: number; allowEmpty?: boolean } = {}): string | undefined {
+function requiredString(input: Arguments, field: string, options: { workspacePath?: boolean; maxLength?: number; allowEmpty?: boolean } = {}): string | undefined {
   if (!(field in input)) return missing(field)
   if (typeof input[field] !== 'string' || (!options.allowEmpty && !input[field].trim())) {
     return invalid(field, 'expected a non-empty string.')
   }
-  if (options.absolute && !path.isAbsolute(input[field] as string)) {
-    return invalid(field, 'expected a non-empty absolute workspace path.')
+  if (options.workspacePath) {
+    try {
+      resolveWorkspacePath(input[field] as string)
+    } catch {
+      return invalid(field, 'expected a relative path or absolute path inside the workspace.')
+    }
   }
   if (options.maxLength !== undefined && (input[field] as string).length > options.maxLength) {
     return invalid(field, `must be at most ${options.maxLength} characters.`)
@@ -51,6 +54,17 @@ function optionalNonEmptyString(input: Arguments, field: string, maxLength?: num
   const result = optionalString(input, field, maxLength)
   if (result || !(field in input)) return result
   return !(input[field] as string).trim() ? invalid(field, 'expected a non-empty string.') : undefined
+}
+
+function optionalWorkspacePath(input: Arguments, field: string): string | undefined {
+  const result = optionalNonEmptyString(input, field)
+  if (result || !(field in input)) return result
+  try {
+    resolveWorkspacePath(input[field] as string)
+  } catch {
+    return invalid(field, 'expected a relative path or absolute path inside the workspace.')
+  }
+  return undefined
 }
 
 function optionalBoolean(input: Arguments, field: string): string | undefined {
@@ -133,7 +147,7 @@ function validateHunks(input: Arguments, field: string, expectedContentPresent: 
 function validateReadFile(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['path', ...PATH_ALIASES, 'source', 'allowSpecialFile', 'mode', 'startLine', 'endLine', 'lineCount', 'startByte', 'endByte', 'symbol', 'match', 'caseSensitive', 'maxMatches'])
   if (allowed) return allowed
-  return requiredString(input, 'path', { absolute: true })
+  return requiredString(input, 'path', { workspacePath: true })
     ?? optionalEnum(input, 'source', ['editor', 'disk'])
     ?? optionalBoolean(input, 'allowSpecialFile')
     ?? optionalEnum(input, 'mode', ['head', 'tail', 'lines', 'bytes', 'symbol', 'matches'])
@@ -152,7 +166,7 @@ function validateSearch(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['query', 'path', 'glob', 'caseSensitive', 'maxResults'])
   if (allowed) return allowed
   return requiredString(input, 'query', { maxLength: 1000 })
-    ?? optionalString(input, 'path')
+    ?? optionalWorkspacePath(input, 'path')
     ?? optionalString(input, 'glob')
     ?? optionalBoolean(input, 'caseSensitive')
     ?? optionalInteger(input, 'maxResults', 1, 200)
@@ -161,7 +175,7 @@ function validateSearch(input: Arguments): string | undefined {
 function validateDiagnostics(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['path', 'severity', 'maxResults'])
   if (allowed) return allowed
-  return optionalNonEmptyString(input, 'path')
+  return optionalWorkspacePath(input, 'path')
     ?? optionalEnum(input, 'severity', ['error', 'warning', 'information', 'hint'])
     ?? optionalInteger(input, 'maxResults', 1, 200)
 }
@@ -171,7 +185,7 @@ function validateGit(input: Arguments): string | undefined {
   if (allowed) return allowed
   return requiredString(input, 'operation')
     ?? optionalEnum(input, 'operation', ['status', 'diff', 'stagedDiff', 'branch', 'history'])
-    ?? optionalNonEmptyString(input, 'path')
+    ?? optionalWorkspacePath(input, 'path')
     ?? optionalInteger(input, 'maxEntries', 1, 200)
 }
 
@@ -223,14 +237,14 @@ function validateCompletion(input: Arguments): string | undefined {
 function validateWrite(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['path', ...PATH_ALIASES, 'content', ...CONTENT_ALIASES])
   if (allowed) return allowed
-  return requiredString(input, 'path', { absolute: true })
+  return requiredString(input, 'path', { workspacePath: true })
     ?? requiredString(input, 'content', { allowEmpty: true })
 }
 
 function validateEdit(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['path', ...PATH_ALIASES, 'expectedContent', 'hunks'])
   if (allowed) return allowed
-  const pathResult = requiredString(input, 'path', { absolute: true })
+  const pathResult = requiredString(input, 'path', { workspacePath: true })
   if (pathResult) return pathResult
   const expectedContentResult = optionalString(input, 'expectedContent')
   if (expectedContentResult) return expectedContentResult
@@ -247,7 +261,7 @@ function validateTransaction(input: Arguments): string | undefined {
     if (!isRecord(value)) return invalid(field, 'expected an object.')
     const editAllowed = checkAllowedFields(value, ['path', ...PATH_ALIASES, 'content', ...CONTENT_ALIASES, 'expectedContent', 'hunks'])
     if (editAllowed) return editAllowed.replace("Invalid field '", `Invalid field '${field}.`)
-    const pathResult = requiredString(value, 'path', { absolute: true })
+    const pathResult = requiredString(value, 'path', { workspacePath: true })
     if (pathResult) return pathResult.replace("Invalid field '", `Invalid field '${field}.`)
     const expectedResult = optionalString(value, 'expectedContent')
     if (expectedResult) return expectedResult.replace("Invalid field '", `Invalid field '${field}.`)
@@ -266,13 +280,13 @@ function validateTransaction(input: Arguments): string | undefined {
 function validateTerminal(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['command', ...COMMAND_ALIASES, 'cwd'])
   if (allowed) return allowed
-  return requiredString(input, 'command') ?? optionalString(input, 'cwd')
+  return requiredString(input, 'command') ?? optionalWorkspacePath(input, 'cwd')
 }
 
 function validateDirectory(input: Arguments): string | undefined {
   const allowed = checkAllowedFields(input, ['path', ...PATH_ALIASES, 'recursive', 'cursor', 'pageSize', 'maxDepth'])
   if (allowed) return allowed
-  return requiredString(input, 'path', { absolute: true })
+  return requiredString(input, 'path', { workspacePath: true })
     ?? optionalBoolean(input, 'recursive')
     ?? optionalString(input, 'cursor')
     ?? (typeof input.cursor === 'string' && !/^\d+$/.test(input.cursor) ? invalid('cursor', 'must contain only digits.') : undefined)

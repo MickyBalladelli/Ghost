@@ -54,7 +54,7 @@ function getMissingRequiredArgument(call: LocalToolCall): string | undefined {
   if (typeof call.arguments[requiredArgument] === 'string' && call.arguments[requiredArgument].trim()) {
     return undefined
   }
-  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using the absolute path from the workspace context.`
+  return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using a workspace-relative or absolute path inside the workspace.`
 }
 
 function resultText(result: vscode.LanguageModelToolResult): string {

@@ -52,7 +52,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add JSON Schema validation and repair feedback for every tool call. Return the exact missing or invalid field.
 - [x] Add a safe “split this edit” recovery that asks for smaller hunks/files when output approaches the provider limit.
 - [x] Add a no-tool detection message that clearly says why Ghost cannot complete an edit and offers retry/regenerate.
-- [ ] Make model-generated paths relative in the prompt where possible, then resolve and validate them host-side. Keep absolute paths accepted for compatibility.
+- [x] Make model-generated paths relative in the prompt where possible, then resolve and validate them host-side. Keep absolute paths accepted for compatibility.
 - [ ] Add a per-request event log with timestamps and status transitions. Keep it bounded and redact it before display/export.
 
 ## P1 — provider abstraction and LLM compatibility

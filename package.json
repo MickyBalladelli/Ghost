@@ -415,7 +415,7 @@
         "displayName": "Ghost Get Diagnostics",
         "toolReferenceName": "ghost_get_diagnostics",
         "userDescription": "Read compiler and Problems-panel diagnostics.",
-        "modelDescription": "Reads current VS Code diagnostics from language servers, compilers, and the Problems panel. Provide an absolute workspace file path for one file, or omit path to use the active file or all workspace diagnostics.",
+        "modelDescription": "Reads current VS Code diagnostics from language servers, compilers, and the Problems panel. Provide a workspace-relative or absolute file path for one file, or omit path to use the active file or all workspace diagnostics.",
         "canBeReferencedInPrompt": true,
         "icon": "$(warning)",
         "when": "true",
@@ -425,7 +425,7 @@
             "path": {
               "type": "string",
               "minLength": 1,
-              "description": "Optional absolute workspace file path. Omit to use the active editor file or all workspace diagnostics."
+              "description": "Optional workspace-relative or absolute file path. Omit to use the active editor file or all workspace diagnostics."
             },
             "severity": {
               "type": "string",
@@ -453,7 +453,7 @@
         "displayName": "Ghost Git Context",
         "toolReferenceName": "ghost_git_context",
         "userDescription": "Read safe Git context for the workspace.",
-        "modelDescription": "Reads non-ignored Git status for the current workspace, a selected-file diff or staged diff, the current branch, or recent history for one file. Use an absolute workspace path for diff, stagedDiff, and history when no file is active.",
+        "modelDescription": "Reads non-ignored Git status for the current workspace, a selected-file diff or staged diff, the current branch, or recent history for one file. Use a workspace-relative or absolute path for diff, stagedDiff, and history when no file is active.",
         "canBeReferencedInPrompt": true,
         "icon": "$(git-branch)",
         "when": "true",
@@ -475,7 +475,7 @@
             "path": {
               "type": "string",
               "minLength": 1,
-              "description": "Optional absolute workspace file or directory path."
+              "description": "Optional workspace-relative or absolute file or directory path."
             },
             "maxEntries": {
               "type": "integer",
@@ -618,7 +618,7 @@
         "displayName": "Ghost Read File",
         "toolReferenceName": "ghost_read_file",
         "userDescription": "Read a text file from the current workspace.",
-        "modelDescription": "Reads a UTF-8 text file from the current workspace with metadata, encoding, line endings, size, and SHA-256 content hash. Use mode head, tail, lines, bytes, symbol, or matches. The path must be absolute and inside the workspace. Do not use it for binary files.",
+        "modelDescription": "Reads a UTF-8 text file from the current workspace with metadata, encoding, line endings, size, and SHA-256 content hash. Use mode head, tail, lines, bytes, symbol, or matches. The path must be relative to the workspace or an absolute path inside it. Do not use it for binary files.",
         "canBeReferencedInPrompt": true,
         "icon": "$(file)",
         "when": "true",
@@ -716,7 +716,7 @@
         "displayName": "Ghost Write File",
         "toolReferenceName": "ghost_write_file",
         "userDescription": "Create or replace a text file in the current workspace.",
-        "modelDescription": "Creates a new text file or replaces the complete content of an existing file in the current workspace. The path must be absolute and inside the workspace. This changes user files and requires confirmation.",
+        "modelDescription": "Creates a new text file or replaces the complete content of an existing file in the current workspace. The path must be relative to the workspace or an absolute path inside it. This changes user files and requires confirmation.",
         "canBeReferencedInPrompt": true,
         "icon": "$(edit)",
         "when": "true",
@@ -745,7 +745,7 @@
         "displayName": "Ghost Apply Edit",
         "toolReferenceName": "ghost_apply_edit",
         "userDescription": "Apply reviewed, structured edits inside the current workspace.",
-        "modelDescription": "Proposes context-aware edits to a workspace file. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against current file content. The user must approve the edit before it is applied. Paths must be absolute and inside the workspace.",
+        "modelDescription": "Proposes context-aware edits to a workspace file. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against current file content. The user must approve the edit before it is applied. Paths must be workspace-relative or absolute inside the workspace.",
         "canBeReferencedInPrompt": true,
         "icon": "$(edit)",
         "when": "true",
@@ -840,7 +840,7 @@
         "displayName": "Ghost Apply Transaction",
         "toolReferenceName": "ghost_apply_transaction",
         "userDescription": "Apply and verify multiple workspace file edits as one transaction.",
-        "modelDescription": "Applies 2 to 50 workspace file edits together. Include one content or hunks edit per unique absolute path. Ghost previews the combined change, verifies every baseline, applies all files, verifies all results, and rolls the group back if any file fails.",
+        "modelDescription": "Applies 2 to 50 workspace file edits together. Include one content or hunks edit per unique workspace-relative or absolute path. Ghost previews the combined change, verifies every baseline, applies all files, verifies all results, and rolls the group back if any file fails.",
         "canBeReferencedInPrompt": true,
         "icon": "$(edit)",
         "when": "true",
@@ -974,7 +974,7 @@
             },
             "cwd": {
               "type": "string",
-              "description": "Optional absolute working directory inside the current workspace."
+              "description": "Optional workspace-relative or absolute working directory inside the current workspace."
             }
           },
           "required": [
@@ -988,7 +988,7 @@
         "displayName": "Ghost List Directory",
         "toolReferenceName": "ghost_list_directory",
         "userDescription": "List files and directories in the current workspace.",
-        "modelDescription": "Lists a bounded page of the file and directory hierarchy under a workspace directory. The path must be absolute and inside the current workspace. Use recursive, maxDepth, pageSize, and the returned cursor to inspect large trees safely before reading or editing files.",
+        "modelDescription": "Lists a bounded page of the file and directory hierarchy under a workspace directory. The path must be workspace-relative or absolute inside the current workspace. Use recursive, maxDepth, pageSize, and the returned cursor to inspect large trees safely before reading or editing files.",
         "canBeReferencedInPrompt": true,
         "icon": "$(folder)",
         "when": "true",
