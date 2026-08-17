@@ -65,9 +65,7 @@ interface RecoveryRecord {
   requestId: string
   conversationId: string
   toolCallId: string
-  path: string
-  before: string
-  after: string
+  files: Array<{ path: string; before: WorkspaceFileSnapshot; after: WorkspaceFileSnapshot }>
   applied: boolean
 }
 
@@ -292,7 +290,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       },
       progress: (progress: string) => {
         if (progress.startsWith('Running ')) {
-          pendingTool = {
+          pendingTool = request.pendingTool ?? {
             toolCallId: this.createToolCallId(),
             name: progress.slice('Running '.length)
           }
@@ -852,35 +850,38 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     conversationId: string,
     toolCallId: string,
     call: LocalToolCall,
-    expectedContent: string | undefined,
+    expected: WorkspaceFileSnapshot | undefined,
+    expectedSnapshots?: Record<string, WorkspaceFileSnapshot>,
     selectedHunkIndexes?: number[]
   ): Promise<void> {
-    if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
-      return
-    }
     try {
-      const uri = resolveWorkspacePath(call.arguments.path)
-      let before = expectedContent
-      if (before === undefined) {
-        try {
-          before = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8')
-        } catch {
-          before = ''
+      let files: Array<{ path: string; before: WorkspaceFileSnapshot; after: WorkspaceFileSnapshot }>
+      if (call.name === 'ghost_apply_transaction') {
+        const prepared = await prepareFileTransaction(parseFileTransaction(call.arguments), expectedSnapshots)
+        files = prepared.map(file => ({
+          path: file.path,
+          before: file.before,
+          after: { exists: true, content: file.after }
+        }))
+      } else {
+        if ((call.name !== 'ghost_write_file' && call.name !== 'ghost_apply_edit') || typeof call.arguments.path !== 'string') {
+          return
         }
-      }
-      const after = call.name === 'ghost_write_file'
-        ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
-        : applyGhostEdit(before, parseGhostEdit(call.arguments), selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined)
-      if (after === undefined) {
-        return
+        const uri = resolveWorkspacePath(call.arguments.path)
+        const before = expected ?? await readWorkspaceFile(uri)
+        const after = call.name === 'ghost_write_file'
+          ? typeof call.arguments.content === 'string' ? call.arguments.content : undefined
+          : applyGhostEdit(before.content, parseGhostEdit(call.arguments), selectedHunkIndexes ? new Set(selectedHunkIndexes) : undefined)
+        if (after === undefined) {
+          return
+        }
+        files = [{ path: uri.fsPath, before, after: { exists: true, content: after } }]
       }
       this.recoveryRecords.set(toolCallId, {
         requestId,
         conversationId,
         toolCallId,
-        path: uri.fsPath,
-        before,
-        after,
+        files,
         applied: false
       })
     } catch {
@@ -907,15 +908,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     try {
-      const uri = resolveWorkspacePath(record.path)
-      const current = await readWorkspaceFile(uri)
-      if (!current.exists || current.content !== record.after) {
-        await vscode.window.showErrorMessage('Ghost cannot restore this file because it changed after the edit.')
-        return
+      const currentFiles = await Promise.all(record.files.map(async file => {
+        const uri = resolveWorkspacePath(file.path)
+        const current = await readWorkspaceFile(uri)
+        if (!sameWorkspaceFile(current, file.after)) {
+          throw new Error(`Ghost cannot restore ${file.path} because it changed after the edit.`)
+        }
+        return { file, uri, current }
+      }))
+      for (const { file, uri, current } of currentFiles) {
+        if (!file.before.exists) {
+          await vscode.workspace.fs.delete(uri, { useTrash: false })
+        } else {
+          await atomicWriteFile(uri, Buffer.from(file.before.content, 'utf8'), current)
+        }
       }
-      await atomicWriteFile(uri, Buffer.from(record.before, 'utf8'))
       record.applied = false
-      await vscode.window.showInformationMessage(`Restored ${uri.fsPath}.`)
+      await vscode.window.showInformationMessage(`Restored ${record.files.length} file${record.files.length === 1 ? '' : 's'}.`)
     } catch (error) {
       await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not restore the file.')
     }
@@ -1064,7 +1073,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return { decision: 'reject', reason: 'Tool blocked by workspace policy.' }
     }
     if (!needsInteractiveApproval) {
-      await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedContent)
+      await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedSnapshot, expectedFiles)
       return { decision: 'once', expectedContent, expectedFileExists, expectedFiles }
     }
 
@@ -1195,7 +1204,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         pending.conversationId,
         pending.toolCallId,
         pending.call,
-        approval.expectedContent,
+        approval.expectedContent === undefined && approval.expectedFileExists === undefined
+          ? undefined
+          : { exists: approval.expectedFileExists ?? true, content: approval.expectedContent ?? '' },
+        undefined,
         approval.selectedHunkIndexes
       )
       pending.resolve(approval)
@@ -1237,7 +1249,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         pending.conversationId,
         pending.toolCallId,
         pending.call,
-        expected,
+        expectedFiles ? undefined : (expected === undefined && expectedFileExists === undefined
+          ? undefined
+          : { exists: expectedFileExists ?? true, content: expected ?? '' }),
+        expectedFiles,
         approval.selectedHunkIndexes
       )
       pending.resolve({ ...approval, expectedContent: expected, expectedFileExists, expectedFiles })
@@ -1318,6 +1333,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request.lastActivityAt = Date.now()
     request.status = getRequestStatusForEvent(event, request.status)
     request.sequence += 1
+    if (event.type === 'tool-requested' && typeof event.toolCallId === 'string' && typeof event.tool === 'string') {
+      request.pendingTool = { toolCallId: event.toolCallId, name: event.tool }
+    }
     this.postMessage({
       source: 'ghost-extension',
       version: GHOST_WEBVIEW_PROTOCOL_VERSION,
