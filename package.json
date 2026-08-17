@@ -34,6 +34,7 @@
     "onView:ghost.chat",
     "onChatParticipant:ghost.agent",
     "onLanguageModelTool:ghost_read_file",
+    "onLanguageModelTool:ghost_search_workspace",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
     "onLanguageModelTool:ghost_apply_transaction",
@@ -278,6 +279,7 @@
             "type": "string",
             "enum": [
               "ghost_read_file",
+              "ghost_search_workspace",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -287,6 +289,7 @@
           },
           "default": [
             "ghost_read_file",
+            "ghost_search_workspace",
             "ghost_write_file",
             "ghost_apply_edit",
             "ghost_apply_transaction",
@@ -301,6 +304,7 @@
             "type": "string",
             "enum": [
               "ghost_read_file",
+              "ghost_search_workspace",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -347,6 +351,47 @@
       }
     ],
     "languageModelTools": [
+      {
+        "name": "ghost_search_workspace",
+        "displayName": "Ghost Search Workspace",
+        "toolReferenceName": "ghost_search_workspace",
+        "userDescription": "Search text in the current workspace.",
+        "modelDescription": "Searches workspace text with ripgrep and returns structured file, line, column, and matching-line data. Uses fixed-string search by default. The optional path must be inside the workspace.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(search)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "Text to search for. Fixed-string matching is used by default."
+            },
+            "path": {
+              "type": "string",
+              "description": "Optional workspace file or directory path to search."
+            },
+            "glob": {
+              "type": "string",
+              "description": "Optional ripgrep glob filter such as **/*.ts."
+            },
+            "caseSensitive": {
+              "type": "boolean",
+              "default": true
+            },
+            "maxResults": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
       {
         "name": "ghost_read_file",
         "displayName": "Ghost Read File",

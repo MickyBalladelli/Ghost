@@ -343,7 +343,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
   if (value.type === 'retry-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 &&
-      ['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
+      ['ghost_read_file', 'ghost_search_workspace', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory'].includes(value.tool as string) &&
       isRecord(value.arguments)
   }
   if (value.type === 'approve-tool') {

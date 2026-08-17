@@ -975,6 +975,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
     const requiredArgument = pathTools.has(call.name)
       ? 'path'
+      : call.name === 'ghost_search_workspace'
+        ? 'query'
       : call.name === 'ghost_apply_transaction'
         ? 'edits'
       : call.name === 'ghost_run_terminal_command'

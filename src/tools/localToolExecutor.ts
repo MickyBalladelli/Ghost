@@ -8,6 +8,7 @@ import {
   ReadFileTool,
   WriteFileInput,
 } from './fileTools'
+import { SearchWorkspaceInput, SearchWorkspaceTool } from './searchTool'
 import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
@@ -33,6 +34,8 @@ function getMissingRequiredArgument(call: LocalToolCall): string | undefined {
     ? 'path'
     : call.name === 'ghost_apply_transaction'
       ? 'edits'
+    : call.name === 'ghost_search_workspace'
+      ? 'query'
     : call.name === 'ghost_run_terminal_command'
       ? 'command'
       : undefined
@@ -89,6 +92,7 @@ export class LocalToolExecutor {
   private readonly readFileTool = new ReadFileTool()
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
+  private readonly searchTool = new SearchWorkspaceTool()
 
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
@@ -115,6 +119,16 @@ export class LocalToolExecutor {
           recursive: call.arguments.recursive === true
         }
         return resultText(await this.listDirectoryTool.invoke({ input, toolInvocationToken: undefined }, token))
+      }
+      case 'ghost_search_workspace': {
+        const input: SearchWorkspaceInput = {
+          query: requiredString(call.arguments, 'query'),
+          ...(typeof call.arguments.path === 'string' ? { path: call.arguments.path } : {}),
+          ...(typeof call.arguments.glob === 'string' ? { glob: call.arguments.glob } : {}),
+          ...(typeof call.arguments.caseSensitive === 'boolean' ? { caseSensitive: call.arguments.caseSensitive } : {}),
+          ...(typeof call.arguments.maxResults === 'number' ? { maxResults: call.arguments.maxResults } : {})
+        }
+        return resultText(await this.searchTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
       case 'ghost_write_file': {
         const input: WriteFileInput = {

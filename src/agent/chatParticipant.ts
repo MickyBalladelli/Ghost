@@ -28,7 +28,7 @@ const SYSTEM_PROMPT = [
   'When using a tool, do not explain the plan first; emit the tool call as the complete response. Keep each ghost_apply_edit hunk small: do not put an entire large component into one replacement. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against nearby file content. Split large work into several focused tool calls and inspect the file between them.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, ghost_write_file, or ghost_apply_transaction.',
   'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
-  'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"absolute workspace path","content":"full text"},{"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
+  'Available tools: ghost_read_file({"path":"absolute workspace path","startLine":1,"endLine":400}), ghost_search_workspace({"query":"text","path":"optional workspace path","glob":"optional glob","maxResults":100}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"absolute workspace path","content":"full text"},{"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":false}).',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
@@ -38,6 +38,7 @@ const MAX_MISSING_TOOL_RETRIES = 2
 const MAX_EMPTY_PROVIDER_RETRIES = 2
 const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
   ghost_read_file: 16000,
+  ghost_search_workspace: 16000,
   ghost_write_file: 8000,
   ghost_apply_edit: 12000,
   ghost_apply_transaction: 16000,
@@ -427,6 +428,8 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
   const pathToolNames = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
   const requiredArgument = pathToolNames.has(call.name)
     ? 'path'
+    : call.name === 'ghost_search_workspace'
+      ? 'query'
     : call.name === 'ghost_run_terminal_command'
       ? 'command'
       : undefined
