@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
-import { redactSensitiveText } from '../privacy/redact'
+import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import { GhostConfig, GhostProvider, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
 import { MlxClient, MlxMessage } from '../services/mlxClient'
@@ -566,7 +566,7 @@ async function getReferenceContext(
     sections.push(`Chat reference: ${label}`)
   }
 
-  return sections.join('\n\n')
+  return redactSensitiveText(sections.join('\n\n'))
 }
 
 async function buildContextPrompt(
@@ -821,7 +821,7 @@ export function createChatParticipantHandler(
           {
             provider: requestOptions.provider,
             model: requestOptions.model?.trim() || settings.chatModel,
-            messages,
+            messages: redactSensitiveValue(messages),
             temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
             topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
             topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
@@ -893,7 +893,7 @@ export function createChatParticipantHandler(
               : 'The model did not return a workspace tool call after retries.'
             requestOptions.onStop?.('invalid-model-response', message)
           }
-          response.markdown(generated)
+          response.markdown(redactSensitiveText(generated))
           return
         }
 

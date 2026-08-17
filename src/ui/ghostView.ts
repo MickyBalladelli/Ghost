@@ -13,7 +13,7 @@ import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
 import { atomicWriteFile } from '../tools/atomicFile'
 import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from '../tools/workspaceFile'
 import { parseFileTransaction, prepareFileTransaction } from '../tools/transactionWorkflow'
-import { isExternalEndpoint, redactSensitiveText } from '../privacy/redact'
+import { isExternalEndpoint, redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import {
   GHOST_WEBVIEW_PROTOCOL_VERSION,
   GHOST_PERSISTENCE_SCHEMA_VERSION,
@@ -1311,7 +1311,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...(request.outputTokens > 0
         ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
         : {}),
-      ...Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))
+      ...redactSensitiveValue(Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value])))
     } as GhostStreamEvent)
   }
 
@@ -1766,7 +1766,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
 
-    void this.view.webview.postMessage(message)
+    void this.view.webview.postMessage(redactSensitiveValue(message))
   }
 
   private createMessage(type: 'reset' | 'clear'): GhostExtensionMessage {

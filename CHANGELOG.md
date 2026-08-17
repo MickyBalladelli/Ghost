@@ -7,6 +7,7 @@ All notable changes to this extension are documented here.
 - Added realpath and symlink boundary checks for workspace paths, including multi-root and missing-root handling.
 - Added password-prompted provider API keys in VS Code SecretStorage for Ollama, MLX/VLM, and OpenAI-compatible requests.
 - Kept provider credentials out of settings, webviews, URLs, logs, exports, and persisted conversations.
+- Expanded secret redaction for model context, webview messages, diagnostics, persistence, and exports, including URLs, headers, cookies, cloud keys, JWTs, and private keys.
 
 ## 1.0.84 - 2026-08-17
 

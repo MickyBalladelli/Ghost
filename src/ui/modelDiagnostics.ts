@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { GhostConfig, ghostConfig } from '../config'
 import { OllamaClient } from '../services/ollamaClient'
+import { redactSensitiveText } from '../privacy/redact'
 
 export const REQUIRED_OLLAMA_MODELS = [
   'qwen2.5-coder:7b',
@@ -17,7 +18,7 @@ export async function checkRequiredOllamaModels(
 
   if (!(await client.checkHealth())) {
     await vscode.window.showErrorMessage(
-      `Cannot reach Ollama at ${settings.ollamaUrl}. Start Ollama, then try again.`
+      `Cannot reach Ollama at ${redactSensitiveText(settings.ollamaUrl)}. Start Ollama, then try again.`
     )
     return
   }
@@ -27,7 +28,7 @@ export async function checkRequiredOllamaModels(
   try {
     installedModels = await client.listModels()
   } catch {
-    await vscode.window.showErrorMessage(`Could not list models from Ollama at ${settings.ollamaUrl}.`)
+    await vscode.window.showErrorMessage(`Could not list models from Ollama at ${redactSensitiveText(settings.ollamaUrl)}.`)
     return
   }
   const missingModels = REQUIRED_OLLAMA_MODELS.filter(model => !installedModels.includes(model))
