@@ -36,7 +36,14 @@ const MAX_TOOL_ROUNDS = 128
 const MIN_TOOL_CALL_TOKENS = 4096
 const MAX_MISSING_TOOL_RETRIES = 2
 const MAX_EMPTY_PROVIDER_RETRIES = 2
-const MAX_TOOL_RESULT_CHARACTERS = 16000
+const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
+  ghost_read_file: 16000,
+  ghost_write_file: 8000,
+  ghost_apply_edit: 12000,
+  ghost_apply_transaction: 16000,
+  ghost_run_terminal_command: 24000,
+  ghost_list_directory: 12000
+}
 const REQUEST_BUDGET_LIMITS = {
   files: 24,
   changedLines: 4000,
@@ -203,6 +210,34 @@ class ContextBudgetManager {
 function summarizeToolResult(value: string): string {
   const compact = value.replace(/\s+/g, ' ').trim()
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
+}
+
+function toolResultContinuation(toolName: LocalToolCall['name'], value: string): string {
+  if (toolName === 'ghost_read_file') {
+    const existingHint = value.match(/\[File output truncated\.[\s\S]*?\]/)?.[0]
+    return existingHint ?? 'Read the next file chunk with ghost_read_file using startLine and endLine.'
+  }
+  if (toolName === 'ghost_list_directory') {
+    return 'Call ghost_list_directory on a narrower directory or use a non-recursive listing.'
+  }
+  if (toolName === 'ghost_run_terminal_command') {
+    return 'Run a narrower inspection command, such as head, tail, or a filtered search.'
+  }
+  return 'Inspect the affected file with ghost_read_file before continuing.'
+}
+
+function limitToolResult(toolName: LocalToolCall['name'], value: string): string {
+  const limit = TOOL_RESULT_CHARACTER_LIMITS[toolName]
+  if (value.length <= limit) {
+    return value
+  }
+  const bytes = Buffer.byteLength(value, 'utf8')
+  const metadata = `Tool result truncated for ${toolName}.\nbytes: ${bytes}\ncontinuation: ${toolResultContinuation(toolName, value)}\nhead:\n`
+  const tailLabel = '\n\ntail:\n'
+  const remainingCharacters = Math.max(256, limit - metadata.length - tailLabel.length - 40)
+  const headCharacters = Math.floor(remainingCharacters * 0.62)
+  const tailCharacters = Math.max(128, remainingCharacters - headCharacters)
+  return `${metadata}${value.slice(0, headCharacters)}${tailLabel}${value.slice(-tailCharacters)}`
 }
 
 function describesWorkspaceChange(value: string): boolean {
@@ -1158,9 +1193,7 @@ export function createChatParticipantHandler(
           toolResult = `Tool error: ${message}`
         }
 
-        if (toolResult.length > MAX_TOOL_RESULT_CHARACTERS) {
-          toolResult = `${toolResult.slice(0, MAX_TOOL_RESULT_CHARACTERS)}\n[Tool result truncated]`
-        }
+        toolResult = limitToolResult(toolCall.name, toolResult)
 
         response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult)}`)
 

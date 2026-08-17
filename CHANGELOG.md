@@ -10,6 +10,7 @@ All notable changes to this extension are documented here.
 - Added verified undo for applied writes, structured edits, and multi-file transactions, including removal of newly created files.
 - Added an in-app privacy page covering providers, keys, workspace and terminal access, storage, exports, and redaction.
 - Added context budgeting with token estimates, reserved output space, old-history compaction, and preservation of current requests, files, diffs, and errors.
+- Replaced the global tool-result cap with per-tool limits and structured head/tail, byte-count, and continuation output.
 
 ## 1.0.85 - 2026-08-17
 
