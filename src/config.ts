@@ -11,6 +11,7 @@ export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 're
 export const GHOST_TOOL_NAMES = [
   'ghost_read_file',
   'ghost_search_workspace',
+  'ghost_get_diagnostics',
   'ghost_write_file',
   'ghost_apply_edit',
   'ghost_apply_transaction',

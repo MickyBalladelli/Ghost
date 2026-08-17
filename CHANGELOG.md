@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.91 - 2026-08-17
 
+- Added `ghost_get_diagnostics` for workspace, active-file, and selected-file Problems-panel diagnostics with severity filters and bounded results.
 - Added bounded directory pages with continuation cursors, recursive depth limits, and entry limits for large workspace trees.
 
 ## 1.0.90 - 2026-08-17

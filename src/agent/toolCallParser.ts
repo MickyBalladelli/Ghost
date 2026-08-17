@@ -1,6 +1,7 @@
 export const LOCAL_TOOL_NAMES = [
   'ghost_read_file',
   'ghost_search_workspace',
+  'ghost_get_diagnostics',
   'ghost_write_file',
   'ghost_apply_edit',
   'ghost_apply_transaction',
@@ -13,6 +14,7 @@ export type LocalToolName = typeof LOCAL_TOOL_NAMES[number]
 const LOCAL_TOOL_ALIASES: Record<string, LocalToolName> = {
   read_file: 'ghost_read_file',
   search_workspace: 'ghost_search_workspace',
+  get_diagnostics: 'ghost_get_diagnostics',
   write_file: 'ghost_write_file',
   apply_edit: 'ghost_apply_edit',
   apply_transaction: 'ghost_apply_transaction',
@@ -20,6 +22,7 @@ const LOCAL_TOOL_ALIASES: Record<string, LocalToolName> = {
   list_directory: 'ghost_list_directory',
   ghostreadfile: 'ghost_read_file',
   ghostsearchworkspace: 'ghost_search_workspace',
+  ghostgetdiagnostics: 'ghost_get_diagnostics',
   ghostwritefile: 'ghost_write_file',
   ghostapplyedit: 'ghost_apply_edit',
   ghostapplytransaction: 'ghost_apply_transaction',

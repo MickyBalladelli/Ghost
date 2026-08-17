@@ -9,6 +9,7 @@ import {
   WriteFileInput,
 } from './fileTools'
 import { SearchWorkspaceInput, SearchWorkspaceTool } from './searchTool'
+import { DiagnosticsInput, DiagnosticsTool } from './diagnosticsTool'
 import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
 import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { resolveWorkspacePath } from './workspacePath'
@@ -93,6 +94,7 @@ export class LocalToolExecutor {
   private readonly listDirectoryTool = new ListDirectoryTool()
   private readonly terminalTool = new RunTerminalCommandTool()
   private readonly searchTool = new SearchWorkspaceTool()
+  private readonly diagnosticsTool = new DiagnosticsTool()
 
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
     if (token.isCancellationRequested) {
@@ -141,6 +143,14 @@ export class LocalToolExecutor {
           ...(typeof call.arguments.maxResults === 'number' ? { maxResults: call.arguments.maxResults } : {})
         }
         return resultText(await this.searchTool.invoke({ input, toolInvocationToken: undefined }, token))
+      }
+      case 'ghost_get_diagnostics': {
+        const input: DiagnosticsInput = {
+          ...(typeof call.arguments.path === 'string' ? { path: call.arguments.path } : {}),
+          ...(typeof call.arguments.severity === 'string' ? { severity: call.arguments.severity as DiagnosticsInput['severity'] } : {}),
+          ...(typeof call.arguments.maxResults === 'number' ? { maxResults: call.arguments.maxResults } : {})
+        }
+        return resultText(await this.diagnosticsTool.invoke({ input, toolInvocationToken: undefined }, token))
       }
       case 'ghost_write_file': {
         const input: WriteFileInput = {

@@ -35,6 +35,7 @@
     "onChatParticipant:ghost.agent",
     "onLanguageModelTool:ghost_read_file",
     "onLanguageModelTool:ghost_search_workspace",
+    "onLanguageModelTool:ghost_get_diagnostics",
     "onLanguageModelTool:ghost_write_file",
     "onLanguageModelTool:ghost_apply_edit",
     "onLanguageModelTool:ghost_apply_transaction",
@@ -280,6 +281,7 @@
             "enum": [
               "ghost_read_file",
               "ghost_search_workspace",
+              "ghost_get_diagnostics",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -290,6 +292,7 @@
           "default": [
             "ghost_read_file",
             "ghost_search_workspace",
+            "ghost_get_diagnostics",
             "ghost_write_file",
             "ghost_apply_edit",
             "ghost_apply_transaction",
@@ -305,6 +308,7 @@
             "enum": [
               "ghost_read_file",
               "ghost_search_workspace",
+              "ghost_get_diagnostics",
               "ghost_write_file",
               "ghost_apply_edit",
               "ghost_apply_transaction",
@@ -391,6 +395,44 @@
           "required": [
             "query"
           ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "ghost_get_diagnostics",
+        "displayName": "Ghost Get Diagnostics",
+        "toolReferenceName": "ghost_get_diagnostics",
+        "userDescription": "Read compiler and Problems-panel diagnostics.",
+        "modelDescription": "Reads current VS Code diagnostics from language servers, compilers, and the Problems panel. Provide an absolute workspace file path for one file, or omit path to use the active file or all workspace diagnostics.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(warning)",
+        "when": "true",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional absolute workspace file path. Omit to use the active editor file or all workspace diagnostics."
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "description": "Optional severity filter."
+            },
+            "maxResults": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 200,
+              "description": "Maximum diagnostics to return."
+            }
+          },
           "additionalProperties": false
         }
       },

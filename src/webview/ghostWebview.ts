@@ -78,6 +78,7 @@ interface ContextData {
 const toolDescriptions: Record<string, string> = {
   ghost_read_file: 'Read a text file from the workspace.',
   ghost_search_workspace: 'Search workspace text with ripgrep and return file, line, column, and match data.',
+  ghost_get_diagnostics: 'Read compiler and Problems-panel diagnostics.',
   ghost_write_file: 'Create or replace a text file in the workspace.',
   ghost_apply_edit: 'Apply reviewed, structured edits to a workspace file.',
   ghost_apply_transaction: 'Apply and verify multiple workspace edits as one transaction.',
@@ -2009,7 +2010,7 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
     setNotice('error', 'Ghost cannot retry this tool because its saved arguments are not a JSON object.')
     return
   }
-  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
+  const retryableTools = ['ghost_read_file', 'ghost_search_workspace', 'ghost_get_diagnostics', 'ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction', 'ghost_run_terminal_command', 'ghost_list_directory']
   if (!retryableTools.includes(found.toolCall.name)) {
     setNotice('error', 'Ghost cannot retry this unknown tool.')
     return

@@ -29,6 +29,7 @@ const SYSTEM_PROMPT = [
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, ghost_write_file, or ghost_apply_transaction.',
   'Every file or directory tool call must include a non-empty absolute path inside the current workspace. Never omit path, use an empty path, or use a bare filename. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
   'Available tools: ghost_read_file({"path":"absolute workspace path","allowSpecialFile":false,"mode":"head|tail|lines|bytes|symbol|matches","lineCount":200,"startLine":1,"endLine":400,"startByte":0,"endByte":12000,"symbol":"Name","match":"text","caseSensitive":true,"maxMatches":100}), ghost_search_workspace({"query":"text","path":"optional workspace path","glob":"optional glob","maxResults":100}), ghost_write_file({"path":"absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"absolute workspace path","content":"full text"},{"path":"absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional absolute workspace path"}), ghost_list_directory({"path":"absolute workspace path","recursive":true,"pageSize":100,"maxDepth":3,"cursor":"0"}).',
+  'Diagnostics tool: ghost_get_diagnostics({"path":"optional absolute workspace file path","severity":"error|warning|information|hint","maxResults":100}) reads compiler and Problems-panel diagnostics. Omit path for the active file or workspace.',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
@@ -40,6 +41,7 @@ const MAX_EMPTY_PROVIDER_RETRIES = 2
 const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
   ghost_read_file: 16000,
   ghost_search_workspace: 16000,
+  ghost_get_diagnostics: 12000,
   ghost_write_file: 8000,
   ghost_apply_edit: 12000,
   ghost_apply_transaction: 16000,
