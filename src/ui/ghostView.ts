@@ -35,6 +35,7 @@ import { migratePersistedState, normalizePromptHistory } from './persistenceMode
 import { parseTaskPlanMarker } from '../agent/taskPlan'
 import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
+import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
 
 interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -111,7 +112,6 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
   private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
-  private static readonly maxProviderAttempts = 3
 
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
@@ -421,7 +421,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     try {
       let lastError: unknown
-      for (let attempt = 1; attempt <= GhostViewProvider.maxProviderAttempts; attempt += 1) {
+      for (let attempt = 1; attempt <= GHOST_RETRY_POLICIES.providerConnectivity.maxRetries + 1; attempt += 1) {
         request.attempt = attempt
         request.status = 'connecting'
         request.lastActivityAt = Date.now()
@@ -446,10 +446,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           break
         } catch (error) {
           lastError = error
-          if (cancellation.token.isCancellationRequested || !isRecoverable(error) || attempt >= GhostViewProvider.maxProviderAttempts) {
+          if (cancellation.token.isCancellationRequested || !isRecoverable(error) || attempt > GHOST_RETRY_POLICIES.providerConnectivity.maxRetries) {
             throw error
           }
-          const delay = 500 * (2 ** (attempt - 1))
+          const delay = retryDelay(GHOST_RETRY_POLICIES.providerConnectivity, attempt - 1)
           this.postStreamEvent(requestId, request, {
             type: 'warning',
             message: `Provider failed. Retrying in ${delay} ms.`

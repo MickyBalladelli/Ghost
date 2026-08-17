@@ -14,6 +14,7 @@ import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
 import { hasLocalToolCallIntent, LocalToolCall, parseLocalToolCall } from './toolCallParser'
 import type { GhostStopReason } from '../ui/ghostState'
+import { GHOST_RETRY_POLICIES } from './retryPolicy'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -39,9 +40,6 @@ const SYSTEM_PROMPT = [
 
 const MAX_TOOL_ROUNDS = 128
 const MIN_TOOL_CALL_TOKENS = 4096
-const MAX_MISSING_TOOL_RETRIES = 2
-const MAX_STALE_EDIT_RETRIES = 1
-const MAX_EMPTY_PROVIDER_RETRIES = 2
 const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
   ghost_read_file: 16000,
   ghost_search_workspace: 16000,
@@ -1048,16 +1046,16 @@ export function createChatParticipantHandler(
         const generated = turn.generated
 
         if (!generated) {
-          if (emptyProviderRetries < MAX_EMPTY_PROVIDER_RETRIES) {
+          if (emptyProviderRetries < GHOST_RETRY_POLICIES.emptyProvider.maxRetries) {
             emptyProviderRetries += 1
-            response.progress(`Provider returned no content. Retrying (${emptyProviderRetries}/${MAX_EMPTY_PROVIDER_RETRIES})...`)
+            response.progress(`Provider returned no content. Retrying (${emptyProviderRetries}/${GHOST_RETRY_POLICIES.emptyProvider.maxRetries})...`)
             messages.push(
               { role: 'assistant', content: '[empty provider response]' },
               { role: 'user', content: 'The previous response was empty. Continue the requested task now. If a workspace file is involved, inspect it with ghost_read_file and then use the correct workspace tool. Emit exactly one complete valid JSON tool call, or give a concise answer if no tool is needed.' }
             )
             continue
           }
-          const message = 'The provider returned no content after 2 retries. Check the model response or connection, then retry.'
+          const message = `The provider returned no content after ${GHOST_RETRY_POLICIES.emptyProvider.maxRetries} retries. Check the model response or connection, then retry.`
           requestOptions.onStop?.('invalid-model-response', message)
           response.progress('Provider returned an empty response')
           response.markdown(message)
@@ -1069,7 +1067,7 @@ export function createChatParticipantHandler(
         if (!toolCall) {
           const malformedToolCall = hasLocalToolCallIntent(generated)
           const expectsWorkspaceTool = toolsEnabled && !successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated) || malformedToolCall)
-          if (expectsWorkspaceTool && missingToolRetries < MAX_MISSING_TOOL_RETRIES) {
+          if (expectsWorkspaceTool && missingToolRetries < GHOST_RETRY_POLICIES.missingTool.maxRetries) {
             missingToolRetries += 1
             response.progress(malformedToolCall
               ? 'The model returned a malformed or truncated tool call. Asking it to retry with valid JSON.'
@@ -1121,7 +1119,7 @@ export function createChatParticipantHandler(
         if (toolArgumentError) {
           invalidToolRetries += 1
           response.progress(`Invalid tool call: ${toolArgumentError}`)
-          if (invalidToolRetries > MAX_MISSING_TOOL_RETRIES) {
+          if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
             const message = 'The model kept returning invalid tool arguments after retries.'
             requestOptions.onStop?.('invalid-model-response', message)
             response.markdown(message)
@@ -1148,7 +1146,7 @@ export function createChatParticipantHandler(
         if (approvedToolArgumentError) {
           invalidToolRetries += 1
           response.progress(`Invalid tool call: ${approvedToolArgumentError}`)
-          if (invalidToolRetries > MAX_MISSING_TOOL_RETRIES) {
+          if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
             const message = 'The model kept returning invalid tool arguments after retries.'
             requestOptions.onStop?.('invalid-model-response', message)
             response.markdown(message)
@@ -1225,7 +1223,7 @@ export function createChatParticipantHandler(
 
         const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)
-        if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < MAX_STALE_EDIT_RETRIES) {
+        if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < GHOST_RETRY_POLICIES.staleEdit.maxRetries) {
           staleEditRetries += 1
           for (const path of editPaths) {
             staleEditRecoveryPaths.add(path)

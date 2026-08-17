@@ -75,6 +75,8 @@ interface ContextData {
   tools: string[]
 }
 
+const MAX_FAILED_TOOL_RETRIES = 2
+
 const toolDescriptions: Record<string, string> = {
   ghost_read_file: 'Read a text file from the workspace.',
   ghost_search_workspace: 'Search workspace text with ripgrep and return file, line, column, and match data.',
@@ -129,6 +131,7 @@ interface ToolCall {
   result?: string
   startedAt: number
   completedAt?: number
+  retryCount?: number
 }
 
 interface TaskPlan {
@@ -2185,6 +2188,10 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
   if (activeRequest || !found.toolCall.arguments) {
     return
   }
+  if ((found.toolCall.retryCount ?? 0) >= MAX_FAILED_TOOL_RETRIES) {
+    setNotice('error', `Ghost stopped retrying this tool after ${MAX_FAILED_TOOL_RETRIES} attempts. Refresh the file or change the request.`)
+    return
+  }
   let argumentsPayload: unknown
   try {
     argumentsPayload = JSON.parse(found.toolCall.arguments)
@@ -2202,6 +2209,7 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
     return
   }
   const conversation = getActiveConversation()
+  found.toolCall.retryCount = (found.toolCall.retryCount ?? 0) + 1
   const requestId = createId('request')
   const assistantMessage = createMessage('assistant', '', requestId)
   assistantMessage.status = 'streaming'
