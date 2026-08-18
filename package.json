@@ -424,7 +424,7 @@
             "ghost_run_terminal_command",
             "ghost_list_directory"
           ],
-          "description": "Tools Ghost may use automatically. Tools in the ask list need your approval first."
+          "description": "Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied."
         },
         "ghost.toolAsklist": {
           "type": "array",
@@ -445,7 +445,7 @@
             ]
           },
           "default": [],
-          "description": "Tools Ghost may use only after asking you. Deny rules override this list."
+          "description": "Tools Ghost must ask about before use. Deny rules override this list."
         },
         "ghost.toolDenylist": {
           "type": "array",

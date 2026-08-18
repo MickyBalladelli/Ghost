@@ -147,8 +147,8 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.toolAllowlist` | All tools | Tools Ghost may use automatically. |
-| `ghost.toolAsklist` | `[]` | Tools Ghost may use only after asking you. |
+| `ghost.toolAllowlist` | All tools | Tools Ghost may use automatically. Tools not listed ask for approval. |
+| `ghost.toolAsklist` | `[]` | Tools Ghost must ask about before use. |
 | `ghost.toolDenylist` | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |
 | `ghost.terminalEnvironmentAllowlist` | Safe common variables | Environment variables passed to approved terminal commands without asking. |
 | `ghost.terminalEnvironmentAsklist` | `[]` | Environment variables passed only after terminal approval. |

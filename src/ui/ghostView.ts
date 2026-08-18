@@ -1122,7 +1122,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const askedTools = settings.toolAsklist ?? []
     const deniedTools = settings.toolDenylist ?? []
-    const blockedByPolicy = !this.isConversationStateTool(call.name) && ((!allowedTools.includes(call.name) && !askedTools.includes(call.name)) || deniedTools.includes(call.name))
+    const asksByPolicy = !this.isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || askedTools.includes(call.name))
+    const blockedByPolicy = !this.isConversationStateTool(call.name) && deniedTools.includes(call.name)
     const isFileEditTool = this.isFileEditTool(call.name)
     const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
     if (unsavedEditorWarning) {
@@ -1137,8 +1138,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
       return { decision: 'reject', reason: unsavedEditorWarning }
     }
-    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && !askedTools.includes(call.name) && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
-    const requiresApproval = (this.requiresToolApproval(call.name) || askedTools.includes(call.name)) && !blockedByPolicy && !autoAcceptedFileEdit
+    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && !asksByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
+    const requiresApproval = (this.requiresToolApproval(call.name) || asksByPolicy) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
     const needsInteractiveApproval = requiresApproval && (isFileEditTool
       ? !this.sessionApprovedFileEdits
@@ -1664,10 +1665,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       : undefined
     const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
     const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-    const allowedTools = [...new Set([
-      ...(settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]),
-      ...(settings.toolAsklist ?? [])
-    ])].filter(tool => !(settings.toolDenylist ?? []).includes(tool))
+    const allowedTools = GHOST_TOOL_NAMES.filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
     this.postMessage({
       source: 'ghost-extension',

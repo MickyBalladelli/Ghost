@@ -1259,8 +1259,8 @@ const getToolPolicy = (tool: string): 'allow' | 'ask' | 'deny' => {
   if (controls.toolAsklist.includes(tool)) {
     return 'ask'
   }
-  if (controls.toolAllowlist.length > 0 && !controls.toolAllowlist.includes(tool)) {
-    return 'deny'
+  if (!controls.toolAllowlist.includes(tool)) {
+    return 'ask'
   }
   return 'allow'
 }
