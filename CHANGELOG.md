@@ -2,10 +2,15 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.13 - 2026-08-18
+
+- Improve the result-area thinking animation: normal-weight text, one bold highlighted character, softer glow, and cleaner timing.
+
 ## 1.1.12 - 2026-08-18
 
 - Make result-area and active tool labels highlight exactly one character at a time from left to right and back, while keeping the bottom status animation separate.
 - Remove the thinking placeholder when a request is cancelled or otherwise finished without a response.
+- Keep the result-area thinking text normal-weight except for the single highlighted character.
 
 ## 1.1.11 - 2026-08-18
 

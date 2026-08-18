@@ -1819,7 +1819,7 @@ const updateAnimatedStatusLabels = (timestamp: number): void => {
     animatedStatusFrame = undefined
     return
   }
-  const stepMs = 110
+  const stepMs = 120
   for (const label of labels) {
     const characters = Array.from(label.querySelectorAll<HTMLElement>('.animated-status-character'))
     const cycleSteps = Math.max(1, characters.length * 2 - 2)

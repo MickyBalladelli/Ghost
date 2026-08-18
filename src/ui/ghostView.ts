@@ -3168,6 +3168,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         overflow-wrap: anywhere;
       }
 
+      .message-placeholder {
+        font-weight: 400;
+      }
+
       .message-response-stats {
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
@@ -3520,7 +3524,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .animated-status-character {
         display: inline-block;
         font-weight: 400;
-        transition: color 80ms linear, font-weight 80ms linear, text-shadow 80ms linear;
+        transition: color 90ms linear, text-shadow 90ms linear;
       }
 
       .animated-status-character.highlighted {
