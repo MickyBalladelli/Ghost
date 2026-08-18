@@ -2,7 +2,7 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.1 - 2026-08-18
+## 1.1.2 - 2026-08-18
 
 - Replaced raw tool and terminal environment permission fields with clear Allow, Ask, and Deny dialogs.
 - Added tool and terminal environment ask policies, with clearer setting descriptions.

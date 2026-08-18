@@ -815,10 +815,10 @@ app.innerHTML = `
           <input id="openai-tls-key-file" type="text" placeholder="Optional PEM file path">
           <p class="settings-help">OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.</p>
           <button type="button" id="test-provider">Test provider connection</button>
+          <button type="button" class="permission-action-button" id="open-tool-permissions">Configure tool permissions…</button>
           <div class="settings-help"><strong>Tool permissions</strong><br><span id="tool-permissions-summary">Configure which tools Ghost can use.</span></div>
-          <button type="button" class="secondary" id="open-tool-permissions">Configure tool permissions…</button>
+          <button type="button" class="permission-action-button" id="open-terminal-environment-permissions">Configure terminal environment…</button>
           <div class="settings-help"><strong>Terminal environment</strong><br><span id="terminal-environment-permissions-summary">Configure which environment variables Ghost passes to commands.</span></div>
-          <button type="button" class="secondary" id="open-terminal-environment-permissions">Configure terminal environment…</button>
           <label for="assistant-name">Assistant name</label>
           <input id="assistant-name" type="text" maxlength="40" value="Ghost">
           <label for="assistant-avatar">Assistant avatar</label>

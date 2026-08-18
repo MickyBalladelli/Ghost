@@ -2658,6 +2658,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         margin: -4px 0 2px;
       }
 
+      .permission-action-button {
+        background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+        border: 1px solid var(--vscode-button-border, var(--ghost-border));
+        color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+        font-weight: 500;
+        justify-self: start;
+        margin-bottom: 8px;
+      }
+
+      .permission-action-button:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+      }
+
       .permission-row {
         align-items: center;
         border-bottom: 1px solid var(--vscode-panel-border);
