@@ -1,8 +1,9 @@
 import { MlxChatOptions } from './mlxClient'
+import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 
 export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions'
-export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'http' | 'unknown'
+export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'rate-limit' | 'auth' | 'invalid-request' | 'http' | 'unknown'
 
 export interface ModelCapabilityRecord {
   model: string
@@ -30,6 +31,7 @@ export interface ProviderErrorOptions {
   code: ProviderErrorCode
   retryable: boolean
   status?: number
+  retryAfterMs?: number
   cause?: unknown
 }
 
@@ -38,6 +40,7 @@ export class ProviderError extends Error {
   readonly code: ProviderErrorCode
   readonly retryable: boolean
   readonly status?: number
+  readonly retryAfterMs?: number
 
   constructor(message: string, options: ProviderErrorOptions) {
     super(message)
@@ -46,6 +49,7 @@ export class ProviderError extends Error {
     this.code = options.code
     this.retryable = options.retryable
     this.status = options.status
+    this.retryAfterMs = options.retryAfterMs
     if (options.cause !== undefined) {
       this.cause = options.cause
     }
@@ -120,14 +124,27 @@ export function normalizeProviderError(provider: ProviderId, error: unknown): Pr
     return error
   }
   const message = errorMessage(error)
-  const status = errorStatus(message)
+  const status = error instanceof ProviderHttpError ? error.status : errorStatus(message)
+  const retryAfterMs = error instanceof ProviderHttpError ? error.retryAfterMs : undefined
   const lowered = message.toLowerCase()
   const cancelled = error instanceof Error && (error.name === 'AbortError' || lowered.includes('cancel'))
-  const timeout = lowered.includes('timeout') || lowered.includes('timed out')
+  const timeout = error instanceof ProviderTimeoutError || lowered.includes('timeout') || lowered.includes('timed out')
   const network = /network|fetch|connect|socket|econn|enotfound|offline/.test(lowered)
-  const code: ProviderErrorCode = cancelled ? 'cancelled' : timeout ? 'timeout' : status ? 'http' : network ? 'network' : 'unknown'
-  const retryable = !cancelled && (timeout || network || (status !== undefined && (status === 408 || status === 409 || status === 429 || status >= 500)))
-  return new ProviderError(message || 'Provider request failed', { provider, code, retryable, status, cause: error })
+  const code: ProviderErrorCode = cancelled
+    ? 'cancelled'
+    : timeout
+      ? 'timeout'
+      : status === 429
+        ? 'rate-limit'
+        : status === 401 || status === 403
+          ? 'auth'
+          : status === 400 || status === 422
+            ? 'invalid-request'
+            : status
+              ? 'http'
+              : network ? 'network' : 'unknown'
+  const retryable = !cancelled && (timeout || network || (status !== undefined && (status === 408 || status === 409 || status === 425 || status === 429 || status >= 500)))
+  return new ProviderError(message || 'Provider request failed', { provider, code, retryable, status, retryAfterMs, cause: error })
 }
 
 export function createProviderAdapter(provider: ProviderId, client: ProviderClient): ProviderAdapter {

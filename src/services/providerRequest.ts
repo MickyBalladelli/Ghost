@@ -1,0 +1,155 @@
+import type { Response } from 'node-fetch'
+
+const DEFAULT_TIMEOUT_MS = 30000
+const DEFAULT_MAX_ATTEMPTS = 2
+const MAX_RETRY_DELAY_MS = 30000
+
+export interface ProviderRequestOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+  maxAttempts?: number
+}
+
+export class ProviderHttpError extends Error {
+  readonly status: number
+  readonly retryAfterMs?: number
+
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message)
+    this.name = 'ProviderHttpError'
+    this.status = status
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+export class ProviderTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Provider request timed out after ${timeoutMs}ms`)
+    this.name = 'ProviderTimeoutError'
+  }
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  const message = `${error.name} ${error.message}`.toLowerCase()
+  return /abort|econn|enotfound|eai_again|etimedout|socket|network|fetch|reset/.test(message)
+}
+
+export function parseRetryAfter(headers: Pick<Headers, 'get'>): number | undefined {
+  const retryAfter = headers.get('retry-after')?.trim()
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(MAX_RETRY_DELAY_MS, Math.round(seconds * 1000))
+    }
+    const timestamp = Date.parse(retryAfter)
+    if (Number.isFinite(timestamp)) {
+      return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()))
+    }
+  }
+
+  const reset = headers.get('x-ratelimit-reset')?.trim()
+  const timestamp = reset ? Number(reset) : NaN
+  if (Number.isFinite(timestamp) && timestamp > 0) {
+    const milliseconds = timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, milliseconds - Date.now()))
+  }
+  return undefined
+}
+
+function retryDelay(attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs !== undefined) {
+    return retryAfterMs
+  }
+  return Math.min(MAX_RETRY_DELAY_MS, 250 * 2 ** Math.max(0, attempt - 1))
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (delayMs <= 0) {
+    return Promise.resolve()
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal?.removeEventListener('abort', abort)
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve()
+    }, delayMs)
+    const abort = () => {
+      clearTimeout(timer)
+      cleanup()
+      reject(new Error('Provider request cancelled during retry backoff'))
+    }
+    if (signal?.aborted) {
+      abort()
+      return
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+  })
+}
+
+export async function requestWithRetry(
+  request: (signal: AbortSignal) => Promise<Response>,
+  options: ProviderRequestOptions = {}
+): Promise<Response> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (options.signal?.aborted) {
+      throw new Error('Provider request cancelled')
+    }
+    const controller = new AbortController()
+    let timedOut = false
+    const timeout = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+    const abort = () => controller.abort()
+    options.signal?.addEventListener('abort', abort, { once: true })
+
+    try {
+      const response = await request(controller.signal)
+      if (!isRetryableStatus(response.status) || attempt >= maxAttempts) {
+        return response
+      }
+      await waitForRetry(retryDelay(attempt, parseRetryAfter(response.headers)), options.signal)
+    } catch (error) {
+      lastError = timedOut ? new ProviderTimeoutError(timeoutMs) : error
+      if (options.signal?.aborted || (!timedOut && !isRetryableNetworkError(error)) || attempt >= maxAttempts) {
+        throw lastError
+      }
+      await waitForRetry(retryDelay(attempt), options.signal)
+    } finally {
+      clearTimeout(timeout)
+      options.signal?.removeEventListener('abort', abort)
+    }
+  }
+
+  throw lastError ?? new Error('Provider request failed')
+}
+
+export async function providerHttpError(response: Response): Promise<ProviderHttpError> {
+  let detail = ''
+  try {
+    detail = (await response.text()).slice(0, 1000)
+  } catch {
+    detail = ''
+  }
+  let message = detail
+  try {
+    const payload = JSON.parse(detail) as { error?: { message?: string } | string; message?: string }
+    const error = typeof payload.error === 'string' ? payload.error : payload.error?.message
+    message = error || payload.message || detail
+  } catch {
+    // Keep the bounded response text.
+  }
+  const suffix = message ? `: ${message}` : ''
+  return new ProviderHttpError(`Provider returned HTTP ${response.status}${suffix}`, response.status, parseRetryAfter(response.headers))
+}

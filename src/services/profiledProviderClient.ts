@@ -9,6 +9,7 @@ import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWirePr
 import { ProviderClient } from './providerAdapter'
 import { streamOpenAiTokens } from './openAiStream'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
+import { providerHttpError, requestWithRetry } from './providerRequest'
 
 type FetchLike = typeof fetch
 
@@ -27,21 +28,8 @@ interface GeminiResponse {
   }>
 }
 
-function withTimeout(timeoutMs: number): AbortSignal {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  controller.signal.addEventListener('abort', () => clearTimeout(timer), { once: true })
-  return controller.signal
-}
-
 async function httpError(response: Response): Promise<Error> {
-  let detail = ''
-  try {
-    detail = (await response.text()).slice(0, 1000)
-  } catch {
-    detail = ''
-  }
-  return new Error(`Provider returned HTTP ${response.status}${detail ? `: ${detail}` : ''}`)
+  return providerHttpError(response)
 }
 
 function textFromContent(content: MlxMessage['content']): string {
@@ -204,12 +192,15 @@ class AnthropicClient implements ProviderClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
       const endpoint = joinEndpoint(this.baseUrl, 'v1/models')
-      const response = await this.request(endpoint, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(endpoint, this.transport)
-      })
+      const response = await requestWithRetry(
+        signal => this.request(endpoint, {
+          method: 'GET',
+          headers: this.headers(),
+          signal,
+          agent: createOpenAiRequestAgent(endpoint, this.transport)
+        }),
+        { timeoutMs }
+      )
       return response.ok
     } catch {
       return false
@@ -218,12 +209,15 @@ class AnthropicClient implements ProviderClient {
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const endpoint = joinEndpoint(this.baseUrl, 'v1/models')
-    const response = await this.request(endpoint, {
-      method: 'GET',
-      headers: this.headers(),
-      signal,
-      agent: createOpenAiRequestAgent(endpoint, this.transport)
-    })
+    const response = await requestWithRetry(
+      requestSignal => this.request(endpoint, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: requestSignal,
+        agent: createOpenAiRequestAgent(endpoint, this.transport)
+      }),
+      { signal, timeoutMs: 30000 }
+    )
     if (!response.ok) throw await httpError(response)
     const payload = await response.json() as ModelsResponse
     return payload.data?.flatMap(model => model.id ? [model.id] : []) ?? []
@@ -275,12 +269,15 @@ class GeminiClient implements ProviderClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
       const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
-      const response = await this.request(endpoint, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(endpoint, this.transport)
-      })
+      const response = await requestWithRetry(
+        signal => this.request(endpoint, {
+          method: 'GET',
+          headers: this.headers(),
+          signal,
+          agent: createOpenAiRequestAgent(endpoint, this.transport)
+        }),
+        { timeoutMs }
+      )
       return response.ok
     } catch {
       return false
@@ -289,12 +286,15 @@ class GeminiClient implements ProviderClient {
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
-    const response = await this.request(endpoint, {
-      method: 'GET',
-      headers: this.headers(),
-      signal,
-      agent: createOpenAiRequestAgent(endpoint, this.transport)
-    })
+    const response = await requestWithRetry(
+      requestSignal => this.request(endpoint, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: requestSignal,
+        agent: createOpenAiRequestAgent(endpoint, this.transport)
+      }),
+      { signal, timeoutMs: 30000 }
+    )
     if (!response.ok) throw await httpError(response)
     const payload = await response.json() as ModelsResponse
     return payload.models?.flatMap(model => model.name ? [model.name.replace(/^models\//, '')] : []) ?? []
@@ -346,12 +346,15 @@ class CustomHttpClient implements ProviderClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     const endpoint = joinCustomEndpoint(this.baseUrl, this.modelsPath)
     try {
-      const response = await this.request(endpoint, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
-      })
+      const response = await requestWithRetry(
+        signal => this.request(endpoint, {
+          method: 'GET',
+          headers: this.headers(),
+          signal,
+          agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
+        }),
+        { timeoutMs }
+      )
       return response.ok
     } catch {
       return false
@@ -360,12 +363,15 @@ class CustomHttpClient implements ProviderClient {
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const endpoint = joinCustomEndpoint(this.baseUrl, this.modelsPath)
-    const response = await this.request(endpoint, {
-      method: 'GET',
-      headers: this.headers(),
-      signal,
-      agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
-    })
+    const response = await requestWithRetry(
+      requestSignal => this.request(endpoint, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: requestSignal,
+        agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
+      }),
+      { signal, timeoutMs: 30000 }
+    )
     if (!response.ok) throw await httpError(response)
     return customModelNames(await response.json())
   }
@@ -412,12 +418,15 @@ class AzureOpenAiClient implements ProviderClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     const endpoint = joinEndpoint(this.baseUrl, `openai/models?api-version=${encodeURIComponent(this.apiVersion)}`)
     try {
-      const response = await this.request(endpoint, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
-      })
+      const response = await requestWithRetry(
+        signal => this.request(endpoint, {
+          method: 'GET',
+          headers: this.headers(),
+          signal,
+          agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
+        }),
+        { timeoutMs }
+      )
       return response.ok || response.status === 401 || response.status === 403
     } catch {
       return false

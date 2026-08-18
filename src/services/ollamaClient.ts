@@ -16,6 +16,7 @@ import {
 import { OpenAiStreamMode, streamOpenAiTokens } from './openAiStream'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
+import { providerHttpError, requestWithRetry } from './providerRequest'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -99,13 +100,6 @@ function getOllamaBaseUrl(baseUrl: string): string {
   return isExplicitOpenAiUrl(normalized) ? removeEndpointSuffix(normalized, 'v1') : normalized
 }
 
-function withTimeout(timeoutMs: number): AbortSignal {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true })
-  return controller.signal
-}
-
 function addSystemPrompt(messages: MlxMessage[], systemPrompt?: string): MlxMessage[] {
   if (!systemPrompt) {
     return messages
@@ -119,9 +113,7 @@ function isFallbackStatus(status: number): boolean {
 }
 
 async function httpError(response: Response): Promise<Error> {
-  const detail = await response.text()
-  const suffix = detail ? `: ${detail.slice(0, 300)}` : ''
-  return new Error(`Local model server returned ${response.status} ${response.statusText}${suffix}`)
+  return providerHttpError(response)
 }
 
 function extractOpenAiText(payload: OpenAiCompletionResponse): string {
@@ -254,11 +246,14 @@ export class OllamaClient {
 
     for (const endpoint of endpoints) {
       try {
-        const response = await this.request(endpoint, this.withTransport(endpoint, {
-          method: 'GET',
-          headers: this.authorizationHeaders(),
-          signal: withTimeout(timeoutMs)
-        }))
+        const response = await requestWithRetry(
+          signal => this.request(endpoint, this.withTransport(endpoint, {
+            method: 'GET',
+            headers: this.authorizationHeaders(),
+            signal
+          })),
+          { timeoutMs }
+        )
 
         if (response.ok) {
           return true
@@ -276,7 +271,10 @@ export class OllamaClient {
 
     for (const endpoint of this.getModelEndpoints()) {
       try {
-        const response = await this.request(endpoint, this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal }))
+        const response = await requestWithRetry(
+          requestSignal => this.request(endpoint, this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal: requestSignal })),
+          { signal, timeoutMs: 30000 }
+        )
 
         if (!response.ok) {
           lastError = await httpError(response)

@@ -5,6 +5,7 @@ import fetch, { type RequestInit, type Response } from 'node-fetch'
 import { GenerationSettings } from './generationSettings'
 import { buildMlxChatBody } from './providerRequestBuilders'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
+import { providerHttpError, requestWithRetry } from './providerRequest'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
@@ -125,30 +126,11 @@ export async function createVisionMessage(text: string, images: MlxVisionImage[]
   return { role: 'user', content }
 }
 
-function withTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-  if (signal) {
-    if (signal.aborted) {
-      controller.abort()
-    } else {
-      signal.addEventListener('abort', () => controller.abort(), { once: true })
-    }
-  }
-
-  controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true })
-  return controller.signal
-}
-
 async function throwForHttpError(response: Response): Promise<void> {
   if (response.ok) {
     return
   }
-
-  const detail = await response.text()
-  const suffix = detail ? `: ${detail.slice(0, 300)}` : ''
-  throw new Error(`MLX server returned ${response.status} ${response.statusText}${suffix}`)
+  throw await providerHttpError(response)
 }
 
 function extractChunkText(chunk: MlxStreamChunk): string {
@@ -242,11 +224,14 @@ export class MlxClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
       const endpoint = joinEndpoint(this.apiUrl, 'models')
-      const response = await this.request(endpoint, {
-        method: 'GET',
-        headers: this.authorizationHeaders(),
-        signal: withTimeout(undefined, timeoutMs)
-      })
+      const response = await requestWithRetry(
+        signal => this.request(endpoint, {
+          method: 'GET',
+          headers: this.authorizationHeaders(),
+          signal
+        }),
+        { timeoutMs }
+      )
 
       return response.ok
     } catch {
@@ -256,11 +241,14 @@ export class MlxClient {
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const endpoint = joinEndpoint(this.apiUrl, 'models')
-    const response = await this.request(endpoint, {
-      method: 'GET',
-      headers: this.authorizationHeaders(),
-      signal
-    })
+    const response = await requestWithRetry(
+      requestSignal => this.request(endpoint, {
+        method: 'GET',
+        headers: this.authorizationHeaders(),
+        signal: requestSignal
+      }),
+      { signal, timeoutMs: 30000 }
+    )
     await throwForHttpError(response)
 
     const payload = await response.json() as MlxModelsResponse

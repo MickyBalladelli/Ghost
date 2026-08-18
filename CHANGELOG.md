@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Added tool and terminal environment ask policies, with clearer setting descriptions.
 - Treats tools missing from an older allowlist as Ask instead of Deny.
 - Added shared endpoint normalization for trailing slashes, `/v1` paths, native Ollama routes, IPv6 hosts, and reverse-proxy prefixes.
+- Added shared provider request timeouts, bounded retries, Retry-After parsing, rate-limit metadata, and normalized HTTP errors.
 
 ## 1.0.98 - 2026-08-18
 
