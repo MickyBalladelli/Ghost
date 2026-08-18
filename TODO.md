@@ -67,7 +67,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Keep an extension point for local HTTP servers with custom model discovery and request templates.
 - [x] Make endpoint joining robust for trailing slashes, `/v1`, native Ollama routes, IPv6, and reverse proxies.
 - [x] Add shared timeout, retry, status parsing, rate-limit handling, and normalized provider errors.
-- [ ] Cache model discovery and health checks with a manual refresh button. Do not fall back silently to a different model.
+- [x] Cache model discovery and health checks with a manual refresh button. Do not fall back silently to a different model.
 - [ ] Show model metadata and capabilities in settings. Explain when Top K, Min P, penalties, vision, tools, or FIM are ignored.
 - [ ] Add model aliases and per-model profiles so chat, agent, vision, and autocomplete can use different settings.
 - [ ] Add support for provider-native tool calling and JSON/schema mode before relying on text parsing.

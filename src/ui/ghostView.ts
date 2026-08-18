@@ -5,7 +5,7 @@ import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
-import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider } from '../config'
+import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider, GhostSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
@@ -113,6 +113,16 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 )
 
+interface ProviderStatus {
+  connection: 'online' | 'offline'
+  models: string[]
+}
+
+interface ProviderStatusCache extends ProviderStatus {
+  key: string
+  checkedAt: number
+}
+
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
   private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
@@ -137,6 +147,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private status: GhostViewStatus = 'ready'
   private disposed = false
   private controlsStateGeneration = 0
+  private providerStatusCache?: ProviderStatusCache
+  private providerStatusRequest?: { key: string; promise: Promise<ProviderStatus> }
+  private static readonly providerStatusCacheTtlMs = 30_000
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
@@ -1618,41 +1631,92 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private async sendControlsState(): Promise<void> {
-    const generation = ++this.controlsStateGeneration
-    const settings = getGhostSettings()
-    let models: string[] = []
-    let connection: 'online' | 'offline' | 'unknown' = 'unknown'
+  private providerStatusKey(settings: GhostSettings): string {
+    return JSON.stringify({
+      provider: settings.provider,
+      ollamaUrl: settings.ollamaUrl,
+      mlxUrl: settings.mlxUrl,
+      openaiUrl: settings.openaiUrl,
+      openaiProfile: settings.openaiProfile,
+      openaiApiVersion: settings.openaiApiVersion,
+      openaiCustomModelsPath: settings.openaiCustomModelsPath,
+      openaiApiKeyHeader: settings.openaiApiKeyHeader,
+      openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
+      openaiOrganizationHeader: settings.openaiOrganizationHeader,
+      openaiOrganization: settings.openaiOrganization,
+      openaiProjectHeader: settings.openaiProjectHeader,
+      openaiProject: settings.openaiProject,
+      openaiProxy: settings.openaiProxy,
+      openaiNoProxy: settings.openaiNoProxy,
+      openaiTlsRejectUnauthorized: settings.openaiTlsRejectUnauthorized,
+      openaiTlsCaFile: settings.openaiTlsCaFile,
+      openaiTlsCertFile: settings.openaiTlsCertFile,
+      openaiTlsKeyFile: settings.openaiTlsKeyFile,
+      apiKeyConfigured: Boolean(this.providerApiKey?.(settings.provider))
+    })
+  }
 
-    try {
-      const client = settings.provider === 'mlx-vlm'
-        ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
-        : settings.provider === 'openai-compatible'
-          ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
-          : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
-      const online = await client.checkHealth(3000)
-      if (this.disposed || generation !== this.controlsStateGeneration) {
-        return
-      }
-      connection = online ? 'online' : 'offline'
-      if (online) {
-        try {
-          models = client.listModels ? await client.listModels() : []
-        } catch (error) {
-          this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
-        }
-      }
-    } catch {
-      if (this.disposed || generation !== this.controlsStateGeneration) {
-        return
-      }
-      connection = 'offline'
+  private async readProviderStatus(settings: GhostSettings): Promise<ProviderStatus> {
+    const client = settings.provider === 'mlx-vlm'
+      ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
+      : settings.provider === 'openai-compatible'
+        ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+        : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
+    const online = await client.checkHealth(3000)
+    if (!online) {
+      return { connection: 'offline', models: [] }
     }
 
+    let models: string[] = []
+    if (client.listModels) {
+      try {
+        models = await client.listModels()
+      } catch (error) {
+        this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
+      }
+    }
+    return {
+      connection: 'online',
+      models: [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
+    }
+  }
+
+  private async getProviderStatus(settings: GhostSettings, forceRefresh = false): Promise<ProviderStatus> {
+    const key = this.providerStatusKey(settings)
+    const cached = this.providerStatusCache
+    if (!forceRefresh && cached?.key === key && Date.now() - cached.checkedAt < GhostViewProvider.providerStatusCacheTtlMs) {
+      return cached
+    }
+    if (this.providerStatusRequest?.key === key) {
+      return this.providerStatusRequest.promise
+    }
+
+    const promise: Promise<ProviderStatus> = this.readProviderStatus(settings).catch(error => {
+      this.debugLog('provider health check failed', error instanceof Error ? error.message : String(error))
+      return { connection: 'offline' as const, models: [] }
+    })
+    this.providerStatusRequest = { key, promise }
+    try {
+      const result = await promise
+      this.providerStatusCache = { ...result, key, checkedAt: Date.now() }
+      return result
+    } finally {
+      if (this.providerStatusRequest?.promise === promise) {
+        this.providerStatusRequest = undefined
+      }
+    }
+  }
+
+  private async sendControlsState(forceProviderRefresh = false): Promise<void> {
+    const generation = ++this.controlsStateGeneration
+    const settings = getGhostSettings()
+    const providerStatus = await this.getProviderStatus(settings, forceProviderRefresh)
     if (this.disposed || generation !== this.controlsStateGeneration) {
       return
     }
 
+    const connection: 'online' | 'offline' = providerStatus.connection
+    let models = providerStatus.models
     if (models.length === 0) {
       models = [settings.chatModel]
     }
@@ -1732,13 +1796,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async testProvider(): Promise<void> {
     const settings = getGhostSettings()
-      const client = settings.provider === 'mlx-vlm'
-      ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
-      : settings.provider === 'openai-compatible'
-        ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
-        : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
-    const online = await client.checkHealth(3000)
-    if (online) {
+    const providerStatus = await this.getProviderStatus(settings, true)
+    if (providerStatus.connection === 'online') {
       await vscode.window.showInformationMessage(`${settings.provider} provider is reachable.`)
     } else {
       await vscode.window.showErrorMessage(`${settings.provider} provider is not reachable.`)
@@ -2043,8 +2102,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await this.openFile(message.path, message.line)
         return
       case 'load-controls':
-      case 'refresh-models':
         await this.sendControlsState()
+        return
+      case 'refresh-models':
+        await this.sendControlsState(true)
         return
       case 'update-settings':
         await this.updateSettings(message.settings)

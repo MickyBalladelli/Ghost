@@ -815,6 +815,7 @@ app.innerHTML = `
           <input id="openai-tls-key-file" type="text" placeholder="Optional PEM file path">
           <p class="settings-help">OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.</p>
           <button type="button" id="test-provider">Test provider connection</button>
+          <button type="button" class="secondary" id="refresh-models">Refresh models</button>
           <button type="button" class="permission-action-button" id="open-tool-permissions">Configure tool permissions…</button>
           <div class="settings-help"><strong>Tool permissions</strong><br><span id="tool-permissions-summary">Configure which tools Ghost can use.</span></div>
           <button type="button" class="permission-action-button" id="open-terminal-environment-permissions">Configure terminal environment…</button>
@@ -965,6 +966,7 @@ const openAiTlsCaFileElement = document.getElementById('openai-tls-ca-file') as 
 const openAiTlsCertFileElement = document.getElementById('openai-tls-cert-file') as HTMLInputElement
 const openAiTlsKeyFileElement = document.getElementById('openai-tls-key-file') as HTMLInputElement
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
+const refreshModelsElement = document.getElementById('refresh-models') as HTMLButtonElement
 const openToolPermissionsElement = document.getElementById('open-tool-permissions') as HTMLButtonElement
 const toolPermissionsSummaryElement = document.getElementById('tool-permissions-summary') as HTMLElement
 const toolPermissionsModalElement = document.getElementById('tool-permissions-modal') as HTMLElement
@@ -3026,11 +3028,6 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       fileEditApproval: message.settings.autoAcceptScope
     }
     availableModels = message.models
-    const configuredModel = controls.chatModel
-    if (availableModels.length > 0 && !availableModels.includes(configuredModel)) {
-      controls.chatModel = availableModels[0]
-      sendSettingsUpdate()
-    }
     availableModelMetadata = message.models.map(model => ({
       id: model,
       label: model,
@@ -3532,6 +3529,7 @@ for (const element of [
   element.addEventListener('change', updateOpenAiSettings)
 }
 testProviderElement.addEventListener('click', () => post('test-provider'))
+refreshModelsElement.addEventListener('click', () => post('refresh-models'))
 openToolPermissionsElement.addEventListener('click', () => {
   renderPermissionControls()
   setModalVisibility(toolPermissionsModalElement, true)
