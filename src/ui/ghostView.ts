@@ -3126,6 +3126,40 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         overflow: auto;
       }
 
+      .quick-switch-button {
+        white-space: nowrap;
+      }
+
+      .quick-switch-grid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: auto minmax(0, 1fr);
+        margin: 12px 0;
+      }
+
+      .quick-switch-grid label {
+        align-self: center;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+      }
+
+      .quick-switch-grid select {
+        min-width: 0;
+        padding: 5px 7px;
+      }
+
+      .diagnostic-card {
+        background: var(--vscode-textCodeBlock-background);
+        border: 1px solid var(--ghost-border);
+        border-radius: 4px;
+        padding: 10px;
+      }
+
+      .diagnostic-card p {
+        margin-bottom: 0;
+        overflow-wrap: anywhere;
+      }
+
       .history-search-row {
         align-items: center;
         display: flex;

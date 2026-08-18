@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.19 - 2026-08-18
+
+- Add a provider/model quick switcher with connection diagnostics, refresh, and copy controls.
+
 ## 1.1.17 - 2026-08-18
 
 - Add a shared fill-in-the-middle provider contract with capability checks and provider endpoint routing.

@@ -788,6 +788,7 @@ app.innerHTML = `
       <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
       <span class="auto-accept-indicator" id="auto-accept-indicator" aria-live="polite"></span>
+      <button type="button" class="context-button quick-switch-button" id="quick-switch" aria-haspopup="dialog">Quick switch</button>
       <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
     </section>
     <div class="chat-layout">
@@ -982,6 +983,23 @@ app.innerHTML = `
         <div class="modal-footer"><button type="button" class="secondary" data-close-modal="context-modal">Done</button></div>
       </section>
     </div>
+    <div class="modal-backdrop" id="quick-switch-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="quick-switch-title">
+        <div class="modal-header"><h2 id="quick-switch-title">Quick switch</h2><button type="button" class="icon-button" data-close-modal="quick-switch-modal" aria-label="Close quick switch">×</button></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Change provider or model without opening full settings.</p>
+          <div class="quick-switch-grid">
+            <label for="quick-provider">Provider</label><select id="quick-provider"><option value="ollama">Ollama</option><option value="mlx-vlm">MLX / VLM</option><option value="openai-compatible">OpenAI-compatible</option></select>
+            <label for="quick-model">Model</label><select id="quick-model"></select>
+          </div>
+          <section class="diagnostic-card" aria-label="Connection diagnostics">
+            <strong id="quick-connection-status">Checking…</strong>
+            <p id="quick-connection-details" class="modal-description"></p>
+          </section>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" id="copy-diagnostics">Copy diagnostics</button><button type="button" class="secondary" id="quick-refresh-models">Refresh models</button><button type="button" class="secondary" data-close-modal="quick-switch-modal">Done</button></div>
+      </section>
+    </div>
     <div class="modal-backdrop" id="history-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
         <div class="modal-header"><h2 id="history-title">Conversation history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close conversation history">×</button></div>
@@ -1110,6 +1128,7 @@ const resetSystemInstructionsElement = document.getElementById('reset-system-ins
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
+const quickSwitchModalElement = document.getElementById('quick-switch-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
 const promptHistoryModalElement = document.getElementById('prompt-history-modal') as HTMLElement
 const editToolModalElement = document.getElementById('edit-tool-modal') as HTMLElement
@@ -1121,6 +1140,13 @@ const historySearchElement = document.getElementById('history-search') as HTMLIn
 const historyBookmarksOnlyElement = document.getElementById('history-bookmarks-only') as HTMLInputElement
 const historySearchSummaryElement = document.getElementById('history-search-summary') as HTMLElement
 const historyListElement = document.getElementById('history-list') as HTMLElement
+const quickSwitchElement = document.getElementById('quick-switch') as HTMLButtonElement
+const quickProviderElement = document.getElementById('quick-provider') as HTMLSelectElement
+const quickModelElement = document.getElementById('quick-model') as HTMLSelectElement
+const quickConnectionStatusElement = document.getElementById('quick-connection-status') as HTMLElement
+const quickConnectionDetailsElement = document.getElementById('quick-connection-details') as HTMLElement
+const copyDiagnosticsElement = document.getElementById('copy-diagnostics') as HTMLButtonElement
+const quickRefreshModelsElement = document.getElementById('quick-refresh-models') as HTMLButtonElement
 const promptHistorySearchElement = document.getElementById('prompt-history-search') as HTMLInputElement
 const promptHistoryListElement = document.getElementById('prompt-history-list') as HTMLElement
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
@@ -1579,6 +1605,27 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
   modelCapabilitiesElement.title = summary
 }
 
+const renderQuickSwitch = (): void => {
+  quickProviderElement.value = controls.provider
+  quickModelElement.textContent = ''
+  for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
+    const option = document.createElement('option')
+    option.value = model
+    option.textContent = model
+    quickModelElement.append(option)
+  }
+  quickModelElement.value = controls.chatModel
+  const metadata = availableModelMetadata.find(item => item.id === controls.chatModel)
+  const connectionLabel = connection === 'online' ? 'Connected' : connection === 'offline' ? 'Offline' : 'Checking…'
+  quickConnectionStatusElement.textContent = `${connectionLabel} · ${controls.provider} · ${controls.chatModel}`
+  quickConnectionDetailsElement.textContent = [
+    `Endpoint: ${providerEndpoint()}`,
+    `Network: ${controls.networkAccess}`,
+    `Capabilities: ${metadata?.capabilities?.join(', ') || 'unknown'}`,
+    `Workspace root: ${uiPreferences.workspaceRoot || 'all roots'}`
+  ].join(' · ')
+}
+
 const renderControls = () => {
   providerElement.value = controls.provider
   modelElement.textContent = ''
@@ -1718,6 +1765,7 @@ const renderControls = () => {
     : connection === 'offline'
       ? controls.networkAccess === 'external' ? 'Offline · external endpoint' : 'Offline'
       : 'Checking…'
+  renderQuickSwitch()
 
   attachmentListElement.textContent = ''
   attachmentLimitElement.textContent = `${attachments.length}/${maxAttachments} attachments · max 1 MB text · 700 KB images`
@@ -4507,6 +4555,33 @@ document.getElementById('privacy-page')?.addEventListener('click', () => {
 document.getElementById('context-preview')?.addEventListener('click', () => {
   renderContextPreview()
   setModalVisibility(contextModalElement, true)
+})
+quickSwitchElement.addEventListener('click', () => {
+  renderQuickSwitch()
+  setModalVisibility(quickSwitchModalElement, true)
+})
+quickProviderElement.addEventListener('change', () => {
+  providerElement.value = quickProviderElement.value
+  providerElement.dispatchEvent(new Event('change'))
+})
+quickModelElement.addEventListener('change', () => {
+  modelElement.value = quickModelElement.value
+  modelElement.dispatchEvent(new Event('change'))
+})
+quickRefreshModelsElement.addEventListener('click', () => {
+  quickRefreshModelsElement.disabled = true
+  post('refresh-models')
+  window.setTimeout(() => {
+    quickRefreshModelsElement.disabled = false
+  }, 1000)
+})
+copyDiagnosticsElement.addEventListener('click', () => {
+  const diagnostics = [
+    quickConnectionStatusElement.textContent,
+    quickConnectionDetailsElement.textContent,
+    `Models available: ${availableModels.join(', ') || 'none'}`
+  ].filter(Boolean).join('\n')
+  void copyText(diagnostics)
 })
 document.getElementById('history')?.addEventListener('click', () => {
   renderHistory()
