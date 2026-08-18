@@ -2391,6 +2391,10 @@ const codeBlock = (code: string, language: string): string => {
   </div>`
 }
 
+const copyButton = (text: string, label: string, className = 'copy-button'): string => (
+`<button type="button" class="${className}" data-copy-text="${escapeAttribute(encodeURIComponent(text))}" aria-label="${escapeAttribute(label)}">Copy</button>`
+)
+
 const tableCells = (line: string): string[] => line
   .trim()
   .replace(/^\|/, '')
@@ -2561,11 +2565,12 @@ const findMessageElement = (messageId: string): HTMLElement | undefined => (
 )
 
 const copyText = async (text: string): Promise<void> => {
+  const safeText = redactSensitiveText(text)
   try {
-    await navigator.clipboard.writeText(text)
+    await navigator.clipboard.writeText(safeText)
   } catch {
     const input = document.createElement('textarea')
-    input.value = text
+    input.value = safeText
     input.style.position = 'fixed'
     input.style.opacity = '0'
     document.body.append(input)
@@ -2585,6 +2590,60 @@ const addAction = (container: HTMLElement, label: string, action: string, messag
   button.dataset.action = action
   button.dataset.messageId = messageId
   container.append(button)
+}
+
+const appendCopyControl = (container: HTMLElement, text: string, label: string): void => {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.className = 'copy-button'
+  button.textContent = 'Copy'
+  button.setAttribute('aria-label', label)
+  button.dataset.copyText = encodeURIComponent(text)
+  button.dataset.messageCopyControl = 'true'
+  container.append(button)
+}
+
+const addMessageCopyControls = (article: HTMLElement, message: ChatMessage): void => {
+  article.querySelectorAll<HTMLElement>('[data-message-copy-control]').forEach(control => control.remove())
+
+  const toolParts = message.parts.filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
+  for (const part of toolParts) {
+    const progress = article.querySelector<HTMLElement>('[data-tool-call-id="' + CSS.escape(part.toolCall.id) + '"]')
+    if (!progress) {
+      continue
+    }
+    const args = parseToolArguments(part.toolCall)
+    const command = part.toolCall.name === 'ghost_run_terminal_command' && typeof args.command === 'string'
+      ? args.command.trim()
+      : ''
+    const path = typeof args.path === 'string'
+      ? args.path.trim()
+      : part.toolCall.diffPreview?.path ?? ''
+    const target = command || path
+    if (target) {
+      appendCopyControl(progress, target, command ? 'Copy command' : 'Copy path')
+    }
+    const resultCopy = progress.querySelector<HTMLButtonElement>('[data-tool-action="copy-result"]')
+    if (resultCopy && part.toolCall.name === 'ghost_get_diagnostics') {
+      resultCopy.textContent = 'Copy diagnostics'
+      resultCopy.setAttribute('aria-label', 'Copy diagnostics')
+    }
+  }
+
+  const errorParts = message.parts.filter((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
+  article.querySelectorAll<HTMLElement>('.error-progress').forEach((element, index) => {
+    const error = errorParts[index]
+    if (error) {
+      appendCopyControl(element, error.message, 'Copy error')
+    }
+  })
+  if (requestIsStopped(message)) {
+    const reason = article.querySelector<HTMLElement>('.request-action-card-reason')
+    const detail = reason?.textContent?.trim()
+    if (reason && detail) {
+      appendCopyControl(reason, detail, 'Copy error')
+    }
+  }
 }
 
 const stopReasonLabels: Record<StopReason, string> = {
@@ -2720,6 +2779,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
   if (actions && message.role === 'user') {
     addAction(actions, 'Edit', 'edit', message.id)
   }
+  addMessageCopyControls(article, message)
   return article
 }
 
@@ -2765,12 +2825,20 @@ const summaryCommandCount = (message: ChatMessage): number => (
   message.parts.filter(part => part.kind === 'tool' && part.toolCall.name === 'ghost_run_terminal_command').length
 )
 
+const renderCopyablePathList = (paths: string[]): string => {
+  if (paths.length === 0) {
+    return '<span>None</span>'
+  }
+  const visiblePaths = paths.slice(0, 12)
+  const items = visiblePaths.map(file => '<li><span>' + escapeHtml(file) + '</span>' + copyButton(file, 'Copy path') + '</li>').join('')
+  const remaining = paths.length > visiblePaths.length ? '<li>+' + (paths.length - visiblePaths.length) + ' more</li>' : ''
+  return '<ul>' + items + remaining + '</ul>'
+}
+
 const renderRequestSummary = (message: ChatMessage): string => {
   if (message.role !== 'assistant' || !message.requestSummary) return ''
   const summary = message.requestSummary
-  const files = summary.changedFiles.length > 0
-    ? `<ul>${summary.changedFiles.slice(0, 12).map(file => `<li>${escapeHtml(file)}</li>`).join('')}${summary.changedFiles.length > 12 ? `<li>+${summary.changedFiles.length - 12} more</li>` : ''}</ul>`
-    : '<span>None</span>'
+  const files = renderCopyablePathList(summary.changedFiles)
   return `<section class="request-summary" aria-label="Request summary"><strong>Request summary</strong><div class="request-summary-grid"><div><span>Final status</span><b>${escapeHtml(summary.status)}</b></div><div><span>Elapsed</span><b>${formatElapsed(summary.elapsedMs)}</b></div><div><span>Model</span><b>${summary.model ? escapeHtml(summary.model) : 'Unknown'}</b></div><div><span>Provider</span><b>${summary.provider ? escapeHtml(summary.provider) : 'Unknown'}</b></div><div><span>Tokens</span><b>${summary.tokenCount}</b></div><div><span>Commands</span><b>${summary.commandCount}</b></div></div><div class="request-summary-files"><span>Changed files</span>${files}</div></section>`
 }
 
@@ -3094,6 +3162,7 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
     if (actions) insertMarkupBefore(actions, requestActionCard)
   }
   element.classList.toggle('error', message.status === 'error')
+  addMessageCopyControls(element, message)
   ensureAnimatedStatusLabels()
 }
 
@@ -4419,6 +4488,11 @@ messagesElement.addEventListener('click', event => {
   if (loadOlder) {
     visibleMessageCount += 200
     renderMessages(false)
+    return
+  }
+  const copyTextButton = target.closest<HTMLButtonElement>('[data-copy-text]')
+  if (copyTextButton) {
+    void copyText(decodeURIComponent(copyTextButton.dataset.copyText ?? ''))
     return
   }
   const codeCopy = target.closest<HTMLButtonElement>('.code-copy')

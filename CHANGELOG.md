@@ -10,6 +10,7 @@ All notable changes to this extension are documented here.
 - Add a first-run setup flow with provider checks, model discovery, capability notes, and an optional test request.
 - Improve accessibility with VS Code theme variables, forced-colors styling, reduced-motion handling, screen-reader status updates, and modal keyboard focus trapping.
 - Reuse visible message elements during refreshes and centralize generated markdown markup through safe DOM fragments.
+- Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
 
 ## 1.1.17 - 2026-08-18
 

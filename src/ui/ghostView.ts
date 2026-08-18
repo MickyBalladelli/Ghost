@@ -3571,6 +3571,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         padding-left: 18px;
       }
 
+      .request-summary-files li {
+        align-items: center;
+        display: flex;
+        gap: 5px;
+      }
+
       .request-action-card {
         border: 1px solid var(--vscode-widget-border, var(--ghost-border));
         border-left: 3px solid var(--ghost-accent);
@@ -3855,11 +3861,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         padding: 4px 8px;
       }
 
-      .code-copy {
+      .code-copy,
+      .copy-button {
         background: transparent;
         border: 0;
         color: var(--vscode-textLink-foreground);
         padding: 2px 4px;
+      }
+
+      .message-progress > .copy-button,
+      .request-action-card-reason > .copy-button {
+        font-size: 0.8em;
+        margin-left: 5px;
       }
 
       .code-block pre {
