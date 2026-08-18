@@ -37,6 +37,7 @@ All notable changes to this extension are documented here.
 - Share the extension-message protocol type with the webview and remove its duplicated local message union.
 - Centralize file mutation validation, change creation, conflict checks, atomic writes, and readback verification for all file tools.
 - Add provider-neutral chat request, message, tool, response, vision, and stream types; keep MLX names as deprecated compatibility aliases only.
+- Add one Ghost state store for request lifecycle, conversations, settings, approvals, provider status, and persistence snapshots with state-change subscriptions.
 
 ## 1.1.17 - 2026-08-18
 

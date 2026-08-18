@@ -26,7 +26,6 @@ import {
   GhostContinuation,
   GhostExtensionMessage,
   GhostPersistedState,
-  GhostRequestEvent,
   GhostSettingsUpdate,
   GhostStreamEvent,
   GhostToolArguments,
@@ -35,7 +34,7 @@ import {
   GhostWebviewRequestOptions,
   decodeGhostWebviewMessage
 } from './ghostProtocol'
-import type { GhostRequestStatus, GhostStopReason } from './ghostState'
+import type { GhostRequestStatus } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 import { compactPersistedState, isStoredRecord, StoredGlobalState, StoredWorkspaceState } from './ghostPersistence'
@@ -48,128 +47,35 @@ import {
 } from './ghostApprovalPolicy'
 import { providerStatusKey, toGhostModelMetadata } from './ghostProviderState'
 import type { ProviderStatus, ProviderStatusCache } from './ghostProviderState'
-import { GhostRequestOrchestrator } from './ghostRequestOrchestrator'
 import { createGhostExportData, parseGhostImportState } from './ghostImportExport'
 import { GhostWebviewLifecycle } from './ghostWebviewLifecycle'
+import {
+  createRequestTiming,
+  FailedToolRetry,
+  GhostRequestState,
+  GhostStateStore,
+  PendingToolApproval,
+  RecoveryRecord,
+  StagedEdit,
+  WorkspaceContextSnapshot
+} from './ghostStateStore'
 import { parseTaskPlanMarker } from '../agent/taskPlan'
-import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
+import { parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
 import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
 import { effectiveGhostLogLevel, writeGhostLog } from '../logging/ghostLogger'
-
-interface GhostRequestState {
-  cancellation: vscode.CancellationTokenSource
-  conversationId: string
-  sequence: number
-  codeMode: boolean
-  status: GhostRequestStatus
-  attempt: number
-  startedAt: number
-  lastActivityAt: number
-  timedOut: boolean
-  stopReason?: GhostStopReason
-  stopMessage?: string
-  model: string
-  provider?: GhostProvider
-  outputTokens: number
-  eventLog: GhostRequestEvent[]
-  completionRecord?: CompletionRecord
-  autoAcceptFilePath?: string
-  approvedFilePaths?: Set<string>
-  approveAllFileEdits?: boolean
-  autoAcceptDisabled?: boolean
-  pendingTool?: { toolCallId: string; name: string }
-  timing: RequestTiming
-}
-
-interface RequestTiming {
-  providerStartedAt?: number
-  firstTokenAt?: number
-  toolStartedAt: Map<string, number>
-  toolExecutionMs: number
-  approvalStartedAt: Map<string, number>
-  approvalWaitMs: number
-  verificationStartedAt?: number
-  verificationMs: number
-}
-
-const createRequestTiming = (): RequestTiming => ({
-  toolStartedAt: new Map(),
-  toolExecutionMs: 0,
-  approvalStartedAt: new Map(),
-  approvalWaitMs: 0,
-  verificationMs: 0
-})
-
-interface PendingToolApproval {
-  requestId: string
-  conversationId: string
-  toolCallId: string
-  call: LocalToolCall
-  expectedContent?: string
-  expectedFileExists?: boolean
-  expectedFiles?: Record<string, WorkspaceFileSnapshot>
-  resolve: (approval: GhostToolApproval) => void
-}
-
-interface RecoveryRecord {
-  requestId: string
-  conversationId: string
-  toolCallId: string
-  files: Array<{ path: string; before: WorkspaceFileSnapshot; after: WorkspaceFileSnapshot }>
-  applied: boolean
-}
-
-interface FailedToolRetry {
-  requestId: string
-  conversationId: string
-  call: LocalToolCall
-}
-
-interface StagedEdit {
-  requestId: string
-  conversationId: string
-  toolCallId: string
-  call: LocalToolCall
-  uri: vscode.Uri
-  before: string
-  after: string
-}
-
-interface WorkspaceContextSnapshot {
-  workspaceName: string
-  folders: string[]
-  activeFile?: { name: string; path: string; languageId: string; hasSelection: boolean }
-  openFiles: string[]
-}
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
   private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
 
   private readonly webviewLifecycle = new GhostWebviewLifecycle()
-  private readonly requestOrchestrator = new GhostRequestOrchestrator<GhostRequestState>()
+  private readonly stateStore: GhostStateStore
   private readonly disposables: vscode.Disposable[] = []
-  private readonly pendingApprovals = new Map<string, PendingToolApproval>()
-  private readonly stagedEdits = new Map<string, StagedEdit>()
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
-  private readonly recoveryRecords = new Map<string, RecoveryRecord>()
-  private readonly failedToolRetries = new Map<string, FailedToolRetry>()
-  private readonly sessionApprovedTools = new Set<string>()
-  private sessionApprovedFileEdits = false
-  private workspaceApprovedFileEdits = false
-  private readonly globalState?: vscode.Memento
-  private readonly workspaceState?: vscode.Memento
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
-  private status: GhostViewStatus = 'ready'
-  private controlsStateGeneration = 0
-  private providerStatusCache?: ProviderStatusCache
-  private providerStatusRequest?: { key: string; promise: Promise<ProviderStatus> }
-  private workspaceContextCache?: WorkspaceContextSnapshot
-  private persistedGlobalSnapshot?: string
-  private persistedWorkspaceSnapshot?: string
   private static readonly providerStatusCacheTtlMs = 30_000
 
   private readonly chatHandler: vscode.ChatRequestHandler
@@ -179,12 +85,39 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private get pendingMessages(): GhostExtensionMessage[] { return this.webviewLifecycle.pendingMessages }
   private set pendingMessages(value: GhostExtensionMessage[]) { this.webviewLifecycle.pendingMessages = value }
   private get disposed(): boolean { return this.webviewLifecycle.disposed }
+  private get requestOrchestrator() { return this.stateStore.requestOrchestrator }
+  private get pendingApprovals() { return this.stateStore.pendingApprovals }
+  private get stagedEdits() { return this.stateStore.stagedEdits }
+  private get recoveryRecords() { return this.stateStore.recoveryRecords }
+  private get failedToolRetries() { return this.stateStore.failedToolRetries }
+  private get sessionApprovedTools() { return this.stateStore.sessionApprovedTools }
+  private get sessionApprovedFileEdits() { return this.stateStore.sessionApprovedFileEdits }
+  private set sessionApprovedFileEdits(value: boolean) { this.stateStore.sessionApprovedFileEdits = value }
+  private get workspaceApprovedFileEdits() { return this.stateStore.workspaceApprovedFileEdits }
+  private set workspaceApprovedFileEdits(value: boolean) { this.stateStore.workspaceApprovedFileEdits = value }
+  private get globalState() { return this.stateStore.globalState }
+  private get workspaceState() { return this.stateStore.workspaceState }
+  private get status() { return this.stateStore.status }
+  private set status(value: GhostViewStatus) { this.stateStore.status = value }
+  private get controlsStateGeneration() { return this.stateStore.controlsStateGeneration }
+  private set controlsStateGeneration(value: number) { this.stateStore.controlsStateGeneration = value }
+  private get providerStatusCache() { return this.stateStore.providerStatusCache }
+  private set providerStatusCache(value: ProviderStatusCache | undefined) { this.stateStore.providerStatusCache = value }
+  private get providerStatusRequest() { return this.stateStore.providerStatusRequest }
+  private set providerStatusRequest(value: { key: string; promise: Promise<ProviderStatus> } | undefined) { this.stateStore.providerStatusRequest = value }
+  private get workspaceContextCache() { return this.stateStore.workspaceContextCache }
+  private set workspaceContextCache(value: WorkspaceContextSnapshot | undefined) { this.stateStore.workspaceContextCache = value }
+  private get persistedGlobalSnapshot() { return this.stateStore.persistedGlobalSnapshot }
+  private set persistedGlobalSnapshot(value: string | undefined) { this.stateStore.persistedGlobalSnapshot = value }
+  private get persistedWorkspaceSnapshot() { return this.stateStore.persistedWorkspaceSnapshot }
+  private set persistedWorkspaceSnapshot(value: string | undefined) { this.stateStore.persistedWorkspaceSnapshot = value }
+  private get settings() { return this.stateStore.settings }
   private get requests(): Map<string, GhostRequestState> { return this.requestOrchestrator.requests }
   private get activeRequestByConversation(): Map<string, string> { return this.requestOrchestrator.activeRequestByConversation }
   private get completedRequests(): Set<string> { return this.requestOrchestrator.completedRequests }
 
   private log(level: GhostLogLevel, message: string, details?: unknown): void {
-    const settings = getGhostSettings()
+    const settings = this.settings
     writeGhostLog(level, effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging), message, details)
   }
 
@@ -196,9 +129,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     private readonly extensionUri: vscode.Uri,
     options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento; providerApiKey?: (provider: GhostProvider) => string | undefined } = {}
   ) {
-    this.globalState = options.globalState
-    this.workspaceState = options.workspaceState
-    this.workspaceApprovedFileEdits = this.workspaceState?.get<boolean>('ghost.workspace.approvedFileEdits') === true
+    this.stateStore = new GhostStateStore({
+      settings: getGhostSettings(),
+      globalState: options.globalState,
+      workspaceState: options.workspaceState
+    })
     this.providerApiKey = options.providerApiKey
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
@@ -206,7 +141,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.workspaceContextCache = undefined
       void this.sendControlsState()
     }
-    this.disposables.push(ghostConfig.onDidChange((_settings, event) => {
+    this.disposables.push(ghostConfig.onDidChange((settings, event) => {
+      this.stateStore.updateSettings(settings)
       if (event.affectsConfiguration('ghost')) {
         this.cancelRequests()
       }
@@ -312,7 +248,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.debugLog('request started', { requestId, conversationId, promptLength: prompt.length })
 
     const cancellation = new vscode.CancellationTokenSource()
-    const settings = getGhostSettings()
+    const settings = this.settings
     const modelRole = attachments.some(attachment => attachment.mimeType?.toLowerCase().startsWith('image/'))
       ? 'vision'
       : options.modelRole ?? (options.mode === 'agent' ? 'agent' : 'chat')
@@ -346,6 +282,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.requests.set(requestId, request)
     this.activeRequestByConversation.set(conversationId, requestId)
+    this.stateStore.notify('request')
     this.postStreamEvent(requestId, request, {
       type: 'request-started'
     })
@@ -598,6 +535,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.debugLog('request timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requestOrchestrator.markCompleted(requestId, conversationId)
+      this.stateStore.notify('request')
       cancellation.dispose()
     }
   }
@@ -612,6 +550,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request.stopReason = 'cancelled'
     request.stopMessage = 'The request was cancelled.'
     request.cancellation.cancel()
+    this.stateStore.notify('request')
   }
 
   private disableAutoAccept(requestId: string, conversationId: string): void {
@@ -697,13 +636,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       timedOut: false,
-      model: getGhostSettings().chatModel,
+      model: this.settings.chatModel,
       outputTokens: 0,
       eventLog: [],
       timing: createRequestTiming()
     }
     this.requests.set(requestId, request)
     this.activeRequestByConversation.set(conversationId, requestId)
+    this.stateStore.notify('request')
     this.postStreamEvent(requestId, request, { type: 'request-started' })
 
     try {
@@ -800,6 +740,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.debugLog('tool retry timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requestOrchestrator.markCompleted(requestId, conversationId)
+      this.stateStore.notify('request')
       cancellation.dispose()
     }
   }
@@ -1201,7 +1142,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       : { toolCallId: this.createToolCallId(), name: call.name }
     request.pendingTool = pending
     this.failedToolRetries.set(pending.toolCallId, { requestId, conversationId: request.conversationId, call })
-    const settings = getGhostSettings()
+    const settings = this.settings
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const askedTools = settings.toolAsklist ?? []
     const deniedTools = settings.toolDenylist ?? []
@@ -1297,6 +1238,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         expectedFiles,
         resolve
       })
+      this.stateStore.notify('approval')
     })
   }
 
@@ -1320,6 +1262,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     request.approveAllFileEdits = true
+    this.stateStore.notify('approval')
     for (const pending of [...this.pendingApprovals.values()]) {
       if (pending.requestId === requestId && pending.conversationId === conversationId && isFileEditTool(pending.call.name)) {
         this.decideToolApproval(requestId, conversationId, pending.toolCallId, { decision: 'request' })
@@ -1337,6 +1280,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
       return
     }
+    this.stateStore.notify('approval')
     const request = this.requests.get(requestId)
     if (approval.decision === 'request' && request) {
       request.approveAllFileEdits = true
@@ -1691,7 +1635,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private persistenceEnabled(): boolean {
-    return getGhostSettings().enableConversationPersistence
+    return this.settings.enableConversationPersistence
   }
 
   private async readPersistedState(): Promise<GhostPersistedState> {
@@ -1708,13 +1652,16 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
     })
-    return compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
+    const safeState = compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
+    this.stateStore.setConversationState(safeState)
+    return safeState
   }
 
   private async sendPersistedState(): Promise<void> {
     const state = this.persistenceEnabled()
       ? await this.readPersistedState()
       : { schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION, conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
+    this.stateStore.setConversationState(state)
     this.postMessage({
       source: 'ghost-extension',
       version: GHOST_WEBVIEW_PROTOCOL_VERSION,
@@ -1724,6 +1671,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async persistState(state: GhostPersistedState): Promise<void> {
+    this.stateStore.setConversationState(state)
     if (!this.globalState || !this.workspaceState) {
       return
     }
@@ -1732,6 +1680,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       await this.workspaceState.update(GhostViewProvider.workspaceStateKey, undefined)
       this.persistedGlobalSnapshot = undefined
       this.persistedWorkspaceSnapshot = undefined
+      this.stateStore.notify('persistence')
       return
     }
     const safeState = compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
@@ -1759,6 +1708,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.persistedWorkspaceSnapshot = workspaceSnapshot
     }
     await Promise.all(writes)
+    this.stateStore.setConversationState(safeState)
+    this.stateStore.notify('persistence')
   }
 
   private async clearPersistedState(): Promise<void> {
@@ -1768,6 +1719,16 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     ])
     this.persistedGlobalSnapshot = undefined
     this.persistedWorkspaceSnapshot = undefined
+    this.stateStore.setConversationState({
+      schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
+      conversations: [],
+      activeConversationId: '',
+      promptHistory: [],
+      presets: [],
+      showReasoning: false,
+      preferences: {}
+    })
+    this.stateStore.notify('persistence')
   }
 
   private async importState(): Promise<void> {
@@ -1844,6 +1805,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     try {
       const result = await promise
       this.providerStatusCache = { ...result, key, checkedAt: Date.now() }
+      this.stateStore.notify('provider')
       return result
     } finally {
       if (this.providerStatusRequest?.promise === promise) {
@@ -1887,7 +1849,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async sendControlsState(forceProviderRefresh = false): Promise<void> {
     const generation = ++this.controlsStateGeneration
-    const settings = getGhostSettings()
+    const settings = this.settings
     const providerStatus = await this.getProviderStatus(settings, forceProviderRefresh)
     if (this.disposed || generation !== this.controlsStateGeneration) {
       return
@@ -1964,7 +1926,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async testProvider(): Promise<void> {
-    const settings = getGhostSettings()
+    const settings = this.settings
     const providerStatus = await this.getProviderStatus(settings, true)
     if (providerStatus.connection === 'online') {
       await vscode.window.showInformationMessage(`${settings.provider} provider is reachable.`)
@@ -1976,7 +1938,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async updateSettings(update: GhostSettingsUpdate): Promise<void> {
     const target = update.workspaceOnly ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global
-    const settingsBeforeUpdate = getGhostSettings()
+    const settingsBeforeUpdate = this.settings
     const sameStringList = (left: string[], right: string[] | undefined): boolean => {
       const rightSet = new Set(right ?? [])
       return left.length === rightSet.size && left.every(item => rightSet.has(item))
@@ -2114,7 +2076,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       await ghostConfig.update('mode', update.mode, target)
     }
     if (update.autoAcceptScope) {
-      if (update.autoAcceptScope !== 'confirm' && getGhostSettings().autoAcceptScope !== update.autoAcceptScope) {
+      if (update.autoAcceptScope !== 'confirm' && this.settings.autoAcceptScope !== update.autoAcceptScope) {
         const choice = await vscode.window.showWarningMessage(
           `Auto-accept can change workspace files without asking. Scope: ${update.autoAcceptScope}. Terminal and other dangerous tools still require approval.`,
           { modal: true },
@@ -2166,7 +2128,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   async export(state?: GhostPersistedState): Promise<void> {
-    const settings = getGhostSettings()
+    const settings = this.settings
     const defaultUri = vscode.workspace.workspaceFolders?.[0]
       ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ghost-export.json')
       : undefined
@@ -2197,11 +2159,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     for (const staged of this.stagedEdits.values()) {
       void this.restoreStagedEdit(staged)
     }
-    this.stagedEdits.clear()
-    this.recoveryRecords.clear()
-    this.failedToolRetries.clear()
-    this.sessionApprovedTools.clear()
-    this.sessionApprovedFileEdits = false
+    this.stateStore.clearTransientState()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
   }
