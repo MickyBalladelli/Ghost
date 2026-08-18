@@ -14,14 +14,14 @@ Ghost currently uses:
 
 ```json
 {
-  "name": "ghost",
-  "publisher": "ghost",
-  "version": "1.0.25",
+  "name": "ghost-ai-coding-assistant",
+  "publisher": "MickyBalladelli",
+  "version": "1.1.19",
   "icon": "icon.png"
 }
 ```
 
-The publisher ID must belong to you. The Marketplace extension ID is `publisher.name`, so these values produce `ghost.ghost`. If `ghost` is unavailable, choose a unique publisher ID and update `package.json`.
+The Marketplace extension ID is `publisher.name`, so the current ID is `MickyBalladelli.ghost-ai-coding-assistant`. Keep the publisher and name aligned with the Marketplace item.
 
 Before publishing, check that:
 
@@ -61,15 +61,15 @@ Microsoft says global Azure DevOps PATs retire on December 1, 2026. For long-ter
 ```bash
 npm install --global @vscode/vsce
 vsce --version
-vsce login ghost
+vsce login MickyBalladelli
 ```
 
-Replace `ghost` with the actual publisher ID if it changed. Paste the PAT when prompted.
+Paste the PAT when prompted. Use the current publisher ID from `package.json`; do not log in as the extension name.
 
 For automation, use a protected secret instead:
 
 ```bash
-VSCE_PAT="$YOUR_VSCE_PAT" vsce publish
+VSCE_PAT="$YOUR_VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
 ```
 
 ## 5. Build Ghost
@@ -77,26 +77,30 @@ VSCE_PAT="$YOUR_VSCE_PAT" vsce publish
 From the repository root:
 
 ```bash
-npm install
-npm run vscode:prepublish
+npm ci
+npm run package
 ```
 
-`vscode:prepublish` compiles the TypeScript extension output.
+`npm run package` compiles the TypeScript extension output and creates a versioned VSIX.
 
-## 6. Package and test the VSIX
-
-Create the installable package:
+Check release versions before installing or publishing:
 
 ```bash
-vsce package
+npm run release:check
 ```
 
-This creates a file such as `ghost-1.0.25.vsix`.
+## 6. Install and test the VSIX
+
+The package script creates:
+
+```bash
+ghost-ai-coding-assistant-1.1.19.vsix
+```
 
 Install it locally:
 
 ```bash
-code --install-extension ./ghost-1.0.25.vsix
+code --install-extension ./ghost-ai-coding-assistant-1.1.19.vsix --force
 ```
 
 Verify the following before publishing:
@@ -117,29 +121,16 @@ Verify the following before publishing:
 
 ## 7. Publish the first release
 
-After the local VSIX check succeeds:
+After the local VSIX check succeeds, publish the exact artifact:
 
 ```bash
-vsce publish
+npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
 ```
 
-Or package and publish separately:
+For a logged-in local publisher, log in once with `MickyBalladelli` and run the same command. In CI, provide `VSCE_PAT` as a protected secret. The Marketplace item is:
 
 ```bash
-vsce package
-vsce publish
-```
-
-The Marketplace URL has this form:
-
-```text
-https://marketplace.visualstudio.com/items?itemName=publisher.name
-```
-
-With the current manifest values, it is:
-
-```text
-https://marketplace.visualstudio.com/items?itemName=ghost.ghost
+https://marketplace.visualstudio.com/items?itemName=MickyBalladelli.ghost-ai-coding-assistant
 ```
 
 ## 8. Publish updates
@@ -149,8 +140,9 @@ Every Marketplace release needs a new version:
 ```bash
 npm version patch --no-git-tag-version
 npm install --package-lock-only
-npm run vscode:prepublish
-vsce publish
+npm run package
+npm run release:check
+npx --no-install vsce publish --packagePath "./ghost-ai-coding-assistant-$(node -p \"require('./package.json').version\").vsix"
 ```
 
 Use `patch` for bug fixes, `minor` for backwards-compatible features, and `major` for breaking changes:
@@ -161,20 +153,24 @@ npm version minor --no-git-tag-version
 npm version major --no-git-tag-version
 ```
 
-Check both `package.json` and `package-lock.json` before committing. `vsce` can also increment and publish in one command:
+Check both `package.json` and `package-lock.json` before committing. Bump the version before packaging; do not reuse a published version.
 
 ```bash
-vsce publish patch
+npm version minor --no-git-tag-version
+npm install --package-lock-only
+npm run package
+npm run release:check
+npx --no-install vsce publish --packagePath "./ghost-ai-coding-assistant-$(node -p \"require('./package.json').version\").vsix"
 ```
 
 ## 9. Tag the release
 
-Replace `1.0.25` with the actual release version:
+Replace `1.1.19` with the actual release version:
 
 ```bash
-git add package.json package-lock.json README.md PUBLISH.md
-git commit -m "Publish Ghost 1.0.25"
-git tag v1.0.25
+git add package.json package-lock.json CHANGELOG.md README.md PUBLISH.md docs
+git commit -m "Release Ghost 1.1.19"
+git tag v1.1.19
 git push origin main --tags
 ```
 
@@ -186,8 +182,8 @@ Typical CI commands:
 
 ```bash
 npm ci
-npm run vscode:prepublish
-VSCE_PAT="$VSCE_PAT" vsce publish
+npm run package
+VSCE_PAT="$VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
 ```
 
 Use a protected release branch or manual approval before publishing. Prefer identity-based publishing as PAT retirement approaches.

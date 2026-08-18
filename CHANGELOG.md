@@ -14,6 +14,22 @@ All notable changes to this extension are documented here.
 - Expand CI with VS Code host tests on Linux, macOS, and Windows, plus VSIX packaging, install smoke testing, and artifact upload.
 - Add dependency security auditing, grouped weekly Dependabot updates, and review policy for compiler, provider, packaging, and test tooling dependencies.
 - Add named regression fixtures for malformed shader edits, missing files, empty provider output, failed applies, truncated tool arguments, and repeated edits.
+- Expand architecture documentation with state ownership, request/approval/provider sequence diagrams, persistence schema, and failure recovery paths.
+- Add provider adapter documentation for capabilities, request builders, streaming, errors, authentication, and new provider integration.
+- Add tool protocol documentation for schemas, validation, approvals, retries, truncation, edits, transactions, and verification.
+- Add release documentation covering versioning, changelog updates, checks, packaging, VSIX smoke tests, publishing, and rollback.
+- Update README with current model profiles, provider capabilities, tool limits, approval scopes, persistence/privacy behavior, and failed-edit troubleshooting.
+- Link the Ollama parameter guide from README, VS Code settings, and the Ghost settings panel, with provider-specific generation mappings.
+- Add a user FAQ for model setup, provider URLs, images, auto-accept, tool failures, context limits, and disk usage.
+- Add a generated configuration reference and drift check for package.json and src/config.ts defaults.
+- Refresh PUBLISH.md with the current extension identity, Marketplace ID, versioned artifact, and release commands.
+- Make local VSIX build and publish helpers derive the artifact name and version from package.json.
+- Add a release consistency check for package metadata, README, changelog, and embedded VSIX manifests.
+- Archive old root VSIX artifacts before package builds so release outputs do not accumulate.
+- Mark the original TODO1 checklist as historical and move it to `archives/TODO1-historical.md`.
+- Add editor and line-ending rules, plus ignore coverage for generated output, logs, caches, secrets, archives, and local model files.
+- Add dependency review automation and a weekly, monthly, quarterly, and security-update review cadence.
+- Add GitHub issue templates for provider bugs, failed edits, security reports, and performance reports.
 - Reuse visible message elements during refreshes and centralize generated markdown markup through safe DOM fragments.
 - Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
 - Add shared provider HTTP transport diagnostics with keep-alive agents, timeout, abort, and retry handling for local and profiled providers.

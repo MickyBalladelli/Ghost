@@ -8,9 +8,9 @@ Official references:
 - [Ollama chat API](https://docs.ollama.com/api/chat)
 - [Ollama OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)
 
-## Default coding profile
+## Ghost generation profiles
 
-These are Ghost's defaults for reliable coding and tool use:
+Ghost's normal generation defaults are:
 
 ```text
 temperature=0.3
@@ -21,7 +21,20 @@ presence_penalty=0
 repeat_penalty=1.05
 ```
 
-This profile favors predictable tool calls and syntactically correct code while keeping enough variation for useful answers.
+The built-in `coding` profile is more deterministic and uses:
+
+```text
+temperature=0.2
+top_p=0.9
+top_k=20
+min_p=0.05
+presence_penalty=0
+repeat_penalty=1.1
+max_context_tokens=16384
+max_tokens=2048
+```
+
+`balanced` keeps the normal sampling values and uses `max_context_tokens=8192` and `max_tokens=1024`. `creative` uses `temperature=0.8`, `top_p=0.95`, `top_k=40`, `min_p=0.02`, `repeat_penalty=1.02`, `max_context_tokens=8192`, and `max_tokens=2048`. Select a profile with `ghost.modelProfile`.
 
 ## Ghost settings
 
@@ -59,6 +72,24 @@ For coding, keep presence penalty at `0`. Code needs to repeat names, keywords, 
 Top K, Top P, and Min P overlap. Start with the default profile and change one value at a time. A low temperature plus very low Top P, Top K, and Min P can make output too rigid or incomplete.
 
 ## Provider behavior
+
+Ghost only sends a setting when the selected request format supports it. This is the complete generation mapping:
+
+| Ghost setting | Ollama | MLX/VLM | OpenAI-compatible chat | Anthropic | Gemini | Custom HTTP |
+| --- | --- | --- | --- | --- | --- | --- |
+| `temperature` | `temperature` | `temperature` | `temperature` | `temperature` | `temperature` | Template value `temperature` |
+| `topP` | `top_p` | `top_p` | `top_p` | `top_p` | `topP` | Template value `topP` |
+| `topK` | `top_k` | Not sent | Not sent | Not sent | Not sent | Not available in template |
+| `minP` | `min_p` | Not sent | Not sent | Not sent | Not sent | Not available in template |
+| `presencePenalty` | `presence_penalty` | `presence_penalty` | `presence_penalty` | Not sent | Not sent | Not available in template |
+| `repeatPenalty` | `repeat_penalty` | Not sent | Not sent | Not sent | Not sent | Not available in template |
+| `seed` | `seed` | `seed` | `seed` | Not sent | `seed` | Template value `seed` |
+| `stopSequences` | `stop` | `stop` | `stop` | `stop_sequences` | `stopSequences` | Template value `stop` |
+| `contextWindow` | `num_ctx` | Not sent | Not sent | Not sent | Not sent | Template value `contextWindow` |
+| `grammar` | `grammar` | `grammar` | Not sent | Not sent | Not sent | Template value `grammar` |
+| response output limit | `num_predict` | `max_tokens` | `max_tokens` | `max_tokens` | `maxOutputTokens` | Template value `maxTokens` |
+
+The custom HTTP provider sends only the fields included in `ghost.openaiCustomRequestTemplate`; its template receives the values named above. The default template includes model, messages, stream, temperature, top P, and max tokens only. Server support can still vary, especially for OpenAI-compatible profiles.
 
 ### Native Ollama
 

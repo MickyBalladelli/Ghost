@@ -1,0 +1,47 @@
+name: Performance report
+description: Report slow startup, provider latency, context preparation, streaming, tools, or UI performance.
+title: "[Performance] "
+labels:
+  - performance
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove secrets, private paths, workspace code, and personal data from diagnostics before posting.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions and platform
+      description: Ghost version, VS Code version, OS, provider/server version, and model.
+    validations:
+      required: true
+  - type: input
+    id: workload
+    attributes:
+      label: Workload
+      description: Request type, approximate files/context size, attachments, and tool rounds.
+      placeholder: Agent edit, 3 files, 12k context tokens, 4 tool rounds
+    validations:
+      required: true
+  - type: textarea
+    id: timings
+    attributes:
+      label: Timings and symptoms
+      description: Include approximate time to first token, total response time, tool latency, CPU/GPU, and memory if known.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Include compact provider or Ghost timing details without private data.

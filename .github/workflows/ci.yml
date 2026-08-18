@@ -30,6 +30,19 @@ jobs:
       - run: npm ci
       - run: npm run security:audit
 
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
   extension-host:
     name: VS Code host tests (${{ matrix.os }})
     needs: fast-tests
@@ -75,6 +88,7 @@ jobs:
         shell: bash
         run: |
           npm run package
+          npm run release:check
           VSIX_PATH="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -name '*.vsix' -print -quit)"
           test -n "$VSIX_PATH"
           echo "path=$VSIX_PATH" >> "$GITHUB_OUTPUT"

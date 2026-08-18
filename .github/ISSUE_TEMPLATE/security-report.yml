@@ -1,0 +1,35 @@
+name: Security report
+description: Report a security hardening concern or suspected vulnerability.
+title: "[Security] "
+labels:
+  - security
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose exploitable details, secrets, private URLs, or proof-of-concept payloads in this public issue. Use GitHub's private vulnerability report link instead: https://github.com/MickyBalladelli/Ghost/security/advisories/new
+  - type: dropdown
+    id: public_safe
+    attributes:
+      label: Is this safe to discuss publicly?
+      options:
+        - Yes, this is a non-sensitive hardening request
+        - No, I will use the private vulnerability report
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Safe summary
+      description: Describe the affected area without exploit steps or sensitive data.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Affected version or commit
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested mitigation
+      description: Optional safe remediation idea. Do not include a public exploit.

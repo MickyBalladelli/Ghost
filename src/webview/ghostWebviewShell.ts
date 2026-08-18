@@ -122,6 +122,7 @@ const createSettingsContent = (): HTMLDivElement => {
     settingRow('Max context tokens', input('max-context', 'number', { min: 1, step: 256, value: 8192 }), 'max-context'),
     settingRow('Response length', select('response-length', [option('short', 'Short'), option('balanced', 'Balanced'), option('long', 'Long'), option('unlimited', 'Unlimited')]), 'response-length'),
     settingRow('Workflow mode', select('mode', [option('ask', 'Ask'), option('edit', 'Edit'), option('agent', 'Agent — implement changes'), option('explain', 'Explain'), option('inline', 'Inline / Completion')]), 'mode'),
+    [createElement('p', { className: 'settings-help' }, ['Provider parameter details: ', createElement('a', { href: 'https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md', target: '_blank', rel: 'noreferrer' }, ['open the parameter guide'])])],
     [button('restore-generation-defaults', 'Restore generation defaults', { className: 'secondary settings-inline-action' })]
   )
 

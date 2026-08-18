@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.1.19",
+  "version": "1.1.20",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -435,7 +435,8 @@
             "Use another OpenAI-compatible server."
           ],
           "default": "ollama",
-          "description": "Ghost model provider."
+          "description": "Ghost model provider.",
+          "markdownDescription": "Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses."
         },
         "ghost.mlxUrl": {
           "type": "string",
@@ -1361,7 +1362,9 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npm run vscode:prepublish && vsce package",
+    "package": "npm run vscode:prepublish && node ./scripts/archiveVsix.js && vsce package",
+    "docs:config": "node ./scripts/generateConfigurationReference.js",
+    "release:check": "node ./scripts/checkReleaseConsistency.js",
     "security:audit": "npm audit --audit-level=high",
     "test:fast": "node ./out/test/runFastTests.js",
     "test:host": "node ./out/test/runTest.js",

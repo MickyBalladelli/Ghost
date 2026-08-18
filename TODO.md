@@ -163,22 +163,22 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## P2 — docs and release hygiene
 
-- [ ] Expand `docs/architecture.md` with state ownership, request sequence diagrams, approval sequence, provider sequence, persistence schema, and failure recovery.
-- [ ] Add `docs/provider-adapter.md` describing capabilities, request builders, streaming, errors, authentication, and how to add a provider.
-- [ ] Add `docs/tool-protocol.md` describing schemas, validation, approval, retries, truncation, edits, and verification.
-- [ ] Add `docs/release.md` with version, changelog, compile, package, install, smoke-test, publish, and rollback steps.
-- [ ] Update `README.md` with the current stable coding profile, provider capability matrix, tool limits, approval scopes, persistence/privacy behavior, and troubleshooting for failed edits.
-- [ ] Link `OLLAMA_PARAMETERS.md` from the settings and README. Document which settings each provider really uses.
-- [ ] Add a user FAQ for model setup, OpenAI-compatible URLs, MLX/VLM images, auto-accept, tool failures, context limits, and disk usage.
-- [ ] Add configuration reference generated from `package.json` so descriptions/defaults cannot drift from `src/config.ts`.
-- [ ] Fix stale examples in `PUBLISH.md` (name, publisher, version, Marketplace ID, and old commands).
-- [ ] Replace the hardcoded `ghost-1.0.14.vsix` package output with the current package version.
-- [ ] Add a release check that package.json, package-lock.json, changelog, README, and VSIX version agree.
-- [ ] Keep only intentional release artifacts. Move old local VSIX files to `./Trash` or stop tracking them; do not let every build grow the repository.
-- [ ] Decide whether `archives/TODO1.md` is historical. Archive it clearly or merge useful items into this file.
-- [ ] Add `.editorconfig` and audit `.gitignore`, `.vscodeignore`, line endings, generated output, logs, caches, and local model files.
-- [ ] Add dependency update automation and a documented review cadence.
-- [ ] Add issue templates for provider bugs, failed edits, security reports, and performance reports.
+- [x] Expand `docs/architecture.md` with state ownership, request sequence diagrams, approval sequence, provider sequence, persistence schema, and failure recovery.
+- [x] Add `docs/provider-adapter.md` describing capabilities, request builders, streaming, errors, authentication, and how to add a provider.
+- [x] Add `docs/tool-protocol.md` describing schemas, validation, approval, retries, truncation, edits, and verification.
+- [x] Add `docs/release.md` with version, changelog, compile, package, install, smoke-test, publish, and rollback steps.
+- [x] Update `README.md` with the current stable coding profile, provider capability matrix, tool limits, approval scopes, persistence/privacy behavior, and troubleshooting for failed edits.
+- [x] Link `OLLAMA_PARAMETERS.md` from the settings and README. Document which settings each provider really uses.
+- [x] Add a user FAQ for model setup, OpenAI-compatible URLs, MLX/VLM images, auto-accept, tool failures, context limits, and disk usage.
+- [x] Add configuration reference generated from `package.json` so descriptions/defaults cannot drift from `src/config.ts`.
+- [x] Fix stale examples in `PUBLISH.md` (name, publisher, version, Marketplace ID, and old commands).
+- [x] Replace the hardcoded `ghost-1.0.14.vsix` package output with the current package version.
+- [x] Add a release check that package.json, package-lock.json, changelog, README, and VSIX version agree.
+- [x] Keep only intentional release artifacts. Move old local VSIX files to `./Trash` or stop tracking them; do not let every build grow the repository.
+- [x] Decide whether `archives/TODO1.md` is historical. Archived as `archives/TODO1-historical.md`; active work remains in `TODO.md`.
+- [x] Add `.editorconfig` and audit `.gitignore`, `.vscodeignore`, line endings, generated output, logs, caches, and local model files.
+- [x] Add dependency update automation and a documented review cadence.
+- [x] Add issue templates for provider bugs, failed edits, security reports, and performance reports.
 
 ## P3 — future product capabilities
 

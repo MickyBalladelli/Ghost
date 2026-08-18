@@ -6,7 +6,16 @@ Ghost keeps `package-lock.json` committed. Dependency changes must update the lo
 
 - Dependabot opens grouped npm updates every Monday.
 - CI runs `npm run security:audit` on every push and pull request.
+- Pull requests run GitHub's dependency review check before merge.
 - High and critical advisories fail CI. A temporary exception needs a tracked issue, an owner, an expiry date, and a short mitigation note.
+
+## Review cadence
+
+- Triage Dependabot pull requests every Monday. Keep one focused update per dependency group and close duplicates after checking the changelog and advisory record.
+- Review provider transport, compiler, VS Code API types, packaging, and test-tool updates before merging. Confirm the lockfile changes contain only the intended packages.
+- Perform a monthly dependency inventory: remove unused packages, check direct dependencies for newer supported majors, and confirm the VSIX does not include development-only files.
+- Review major-version upgrades separately each quarter. Record compatibility notes, required migrations, CI evidence, and a rollback version in the changelog or release notes.
+- Treat security advisories outside the cadence: assess them within one business day and ship a fix or documented mitigation within three business days when practical.
 
 ## Review rules
 

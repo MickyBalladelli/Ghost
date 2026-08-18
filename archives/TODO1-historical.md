@@ -1,5 +1,7 @@
 # TODO: Build "Ghost" VS Code Extension
 
+> Historical checklist retained for project history. Active work belongs in [`TODO.md`](../TODO.md); do not use this file as the current task list.
+
 **Extension Name:** Ghost (`ghost`)
 **Objective:** Create a privacy-first, fully local AI coding assistant for Visual Studio Code that provides inline code completions, a sidebar chat agent, workspace file context, and agentic tool execution (terminal commands & file editing) using Ollama / vLLM.
 

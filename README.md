@@ -14,6 +14,8 @@
 
 Ghost runs chat, agent tools, and inline completion against Ollama, MLX/VLM, or another OpenAI-compatible server. Your code stays on your machine when you use a local provider.
 
+Current release: `1.1.19`
+
 ## Highlights
 
 - Local chat through the Ghost view and the native `@local` chat participant.
@@ -22,7 +24,8 @@ Ghost runs chat, agent tools, and inline completion against Ollama, MLX/VLM, or 
 - Inline code completion with a fast Fill-in-the-Middle model.
 - Workspace context from the workspace, folders, active editor, selection, and open files.
 - Text-file attachments for focused requests.
-- Five workspace tools with allowlists, denylists, approval prompts, and visible progress.
+- Eleven workspace tools with allowlists, denylists, approval prompts, and visible progress.
+- Stable Coding, Balanced, and Creative model profiles with provider capability reporting.
 - Source-editor edit previews with Accept/Reject controls, selected-hunk approval, and restore actions for applied edits.
 - Ask, Edit, Agent, Explain, and Inline workflow modes.
 - Conversation history popup, prompt history, reusable presets, import/export, retry, regenerate, and cancellation.
@@ -94,16 +97,24 @@ Ghost exposes these tools to the agent:
 | Tool | What it does | Approval |
 | --- | --- | --- |
 | `ghost_read_file` | Reads a text file inside the current workspace. | Safe workspace tool |
+| `ghost_search_workspace` | Searches workspace text with a query and optional glob. | Safe workspace tool |
+| `ghost_get_diagnostics` | Reads VS Code diagnostics for the workspace or one file. | Safe workspace tool |
+| `ghost_git_context` | Reads bounded Git status, diff, and recent commit context. | Safe workspace tool |
+| `ghost_update_task_plan` | Updates the visible request task plan. | Conversation state |
+| `ghost_record_completion` | Records a completed request result. | Conversation state |
 | `ghost_write_file` | Creates or replaces a text file. | Required |
 | `ghost_apply_edit` | Applies reviewed, line-based edits. | Required |
+| `ghost_apply_transaction` | Applies several reviewed edits as one transaction. | Required |
 | `ghost_run_terminal_command` | Runs a shell command in the workspace. | Required |
 | `ghost_list_directory` | Lists files and folders under a workspace path. | Safe workspace tool |
 
 The **Context** popup shows the tools currently available to the request. The **Settings** panel has clear permission dialogs for tools and terminal environment variables. Each item can be set to **Allow**, **Ask**, or **Deny**. Deny always wins.
 
-Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Ghost also stops repeated edits to the same file and stops after eight successful edits to one file to prevent edit loops.
+Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Repeated reads reuse the existing result when possible. The edit guard stops repeated, inverse, and overlapping edits that look like an edit loop.
 
-Ghost allows up to 128 tool calls per batch. It asks whether to continue after that limit. The counter includes reads, edits, terminal commands, and directory listings.
+Ghost allows up to 128 tool rounds per request. It asks whether to continue after that limit. A request also stops at 24 files, 4,000 changed lines, 1 MB of changed bytes, 32 terminal commands, or 64,000 model tokens. The counter includes reads, edits, terminal commands, directory listings, and state tools.
+
+The main safety limits are 400 lines or 12,000 characters per file read, 1 MB for a safe file read, 200 search or diagnostic results, 50 edit hunks, 100,000 replacement characters, 10,000 edit-context characters, 120 seconds per terminal command, and 200,000 terminal-output characters. Ghost truncates tool results before they enter model context.
 
 Tool progress is compact by default: Ghost says what it is reading, editing, or executing. Enable **Show verbose tool details** in Settings to show raw arguments, results, timings, and previews.
 
@@ -129,7 +140,31 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
 | `ghost.enableInlineCompletions` | `true` | Enable or disable inline code completion. |
 
+### Stable coding profile
+
+Set `ghost.modelProfile` to `coding`, `balanced`, or `creative`. A profile overrides the matching generation settings for the request. Leave it empty to use the individual settings below. Profiles can be selected independently for chat, agent, vision, and autocomplete models.
+
+| Profile | Temperature | Top P | Top K | Min P | Repeat penalty | Context | Output |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `coding` | `0.2` | `0.9` | `20` | `0.05` | `1.1` | `16,384` | `2,048` |
+| `balanced` | `0.3` | `0.9` | `20` | `0.05` | `1.05` | `8,192` | `1,024` |
+| `creative` | `0.8` | `0.95` | `40` | `0.02` | `1.02` | `8,192` | `2,048` |
+
+### Provider capability matrix
+
+Ghost adapts requests to the selected provider. Streaming is supported by all built-in adapters. FIM is available only when the configured client exposes a FIM endpoint.
+
+| Provider | Tools | JSON mode | Vision | FIM | Sampling controls |
+| --- | --- | --- | --- | --- | --- |
+| Ollama | Yes | Yes | Yes | Client-dependent | Temperature, Top P, Top K, Min P, presence penalty, repeat penalty |
+| MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
+| OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
+
+OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+
 ### Response settings
+
+For parameter names, provider differences, and tuning examples, see [OLLAMA_PARAMETERS.md](OLLAMA_PARAMETERS.md).
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
@@ -153,6 +188,8 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.terminalEnvironmentAllowlist` | Safe common variables | Environment variables passed to approved terminal commands without asking. |
 | `ghost.terminalEnvironmentAsklist` | `[]` | Environment variables passed only after terminal approval. |
 | `ghost.fileEditApproval` | `confirm` | Ask before each file edit, or use `auto` to apply file edits automatically. |
+
+File-edit auto-accept scopes are `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, and `always`. `one-edit` accepts one edit; `current-file` stays on the first file; `request` lasts for the current request; `session` lasts for the Ghost session; `workspace` applies to this workspace; `always` applies file edits without asking. Terminal and other dangerous tools still require their own approval. Deny rules always win.
 
 ### Persistence and diagnostics
 
@@ -184,9 +221,46 @@ The panel also manages prompt presets. Saving a preset closes the panel. When co
 
 ### Persistence and privacy
 
-`ghost.enableConversationPersistence` is off by default. When enabled, Ghost saves conversations and preferences in VS Code storage. State is schema-versioned and common credentials are redacted before storage, export, diagnostics, and display.
+`ghost.enableConversationPersistence` is off by default. When enabled, Ghost saves conversations and preferences in VS Code storage, not in the project files. Global state stores prompt history, presets, display preferences, and provider UI preferences. Workspace state stores conversations and the active conversation. State is schema-versioned, bounded, compacted, and migrated; unchanged autosave writes are skipped. Common credentials and secrets are redacted before storage, export, diagnostics, display, and clipboard copies.
 
 Ghost has no telemetry service. Requests are sent only to the provider URL selected in Ghost. If you use a remote OpenAI-compatible or MLX endpoint, the interface marks the connection as external.
+
+## FAQ
+
+### Which model should I install?
+
+For local Ollama, install `qwen2.5-coder:7b` for chat and agent work and `qwen2.5-coder:1.5b` for inline completion:
+
+```bash
+ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5-coder:1.5b
+```
+
+Choose the `coding` profile for predictable edits, `balanced` for the normal defaults, or `creative` for varied explanations. See [OLLAMA_PARAMETERS.md](OLLAMA_PARAMETERS.md) for generation tuning.
+
+### What URL should I use?
+
+Use the server base URL for Ollama, normally `http://localhost:11434`. Use the MLX/VLM server URL, normally `http://localhost:8000`. OpenAI-compatible servers usually use a URL ending in `/v1`, such as `http://localhost:8001/v1`; do not add `/v1` twice. The selected compatibility profile may choose a different path for Anthropic, Gemini, Azure OpenAI, or a custom server.
+
+### Can I send images?
+
+Yes, attach an image when the selected provider reports vision support. The built-in MLX/VLM provider is the vision path. Ghost accepts up to 8 attachments, with images limited to 700 KB each. Images are sent with the request and are not saved in conversation history. Providers without vision support reject or omit image context; switch provider or remove the image.
+
+### What does auto-accept do?
+
+Auto-accept controls file edits only. `one-edit`, `current-file`, `request`, `session`, `workspace`, and `always` widen the approval scope; `confirm` asks every time. Terminal commands and other dangerous tools still need approval. Deny rules override allow and ask rules. Use the emergency stop or change the scope back to `confirm` if Ghost starts making unwanted edits.
+
+### What should I do when a tool fails?
+
+Read the error detail and retry with the corrected argument. For a missing file, list the workspace and use the real path. For a failed edit, read the current file again and send smaller, non-overlapping hunks. For a blocked command, check tool permissions and terminal environment permissions. Rejected or failed changes are not silently treated as successful.
+
+### Why did Ghost say the context is full?
+
+Lower `ghost.maxContextTokens`, choose less automatic context, remove unused attachments, or start a new conversation. Ghost compacts older results and keeps the current request, files, diffs, and errors when possible. Large files, tool output, and long history still consume the model context; the provider may also have a smaller native limit.
+
+### Where does Ghost use disk space?
+
+With persistence off, conversations stay in memory. With persistence on, Ghost stores bounded conversations, prompt history, presets, and preferences in VS Code storage, not in project files. Reset or clear the interface to remove Ghost state. Provider model files are managed separately by Ollama, MLX, or the remote server; removing Ghost history does not remove downloaded models. Attachments are request data and are not retained in history.
 
 ## Commands
 
@@ -230,6 +304,10 @@ Check the tool allowlist and denylist in **Settings** or VS Code settings. File 
 
 Check the API mode and endpoint suffix. Most OpenAI-compatible servers use `/v1`; Ollama normally uses its base URL without `/v1`.
 
+### A file edit fails
+
+Read the file again before retrying. Make sure the path is inside the open workspace and that unsaved editor changes are accounted for. An edit can fail when its old text, expected content, hash, line range, or context is stale; when hunks overlap or are malformed; when it is a no-op; or when the edit-loop guard sees a repeated or inverse change. Retry with a fresh read and smaller, non-overlapping hunks. For a staged edit, use **Open Diff**, then **Accept Ghost edit**, **Reject Ghost edit**, or **Restore**. A failed transaction rolls back its changes; inspect the first reported conflict before retrying. If the tool is blocked, check the allowlist, asklist, denylist, and approval scope.
+
 ## Development
 
 ```bash
@@ -243,15 +321,17 @@ Create and install a local VSIX with:
 ./create-vsix.sh
 ```
 
-The script increments the patch version, compiles Ghost, creates `ghost-${version}.vsix`, and installs it in VS Code. Publish an already-created matching VSIX with:
+The script increments the patch version, compiles Ghost, creates `<package-name>-<version>.vsix`, and installs it in VS Code. Publish an already-created matching VSIX with:
 
 ```bash
 ./publish.sh
 ```
 
-`publish.sh` reads the version from `package.json`, requires `ghost-${version}.vsix`, and publishes that exact package through `vsce`.
+`publish.sh` reads the package name and version from `package.json`, requires the matching `<package-name>-<version>.vsix`, and publishes that exact package through `vsce`.
 
-Run `npm test` in a VS Code-capable environment for the extension-host test suite. See [docs/architecture.md](docs/architecture.md) for the extension host, webview, providers, persistence, tools, and approval flow.
+Before a release, run `npm run release:check` after packaging. It checks the package and lockfile versions, the README marker, the latest changelog heading, and every root VSIX artifact.
+
+Run the fast suite with `npm run test:fast`. Run the VS Code extension-host suite with `npm run test:host` in a VS Code-capable environment. `npm test` compiles and runs both suites. See [docs/architecture.md](docs/architecture.md) for the extension host, webview, providers, persistence, tools, and approval flow.
 
 ## Project structure
 
@@ -273,3 +353,7 @@ MIT. See [LICENSE](LICENSE).
 
 - [Issues and feature requests](https://github.com/MickyBalladelli/Ghost/issues)
 - [Architecture guide](docs/architecture.md)
+- [Provider adapter guide](docs/provider-adapter.md)
+- [Tool protocol guide](docs/tool-protocol.md)
+- [Release guide](docs/release.md)
+- [Configuration reference](docs/configuration.md)
