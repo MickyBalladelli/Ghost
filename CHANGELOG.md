@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.28 - 2026-08-18
+
+- Make the initial model test a tool-free chat check without a completion-record warning.
+
 ## 1.1.27 - 2026-08-18
 
 - Keep Stop and Send inside the prompt composer on narrow panels.

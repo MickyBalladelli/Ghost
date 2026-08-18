@@ -2770,7 +2770,7 @@ const applySlashCommand = (prompt: string): string | undefined => {
   return resolvedPrompt
 }
 
-const submitPrompt = (rawPrompt: string) => {
+const submitPrompt = (rawPrompt: string, options: { setupTest?: boolean } = {}) => {
   const prompt = applySlashCommand(rawPrompt.trim())?.trim().slice(0, 20000) ?? ''
   if (!prompt || activeRequest) {
     return
@@ -2800,7 +2800,8 @@ const submitPrompt = (rawPrompt: string) => {
     model: controls.chatModel,
     phase: 'context',
     latestDetail: 'Preparing context',
-    tokenCount: 0
+    tokenCount: 0,
+    ...(options.setupTest ? { setupTest: true } : {})
   }
   requests.set(requestId, activeRequest)
   startProgressTimer()
@@ -2811,11 +2812,24 @@ const submitPrompt = (rawPrompt: string) => {
   const submittedAttachments = attachments
   attachments = []
   render(true)
+  const requestOptions = buildRequestOptions()
+  if (options.setupTest) {
+    requestOptions.modelRole = 'chat'
+    requestOptions.mode = 'ask'
+    requestOptions.context = {
+      workspace: false,
+      folders: false,
+      activeFile: false,
+      selection: false,
+      openFiles: false,
+      tools: false
+    }
+  }
   post('submit', {
     requestId,
     conversationId: conversation.id,
     prompt,
-    options: buildRequestOptions(),
+    options: requestOptions,
     attachments: submittedAttachments
   })
 }
@@ -3761,12 +3775,21 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     const status = message.status ?? 'failed'
     const completionRecord = normalizeCompletionRecord(message.completionRecord)
     const eventLog = normalizeRequestEventLog(message.eventLog)
-    conversation.completionRecord = completionRecord ?? {
-      changedFiles: [],
-      checksRun: [],
-      failures: [status === 'completed' ? 'Model did not provide a completion record.' : `Request ended without a completion record (${status}).`],
-      remainingWork: ['Provide a structured completion record before the final answer.'],
-      recordedAt: Date.now()
+    if (completionRecord) {
+      conversation.completionRecord = completionRecord
+    } else if (request.setupTest) {
+      conversation.completionRecord = undefined
+      setupTestStatusElement.textContent = status === 'completed'
+        ? 'Test passed: model replied.'
+        : `Test failed: ${status}.`
+    } else {
+      conversation.completionRecord = {
+        changedFiles: [],
+        checksRun: [],
+        failures: [status === 'completed' ? 'Model did not provide a completion record.' : `Request ended without a completion record (${status}).`],
+        remainingWork: ['Provide a structured completion record before the final answer.'],
+        recordedAt: Date.now()
+      }
     }
     request.status = status
     assistantMessage.requestStatus = status
@@ -4332,7 +4355,7 @@ setupTestRequestElement.addEventListener('click', () => {
   }
   setupTestStatusElement.textContent = 'Test request sent. Watch the conversation for the result.'
   setModalVisibility(firstRunModalElement, false)
-  submitPrompt('Reply with exactly READY so I can verify the selected model.')
+  submitPrompt('Reply with exactly READY so I can verify the selected model.', { setupTest: true })
 })
 finishFirstRunElement.addEventListener('click', () => {
   uiPreferences.firstRunSetupComplete = true

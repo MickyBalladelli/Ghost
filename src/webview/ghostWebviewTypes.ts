@@ -255,6 +255,7 @@ export interface ActiveRequest {
   latestDetail: string
   tokenCount: number
   tokensPerSecond?: number
+  setupTest?: boolean
   stopReason?: StopReason
   autoAcceptDisabled?: boolean
 }
