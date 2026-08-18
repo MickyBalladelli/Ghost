@@ -66,6 +66,7 @@ export interface GhostSettings {
   chatModel: string
   autocompleteModel: string
   requestTimeLimitMinutes: number
+  jsonMode: boolean
   modelProfile: string
   modelAliases: GhostModelAliases
   modelProfiles: GhostModelProfiles
@@ -118,6 +119,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   requestTimeLimitMinutes: 120,
+  jsonMode: false,
   modelProfile: '',
   modelAliases: {},
   modelProfiles: {},
@@ -182,6 +184,7 @@ export class GhostConfig {
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
       requestTimeLimitMinutes: configuration.get('requestTimeLimitMinutes', DEFAULT_GHOST_SETTINGS.requestTimeLimitMinutes),
+      jsonMode: configuration.get('jsonMode', DEFAULT_GHOST_SETTINGS.jsonMode),
       modelProfile: configuration.get('modelProfile', DEFAULT_GHOST_SETTINGS.modelProfile),
       modelAliases: configuration.get('modelAliases', DEFAULT_GHOST_SETTINGS.modelAliases),
       modelProfiles: configuration.get('modelProfiles', DEFAULT_GHOST_SETTINGS.modelProfiles),

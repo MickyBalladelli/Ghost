@@ -1,4 +1,4 @@
-import { MlxChatOptions } from './mlxClient'
+import { MlxChatOptions, MlxStreamEvent } from './mlxClient'
 import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 
 export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
@@ -60,6 +60,7 @@ export interface ProviderClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
   listModels?(signal?: AbortSignal): Promise<string[]>
   streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string>
+  streamChatEvents?(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
 }
 
 export interface ProviderAdapter {
@@ -67,6 +68,7 @@ export interface ProviderAdapter {
   capabilities(model?: string): ModelCapabilityRecord
   chat(options: MlxChatOptions): Promise<string>
   stream(options: MlxChatOptions): AsyncGenerator<string>
+  streamEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
   listModels(signal?: AbortSignal): Promise<string[]>
   health(timeoutMs?: number, signal?: AbortSignal): Promise<boolean>
   normalizeError(error: unknown): ProviderError
@@ -79,8 +81,8 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     contextWindow: 32768,
     outputLimit: 8192,
     nativeApi: 'ollama',
-    supportsTools: false,
-    supportsJsonMode: false,
+    supportsTools: true,
+    supportsJsonMode: true,
     supportsVision: true,
     supportsFIM: true,
     supportsStreaming: true,
@@ -101,8 +103,8 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     contextWindow: 32768,
     outputLimit: 8192,
     nativeApi: 'openai-chat-completions',
-    supportsTools: false,
-    supportsJsonMode: false,
+    supportsTools: true,
+    supportsJsonMode: true,
     supportsVision: false,
     supportsFIM: false,
     supportsStreaming: true,
@@ -166,6 +168,19 @@ export function createProviderAdapter(provider: ProviderId, client: ProviderClie
     async *stream(options) {
       try {
         yield* client.streamChatCompletion(options)
+      } catch (error) {
+        throw normalizeProviderError(provider, error)
+      }
+    },
+    async *streamEvents(options) {
+      try {
+        if (client.streamChatEvents) {
+          yield* client.streamChatEvents(options)
+          return
+        }
+        for await (const chunk of client.streamChatCompletion(options)) {
+          yield { type: 'text', text: chunk }
+        }
       } catch (error) {
         throw normalizeProviderError(provider, error)
       }

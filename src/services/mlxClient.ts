@@ -32,6 +32,29 @@ export interface MlxMessage {
   content: MlxMessageContent
 }
 
+export interface MlxToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description?: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export interface MlxResponseFormat {
+  type: 'text' | 'json_object' | 'json_schema'
+  json_schema?: {
+    name: string
+    description?: string
+    strict?: boolean
+    schema: Record<string, unknown>
+  }
+}
+
+export type MlxStreamEvent =
+  | { type: 'text'; text: string }
+  | { type: 'tool-call'; name?: string; arguments?: string; done?: boolean }
+
 export interface MlxVisionImage {
   data?: string | Uint8Array
   path?: string
@@ -44,6 +67,9 @@ export interface MlxChatOptions {
   model: string
   messages: MlxMessage[]
   generation?: GenerationSettings
+  tools?: MlxToolDefinition[]
+  toolChoice?: 'auto' | 'none' | 'required'
+  responseFormat?: MlxResponseFormat
   signal?: AbortSignal
 }
 

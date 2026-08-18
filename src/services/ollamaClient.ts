@@ -4,6 +4,7 @@ import { TextDecoder } from 'node:util'
 import {
   MlxChatOptions,
   MlxMessage,
+  MlxStreamEvent,
 } from './mlxClient'
 import { GenerationSettings } from './generationSettings'
 import {
@@ -13,7 +14,7 @@ import {
   buildOpenAiFimBody,
   buildOpenAiResponsesBody
 } from './providerRequestBuilders'
-import { OpenAiStreamMode, streamOpenAiTokens } from './openAiStream'
+import { OpenAiStreamMode, streamOpenAiEvents } from './openAiStream'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
 import { providerHttpError, requestWithRetry } from './providerRequest'
@@ -73,7 +74,7 @@ interface OpenAiResponsesResponse {
 
 interface OllamaCompletionResponse {
   response?: string | null
-  message?: { content?: string | null }
+  message?: { content?: string | null; tool_calls?: Array<{ function?: { name?: string; arguments?: string | Record<string, unknown> } }> }
 }
 
 interface OllamaStreamChunk extends OllamaCompletionResponse {
@@ -138,7 +139,18 @@ function extractOllamaText(payload: OllamaCompletionResponse): string {
   return payload.response ?? payload.message?.content ?? ''
 }
 
-export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
+function extractOllamaToolCall(payload: OllamaCompletionResponse): MlxStreamEvent | undefined {
+  const tool = payload.message?.tool_calls?.[0]?.function
+  if (!tool?.name) return undefined
+  return {
+    type: 'tool-call',
+    name: tool.name,
+    arguments: typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments ?? {}),
+    done: payload.message?.tool_calls !== undefined
+  }
+}
+
+export async function* streamOllamaEvents(body: NodeJS.ReadableStream): AsyncGenerator<MlxStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
 
@@ -150,29 +162,22 @@ export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGener
     }
     const lines = buffer.split(/\r?\n/)
     buffer = lines.pop() ?? ''
-
     for (const line of lines) {
-      if (!line.trim()) {
-        continue
-      }
-
+      if (!line.trim()) continue
       let parsed: OllamaStreamChunk
-
       try {
         parsed = JSON.parse(line) as OllamaStreamChunk
       } catch {
         continue
       }
-
-      const text = extractOllamaText(parsed)
-
-      if (text) {
-        yield text
+      const toolCall = extractOllamaToolCall(parsed)
+      if (toolCall) {
+        yield toolCall
+      } else {
+        const text = extractOllamaText(parsed)
+        if (text) yield { type: 'text', text }
       }
-
-      if (parsed.done) {
-        return
-      }
+      if (parsed.done) return
     }
   }
 
@@ -181,18 +186,40 @@ export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGener
   } catch {
     return
   }
+  if (!buffer.trim()) return
+  try {
+    const parsed = JSON.parse(buffer) as OllamaStreamChunk
+    const toolCall = extractOllamaToolCall(parsed)
+    if (toolCall) yield toolCall
+    else {
+      const text = extractOllamaText(parsed)
+      if (text) yield { type: 'text', text }
+    }
+  } catch {
+    // The server may close with an incomplete JSON line.
+  }
+}
 
-  if (buffer.trim()) {
-    try {
-      const text = extractOllamaText(JSON.parse(buffer) as OllamaStreamChunk)
-
-      if (text) {
-        yield text
-      }
-    } catch {
-      // The server may close with an incomplete JSON line.
+export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
+  let toolName = ''
+  let toolOpen = false
+  for await (const event of streamOllamaEvents(body)) {
+    if (event.type === 'text') {
+      yield event.text
+      continue
+    }
+    if (event.name) toolName = event.name
+    if (!toolOpen && toolName) {
+      yield `{"tool":${JSON.stringify(toolName)},"arguments":`
+      toolOpen = true
+    }
+    if (event.arguments) yield event.arguments
+    if (event.done && toolOpen) {
+      yield '}'
+      toolOpen = false
     }
   }
+  if (toolOpen) yield '}'
 }
 
 export function buildFimPrompt(prefix: string, suffix: string): string {
@@ -302,6 +329,13 @@ export class OllamaClient {
   }
 
   async *streamChatCompletion(options: OllamaChatOptions): AsyncGenerator<string> {
+    for await (const event of this.streamChatEvents(options)) {
+      if (event.type === 'text') yield event.text
+      else if (event.name) yield `{"tool":${JSON.stringify(event.name)},"arguments":${event.arguments?.trim() || '{}'}}`
+    }
+  }
+
+  async *streamChatEvents(options: OllamaChatOptions): AsyncGenerator<MlxStreamEvent> {
     const messages = addSystemPrompt(options.messages, options.systemPrompt)
     const stream = options.stream ?? true
     const mode = options.mode ?? this.mode
@@ -333,7 +367,7 @@ export class OllamaClient {
             : extractOpenAiText(payload as OpenAiCompletionResponse)
 
         if (text) {
-          yield text
+          yield { type: 'text', text }
         }
 
         return
@@ -344,10 +378,10 @@ export class OllamaClient {
       }
 
       if (attempt.kind === 'ollama') {
-        yield* streamOllamaJson(response.body)
+        yield* streamOllamaEvents(response.body)
       } else {
         const streamMode: OpenAiStreamMode = attempt.kind === 'openai-responses' ? 'responses' : 'chat-completions'
-        yield* streamOpenAiTokens(response.body, streamMode)
+        yield* streamOpenAiEvents(response.body, streamMode)
       }
 
       return

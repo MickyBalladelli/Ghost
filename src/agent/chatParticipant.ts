@@ -5,7 +5,7 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import { GhostConfig, GhostProvider, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
-import { MlxClient, MlxMessage } from '../services/mlxClient'
+import { MlxClient, MlxMessage, MlxResponseFormat, MlxStreamEvent } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
@@ -13,13 +13,15 @@ import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
 import { resolveWorkspacePath } from '../tools/workspacePath'
-import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler } from './toolCallParser'
+import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler, parseNativeLocalToolCall } from './toolCallParser'
+import { GHOST_NATIVE_TOOL_DEFINITIONS, JSON_OBJECT_RESPONSE_FORMAT } from './nativeTooling'
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
+import { profileProtocol } from '../services/profiledProviderClient'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -554,6 +556,8 @@ export interface GhostRequestOptions {
   additionalContext?: string
   showReasoning?: boolean
   customSystemInstructions?: string
+  jsonMode?: boolean
+  responseFormat?: MlxResponseFormat
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
   confirmBudgetContinue?: (reason: string) => Promise<boolean>
@@ -893,12 +897,12 @@ function findStreamedToolCallStart(text: string): number | undefined {
 
 async function streamModelTurn(
   llmFactory: LlmFactory,
-  options: Parameters<LlmFactory['streamChatCompletion']>[0],
+  options: Parameters<LlmFactory['streamChatEvents']>[0],
   response: vscode.ChatResponseStream,
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean }> {
+): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean; toolCall?: LocalToolCall }> {
   let generated = ''
   let modelCharacters = 0
   let decided = false
@@ -907,6 +911,16 @@ async function streamModelTurn(
   let toolCallProbe = ''
   let hidingReasoning = false
   let hiddenReasoningNotified = false
+  let nativeToolName = ''
+  let nativeToolArguments = ''
+
+  const nativeToolResult = (event: MlxStreamEvent): LocalToolCall | undefined => {
+    if (event.type !== 'tool-call') return undefined
+    if (event.name) nativeToolName = event.name
+    if (event.arguments) nativeToolArguments += event.arguments
+    if (!event.done || !nativeToolName) return undefined
+    return parseNativeLocalToolCall(nativeToolName, nativeToolArguments)
+  }
 
   const emitVisibleChunk = (chunk: string): void => {
     if (showReasoning) {
@@ -942,7 +956,19 @@ async function streamModelTurn(
     }
   }
 
-  for await (const chunk of llmFactory.streamChatCompletion(options)) {
+  for await (const event of llmFactory.streamChatEvents(options)) {
+    const nativeToolCall = nativeToolResult(event)
+    if (nativeToolCall) {
+      return {
+        generated: JSON.stringify({ tool: nativeToolCall.name, arguments: nativeToolCall.arguments }),
+        streamed: false,
+        modelTokens: Math.ceil(modelCharacters / 4),
+        splitSuggested: false,
+        toolCall: nativeToolCall
+      }
+    }
+    if (event.type !== 'text') continue
+    const chunk = event.text
     modelCharacters += chunk.length
     if (token.isCancellationRequested) {
       return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4), splitSuggested: false }
@@ -1033,11 +1059,17 @@ async function streamModelTurn(
     }
   }
 
+  const completedNativeToolCall = nativeToolName
+    ? parseNativeLocalToolCall(nativeToolName, nativeToolArguments)
+    : undefined
   return {
-    generated: bufferingToolCall ? toolCallAssembler.getText() : generated.trim(),
-    streamed: decided && !bufferingToolCall,
+    generated: completedNativeToolCall
+      ? JSON.stringify({ tool: completedNativeToolCall.name, arguments: completedNativeToolCall.arguments })
+      : bufferingToolCall ? toolCallAssembler.getText() : generated.trim(),
+    streamed: completedNativeToolCall ? false : decided && !bufferingToolCall,
     modelTokens: Math.ceil(modelCharacters / 4),
-    splitSuggested: false
+    splitSuggested: false,
+    ...(completedNativeToolCall ? { toolCall: completedNativeToolCall } : {})
   }
 }
 
@@ -1086,6 +1118,10 @@ export function createChatParticipantHandler(
     }
 
     const toolsEnabled = requestOptions.context?.tools !== false
+    const nativeToolCalling = toolsEnabled && (
+      modelSettings.provider === 'ollama' ||
+      (modelSettings.provider === 'openai-compatible' && profileProtocol(settings.openaiProfile) === 'openai-chat')
+    )
     const workspaceChangeRequested = describesWorkspaceChange(request.prompt)
     if (!toolsEnabled && workspaceChangeRequested) {
       response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')
@@ -1169,6 +1205,12 @@ export function createChatParticipantHandler(
               repeatPenalty: Math.min(3, Math.max(0, modelSettings.repeatPenalty)),
               maxTokens: outputTokens
             },
+            ...(nativeToolCalling ? { tools: GHOST_NATIVE_TOOL_DEFINITIONS, toolChoice: 'auto' as const } : {}),
+            ...(requestOptions.responseFormat
+              ? { responseFormat: requestOptions.responseFormat }
+              : (requestOptions.jsonMode ?? settings.jsonMode) && !nativeToolCalling
+                ? { responseFormat: JSON_OBJECT_RESPONSE_FORMAT }
+                : {}),
             signal: cancellation.signal
           },
           response,
@@ -1229,7 +1271,7 @@ export function createChatParticipantHandler(
         }
 
         const parsedResponse = classifyLocalToolResponse(generated)
-        const toolCall = parsedResponse.call
+        const toolCall = turn.toolCall ?? parsedResponse.call
 
         if (!toolCall) {
           const malformedToolCall = parsedResponse.state === 'malformed-json' || parsedResponse.state === 'truncated-json' || parsedResponse.state === 'unknown-tool'

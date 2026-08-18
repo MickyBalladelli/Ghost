@@ -259,6 +259,11 @@
           "maximum": 1440,
           "description": "Maximum minutes a local Ghost request may run before its safety budget stops it."
         },
+        "ghost.jsonMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Request JSON object responses from providers that support JSON mode when native tools are not active."
+        },
         "ghost.modelProfile": {
           "type": "string",
           "default": "",

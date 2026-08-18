@@ -2,12 +2,12 @@ import fetch, { type Response } from 'node-fetch'
 
 import type { GhostSettings } from '../config'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
-import { MlxChatOptions, MlxMessage } from './mlxClient'
+import { MlxChatOptions, MlxMessage, MlxStreamEvent } from './mlxClient'
 import { OllamaClient } from './ollamaClient'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWireProtocol, resolveOpenAiProfileEndpoint } from './providerProfiles'
 import { ProviderClient } from './providerAdapter'
-import { streamOpenAiTokens } from './openAiStream'
+import { streamOpenAiEvents, streamOpenAiTokens } from './openAiStream'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError, requestWithRetry } from './providerRequest'
 
@@ -449,6 +449,20 @@ class AzureOpenAiClient implements ProviderClient {
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
     yield* streamOpenAiTokens(response.body, 'chat-completions')
+  }
+
+  async *streamChatEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent> {
+    const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
+    const response = await this.request(endpoint, {
+      method: 'POST',
+      headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
+      signal: options.signal,
+      agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
+      body: JSON.stringify(buildOpenAiChatBody(options, options.messages, true))
+    })
+    if (!response.ok) throw await httpError(response)
+    if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
+    yield* streamOpenAiEvents(response.body, 'chat-completions')
   }
 
   private headers(): Record<string, string> {

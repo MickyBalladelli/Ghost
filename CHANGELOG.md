@@ -2,6 +2,12 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.15 - 2026-08-18
+
+- Add native tool definitions and structured tool-call streaming for Ollama and OpenAI-compatible providers, with text parsing fallback.
+- Add provider request support for JSON object and JSON schema response formats.
+- Add the `ghost.jsonMode` setting for providers that support JSON mode.
+
 ## 1.1.14 - 2026-08-18
 
 - Keep animated label width stable with a fixed-width font and one reserved cell per character.

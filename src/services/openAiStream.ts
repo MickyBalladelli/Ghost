@@ -1,4 +1,5 @@
 import { TextDecoder } from 'node:util'
+import type { MlxStreamEvent } from './mlxClient'
 
 export type OpenAiStreamMode = 'chat-completions' | 'responses'
 
@@ -88,44 +89,29 @@ function toolPrefix(name: string): string {
 function eventOutput(
   event: StreamEvent,
   mode: OpenAiStreamMode,
-  toolState: { name: string; prefixSent: boolean; open: boolean; argumentsSeen: boolean }
-): string[] {
+  toolState: { name: string; argumentsSeen: boolean }
+): MlxStreamEvent[] {
   if (event.data === '[DONE]') return []
   const payload = jsonObject(event.data)
   if (!payload) return []
-  const outputs: string[] = []
+  const outputs: MlxStreamEvent[] = []
   const functionCall = functionDelta(payload, mode)
   if (functionCall) {
     if (functionCall.name) toolState.name += functionCall.name
-    if (functionCall.arguments !== undefined) {
-      if (!toolState.prefixSent && toolState.name) {
-        outputs.push(toolPrefix(toolState.name))
-        toolState.prefixSent = true
-        toolState.open = true
-      }
-      if (functionCall.arguments) {
-        toolState.argumentsSeen = true
-        outputs.push(functionCall.arguments)
-      }
-    }
-    if (functionCall.done && functionCall.arguments && !toolState.argumentsSeen) {
-      outputs.push(functionCall.arguments)
-    }
-    if (functionCall.done && toolState.open) {
-      outputs.push('}')
-      toolState.open = false
-    }
+    const argumentsChunk = functionCall.done && toolState.argumentsSeen ? undefined : functionCall.arguments
+    if (argumentsChunk) toolState.argumentsSeen = true
+    outputs.push({ type: 'tool-call', name: toolState.name || undefined, arguments: argumentsChunk, done: functionCall.done })
     return outputs
   }
   const text = textDelta(payload, mode)
-  if (text) outputs.push(text)
+  if (text) outputs.push({ type: 'text', text })
   return outputs
 }
 
-export async function* streamOpenAiTokens(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<string> {
+export async function* streamOpenAiEvents(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<MlxStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
-  const toolState = { name: '', prefixSent: false, open: false, argumentsSeen: false }
+  const toolState = { name: '', argumentsSeen: false }
 
   for await (const chunk of body as AsyncIterable<Buffer | string>) {
     try {
@@ -136,7 +122,7 @@ export async function* streamOpenAiTokens(body: NodeJS.ReadableStream, mode: Ope
     const parsed = parseEvents(buffer)
     buffer = parsed.remaining
     for (const event of parsed.events) {
-      for (const output of eventOutput(event, mode, toolState)) yield output
+      yield* eventOutput(event, mode, toolState)
     }
   }
 
@@ -147,7 +133,36 @@ export async function* streamOpenAiTokens(body: NodeJS.ReadableStream, mode: Ope
   }
   const parsed = parseEvents(`${buffer}\n\n`)
   for (const event of parsed.events) {
-    for (const output of eventOutput(event, mode, toolState)) yield output
+    yield* eventOutput(event, mode, toolState)
   }
-  if (toolState.open) yield '}'
+}
+
+export async function* streamOpenAiTokens(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<string> {
+  let toolName = ''
+  let toolArguments = ''
+  let toolOpen = false
+
+  for await (const event of streamOpenAiEvents(body, mode)) {
+    if (event.type === 'text') {
+      yield event.text
+      continue
+    }
+    if (event.name) {
+      toolName = event.name
+    }
+    if (!toolOpen && toolName) {
+      yield toolPrefix(toolName)
+      toolOpen = true
+    }
+    if (event.arguments) {
+      toolArguments += event.arguments
+      yield event.arguments
+    }
+    if (event.done && toolOpen) {
+      if (!event.arguments && toolArguments.length === 0) yield '{}'
+      yield '}'
+      toolOpen = false
+    }
+  }
+  if (toolOpen) yield '}'
 }

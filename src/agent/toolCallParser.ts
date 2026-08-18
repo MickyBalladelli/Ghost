@@ -457,3 +457,14 @@ export function classifyLocalToolResponse(text: string): LocalToolParseResult {
 export function parseLocalToolCall(text: string): LocalToolCall | undefined {
   return classifyLocalToolResponse(text).call
 }
+
+export function parseNativeLocalToolCall(name: string, argumentsValue: string | Record<string, unknown> | undefined): LocalToolCall | undefined {
+  const normalizedName = normalizeLocalToolName(name)
+  if (!normalizedName) return undefined
+  const argumentsObject = parseArguments(argumentsValue)
+  if (!argumentsObject) return undefined
+  return {
+    name: normalizedName,
+    arguments: normalizeToolArguments(normalizedName, argumentsObject)
+  }
+}

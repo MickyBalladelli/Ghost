@@ -1,9 +1,12 @@
-import type { MlxChatOptions, MlxMessage, MlxMessageContent } from './mlxClient'
+import type { MlxChatOptions, MlxMessage, MlxMessageContent, MlxResponseFormat, MlxToolDefinition } from './mlxClient'
 import { GenerationSettings, normalizeGenerationSettings } from './generationSettings'
 
 interface ChatWireOptions {
   model: string
   generation?: GenerationSettings
+  tools?: MlxToolDefinition[]
+  toolChoice?: MlxChatOptions['toolChoice']
+  responseFormat?: MlxResponseFormat
 }
 
 interface FimWireOptions {
@@ -57,6 +60,9 @@ export function buildMlxChatBody(options: MlxChatOptions): Record<string, unknow
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
     max_tokens: generation.maxTokens,
+    ...(options.tools?.length ? { tools: options.tools } : {}),
+    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+    ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
     stream: true
   }
 }
@@ -67,6 +73,8 @@ export function buildOllamaChatBody(options: ChatWireOptions, messages: MlxMessa
     model: options.model,
     messages: toOllamaMessages(messages),
     stream,
+    ...(options.tools?.length ? { tools: options.tools } : {}),
+    ...(options.responseFormat ? { format: options.responseFormat.type === 'json_object' ? 'json' : options.responseFormat.json_schema ?? options.responseFormat.type } : {}),
     options: {
       ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
       ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
@@ -85,6 +93,9 @@ export function buildOpenAiChatBody(options: ChatWireOptions, messages: MlxMessa
     model: options.model,
     messages,
     stream,
+    ...(options.tools?.length ? { tools: options.tools } : {}),
+    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+    ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
     ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
@@ -109,6 +120,9 @@ export function buildOpenAiResponsesBody(options: ChatWireOptions, messages: Mlx
     model: options.model,
     input: toOpenAiResponsesInput(messages),
     stream: true,
+    ...(options.tools?.length ? { tools: options.tools } : {}),
+    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
+    ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.maxTokens === undefined ? {} : { max_output_tokens: generation.maxTokens })
