@@ -99,25 +99,53 @@ interface ContextBudgetResult {
   messages: MlxMessage[]
   inputTokens: number
   compacted: boolean
+  omittedTokens: number
 }
 
-const estimateTextTokens = (text: string): number => Math.ceil(text.length / 4)
+type ContextTokenizer = (text: string) => number
 
-const estimateMessageTokens = (message: MlxMessage): number => {
+const tokenizeContext: ContextTokenizer = (text: string): number => {
+  const tokens = text.match(/[A-Za-z0-9_]+|[^A-Za-z0-9_\s]/g)
+  return tokens?.length ?? 0
+}
+
+const estimateMessageTokens = (message: MlxMessage, tokenizer: ContextTokenizer): number => {
   if (typeof message.content === 'string') {
-    return estimateTextTokens(message.content)
+    return tokenizer(message.content)
   }
-  return message.content.reduce((total, part) => total + (part.type === 'text' ? estimateTextTokens(part.text) : 256), 0)
+  return message.content.reduce((total, part) => total + (part.type === 'text' ? tokenizer(part.text) : 256), 0)
 }
 
-const compactText = (text: string, maxTokens: number, marker = '[Context compacted by Ghost]'): string => {
-  const maxCharacters = Math.max(256, maxTokens * 4)
-  if (text.length <= maxCharacters) {
+const compactText = (
+  text: string,
+  maxTokens: number,
+  marker = '[Context compacted by Ghost]',
+  tokenizer: ContextTokenizer = tokenizeContext
+): string => {
+  if (tokenizer(text) <= maxTokens) {
     return text
   }
-  const headCharacters = Math.floor(maxCharacters * 0.55)
-  const tailCharacters = Math.max(0, maxCharacters - headCharacters - marker.length - 4)
-  return `${text.slice(0, headCharacters)}\n\n${marker}\n\n${text.slice(-tailCharacters)}`
+  const markerTokenCount = Math.max(1, tokenizer(marker))
+  const markerText = markerTokenCount <= maxTokens
+    ? marker
+    : marker.slice(0, Math.max(1, Math.floor(marker.length * maxTokens / markerTokenCount)))
+  const buildCandidate = (retainedCharacters: number): string => {
+    const headCharacters = Math.floor(retainedCharacters * 0.55)
+    const tailCharacters = Math.max(0, retainedCharacters - headCharacters)
+    const tail = tailCharacters > 0 ? text.slice(-tailCharacters) : ''
+    return `${text.slice(0, headCharacters)}\n\n${markerText}\n\n${tail}`
+  }
+  let low = 0
+  let high = text.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (tokenizer(buildCandidate(middle)) <= maxTokens) {
+      low = middle
+    } else {
+      high = middle - 1
+    }
+  }
+  return buildCandidate(low)
 }
 
 const contextSectionPriority = (section: string): number => {
@@ -133,10 +161,10 @@ const contextSectionPriority = (section: string): number => {
   return 60
 }
 
-const compactInitialContext = (text: string, maxTokens: number): string => {
+const compactInitialContext = (text: string, maxTokens: number, tokenizer: ContextTokenizer): string => {
   const sections = text.split(/\n\n(?=[A-Za-z@])/)
   if (sections.length <= 1) {
-    return compactText(text, maxTokens)
+    return compactText(text, maxTokens, '[Context compacted by Ghost]', tokenizer)
   }
   const selected: Array<{ text: string; index: number }> = []
   let remaining = Math.max(256, maxTokens)
@@ -145,11 +173,13 @@ const compactInitialContext = (text: string, maxTokens: number): string => {
     .sort((left, right) => right.priority - left.priority || left.index - right.index)
   for (const item of ranked) {
     if (remaining <= 0) break
-    const sectionTokens = estimateTextTokens(item.section)
+    const sectionTokens = tokenizer(item.section)
     const allowedTokens = Math.min(sectionTokens, remaining)
     if (allowedTokens < 32 && selected.length > 0) continue
     selected.push({
-      text: sectionTokens > allowedTokens ? compactText(item.section, allowedTokens, '[File context compacted by Ghost]') : item.section,
+      text: sectionTokens > allowedTokens
+        ? compactText(item.section, allowedTokens, '[File context compacted by Ghost]', tokenizer)
+        : item.section,
       index: item.index
     })
     remaining -= Math.min(sectionTokens, allowedTokens)
@@ -160,46 +190,53 @@ const compactInitialContext = (text: string, maxTokens: number): string => {
     .join('\n\n')
 }
 
-const compactHistoryMessage = (message: MlxMessage, maxTokens: number): MlxMessage => {
+const compactHistoryMessage = (message: MlxMessage, maxTokens: number, tokenizer: ContextTokenizer): MlxMessage => {
   if (typeof message.content !== 'string') {
     return message
   }
   const marker = /tool result|diff|error|failed|verification/i.test(message.content)
     ? '[Older tool result compacted by Ghost]'
     : '[Older model turn compacted by Ghost]'
-  return { ...message, content: compactText(message.content, maxTokens, marker) }
+  return { ...message, content: compactText(message.content, maxTokens, marker, tokenizer) }
 }
 
 class ContextBudgetManager {
   private readonly inputTokenBudget: number
+  private readonly tokenizer: ContextTokenizer
 
-  constructor(maxContextTokens: number, requestedOutputTokens: number | undefined, toolsEnabled: boolean) {
+  constructor(
+    maxContextTokens: number,
+    requestedOutputTokens: number | undefined,
+    toolsEnabled: boolean,
+    tokenizer: ContextTokenizer = tokenizeContext
+  ) {
     const outputReserve = Math.max(
       toolsEnabled ? MIN_TOOL_CALL_TOKENS : 512,
       requestedOutputTokens ?? 0
     )
     this.inputTokenBudget = Math.max(256, Math.floor(maxContextTokens) - outputReserve)
+    this.tokenizer = tokenizer
   }
 
   prepare(messages: MlxMessage[]): ContextBudgetResult {
-    const originalTokens = messages.reduce((total, message) => total + estimateMessageTokens(message), 0)
+    const originalTokens = messages.reduce((total, message) => total + estimateMessageTokens(message, this.tokenizer), 0)
     if (originalTokens <= this.inputTokenBudget) {
-      return { messages, inputTokens: originalTokens, compacted: false }
+      return { messages, inputTokens: originalTokens, compacted: false, omittedTokens: 0 }
     }
 
     const system = messages[0]
     const initial = messages[1]
     const history = messages.slice(2)
-    const systemTokens = system ? estimateMessageTokens(system) : 0
+    const systemTokens = system ? estimateMessageTokens(system, this.tokenizer) : 0
     const initialBudget = Math.max(512, Math.floor((this.inputTokenBudget - systemTokens) * 0.65))
     const compactedInitial = initial && typeof initial.content === 'string'
-      ? { ...initial, content: compactInitialContext(initial.content, initialBudget) }
+      ? { ...initial, content: compactInitialContext(initial.content, initialBudget, this.tokenizer) }
       : initial
     const selected: MlxMessage[] = [
       ...(system ? [system] : []),
       ...(compactedInitial ? [compactedInitial] : [])
     ]
-    let remaining = this.inputTokenBudget - selected.reduce((total, message) => total + estimateMessageTokens(message), 0)
+    let remaining = this.inputTokenBudget - selected.reduce((total, message) => total + estimateMessageTokens(message, this.tokenizer), 0)
     const chosenHistory: MlxMessage[] = []
     for (let index = history.length - 1; index >= 0; index -= 1) {
       if (remaining <= 0) break
@@ -207,11 +244,11 @@ class ContextBudgetManager {
       const isRecent = history.length - index <= 4
       const candidate = isRecent
         ? original
-        : compactHistoryMessage(original, Math.min(768, Math.max(128, Math.floor(remaining / 2))))
-      const candidateTokens = estimateMessageTokens(candidate)
+        : compactHistoryMessage(original, Math.min(768, Math.max(128, Math.floor(remaining / 2))), this.tokenizer)
+      const candidateTokens = estimateMessageTokens(candidate, this.tokenizer)
       if (candidateTokens > remaining) {
-        const compacted = compactHistoryMessage(candidate, remaining)
-        const compactedTokens = estimateMessageTokens(compacted)
+        const compacted = compactHistoryMessage(candidate, remaining, this.tokenizer)
+        const compactedTokens = estimateMessageTokens(compacted, this.tokenizer)
         if (compactedTokens > remaining || compactedTokens < 8) continue
         chosenHistory.unshift(compacted)
         remaining -= compactedTokens
@@ -221,8 +258,13 @@ class ContextBudgetManager {
       remaining -= candidateTokens
     }
     selected.push(...chosenHistory)
-    const inputTokens = selected.reduce((total, message) => total + estimateMessageTokens(message), 0)
-    return { messages: selected, inputTokens, compacted: true }
+    const inputTokens = selected.reduce((total, message) => total + estimateMessageTokens(message, this.tokenizer), 0)
+    return {
+      messages: selected,
+      inputTokens,
+      compacted: true,
+      omittedTokens: Math.max(0, originalTokens - inputTokens)
+    }
   }
 }
 
@@ -1334,7 +1376,7 @@ export function createChatParticipantHandler(
         const preparedContext = contextBudget.prepare(messages)
         if (preparedContext.compacted && !contextCompactionReported) {
           contextCompactionReported = true
-          response.progress(`Context compacted to ${preparedContext.inputTokens} estimated input tokens; current request, files, diffs, and errors kept.`)
+          response.progress(`Context compacted to ${preparedContext.inputTokens} tokens; omitted about ${preparedContext.omittedTokens} tokens to keep the request within budget. Current request, files, diffs, and errors kept.`)
         }
         const turn = await streamModelTurn(
           llmFactory,
