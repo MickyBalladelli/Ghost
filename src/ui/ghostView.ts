@@ -2549,6 +2549,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebview.js')
     )
+    const conversationStoreUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewConversationStore.js')
+    )
     const iconUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'icon.png')
     )
@@ -4461,6 +4464,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   </head>
   <body data-ghost-icon="${iconUri}">
     <div id="app"></div>
+    <script nonce="${nonce}" src="${conversationStoreUri}"></script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`

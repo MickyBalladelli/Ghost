@@ -86,9 +86,10 @@ if (!app) {
 }
 
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-const persistenceSchemaVersion = 2
-const defaultPromptHistoryLimit = 100
-const maxPromptHistoryLimit = 500
+const conversationStore = (globalThis as typeof globalThis & { GhostConversationStore: GhostConversationStoreApi }).GhostConversationStore
+const persistenceSchemaVersion = conversationStore.persistenceSchemaVersion
+const defaultPromptHistoryLimit = conversationStore.defaultPromptHistoryLimit
+const maxPromptHistoryLimit = conversationStore.maxPromptHistoryLimit
 
 const redactSensitiveText = (value: string): string => value
   .replace(/(authorization\s*[:=]\s*(?:bearer|basic)\s+)[^\s,;]+/gi, '$1[REDACTED]')
@@ -172,32 +173,9 @@ const compactPersistedState = <T>(value: T): T => {
   return compacted as T
 }
 
-const createConversation = (): Conversation => {
-  const timestamp = Date.now()
-  return {
-    id: createId('conversation'),
-    title: 'New conversation',
-    messages: [],
-    draft: '',
-    promptHistory: [],
-    createdAt: timestamp,
-    updatedAt: timestamp
-  }
-}
-
-const normalizePromptHistory = (value: unknown, limit = defaultPromptHistoryLimit): string[] => (
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, Math.min(maxPromptHistoryLimit, Math.max(1, Math.floor(limit))))
-    : []
-)
-
-const addPromptToHistory = (history: readonly string[], prompt: string, limit = defaultPromptHistoryLimit): string[] => {
-  const normalized = prompt.trim()
-  if (!normalized) {
-    return normalizePromptHistory(history, limit)
-  }
-  return [normalized, ...history.filter(item => item !== normalized)].slice(0, Math.min(maxPromptHistoryLimit, Math.max(1, Math.floor(limit))))
-}
+const createConversation = (): Conversation => conversationStore.createConversation() as Conversation
+const normalizePromptHistory = conversationStore.normalizePromptHistory
+const addPromptToHistory = conversationStore.addPromptToHistory
 
 const textPart = (text: string): MessagePart => ({ kind: 'text', text })
 
