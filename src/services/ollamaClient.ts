@@ -15,6 +15,7 @@ import {
 } from './providerRequestBuilders'
 import { OpenAiStreamMode, streamOpenAiTokens } from './openAiStream'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
+import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -81,21 +82,21 @@ interface OllamaStreamChunk extends OllamaCompletionResponse {
 type FetchLike = typeof fetch
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, '')
+  return normalizeEndpoint(baseUrl)
 }
 
 function isExplicitOpenAiUrl(baseUrl: string): boolean {
-  return normalizeBaseUrl(baseUrl).endsWith('/v1')
+  return hasEndpointSuffix(baseUrl, 'v1')
 }
 
 function getOpenAiBaseUrl(baseUrl: string): string {
   const normalized = normalizeBaseUrl(baseUrl)
-  return isExplicitOpenAiUrl(normalized) ? normalized : `${normalized}/v1`
+  return isExplicitOpenAiUrl(normalized) ? normalized : joinEndpoint(normalized, 'v1')
 }
 
 function getOllamaBaseUrl(baseUrl: string): string {
   const normalized = normalizeBaseUrl(baseUrl)
-  return isExplicitOpenAiUrl(normalized) ? normalized.slice(0, -3) : normalized
+  return isExplicitOpenAiUrl(normalized) ? removeEndpointSuffix(normalized, 'v1') : normalized
 }
 
 function withTimeout(timeoutMs: number): AbortSignal {
@@ -391,33 +392,33 @@ export class OllamaClient {
   private getHealthEndpoints(): string[] {
     if (this.mode === 'ollama') {
       const baseUrl = getOllamaBaseUrl(this.baseUrl)
-      return [`${baseUrl}/api/tags`, baseUrl]
+      return [joinEndpoint(baseUrl, 'api/tags'), baseUrl]
     }
 
     if (this.mode === 'openai-compatible' || isExplicitOpenAiUrl(this.baseUrl)) {
-      return [`${getOpenAiBaseUrl(this.baseUrl)}/models`]
+      return [joinEndpoint(getOpenAiBaseUrl(this.baseUrl), 'models')]
     }
 
     return [
-      `${getOpenAiBaseUrl(this.baseUrl)}/models`,
-      `${getOllamaBaseUrl(this.baseUrl)}/api/tags`
+      joinEndpoint(getOpenAiBaseUrl(this.baseUrl), 'models'),
+      joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/tags')
     ]
   }
 
   private getModelEndpoints(): string[] {
     if (this.mode === 'ollama') {
-      return [`${getOllamaBaseUrl(this.baseUrl)}/api/tags`]
+      return [joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/tags')]
     }
     return this.getHealthEndpoints()
   }
 
   private getChatAttempts(mode: OllamaApiMode, openAiMode: OpenAiApiMode): Array<{ kind: 'ollama' | 'openai-chat' | 'openai-responses'; endpoint: string }> {
     if (mode === 'ollama') {
-      return [{ kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/chat` }]
+      return [{ kind: 'ollama', endpoint: joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/chat') }]
     }
 
-    const chatAttempt = { kind: 'openai-chat' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/chat/completions` }
-    const responsesAttempt = { kind: 'openai-responses' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/responses` }
+    const chatAttempt = { kind: 'openai-chat' as const, endpoint: joinEndpoint(getOpenAiBaseUrl(this.baseUrl), 'chat/completions') }
+    const responsesAttempt = { kind: 'openai-responses' as const, endpoint: joinEndpoint(getOpenAiBaseUrl(this.baseUrl), 'responses') }
     const openAiAttempts = openAiMode === 'responses'
       ? [responsesAttempt]
       : openAiMode === 'chat-completions'
@@ -428,7 +429,7 @@ export class OllamaClient {
       return openAiAttempts
     }
 
-    return [...openAiAttempts, { kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/chat` }]
+    return [...openAiAttempts, { kind: 'ollama', endpoint: joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/chat') }]
   }
 
   private getChatRequest(
@@ -473,16 +474,16 @@ export class OllamaClient {
 
   private getCompletionAttempts(mode: OllamaApiMode): Array<{ kind: 'ollama' | 'openai'; endpoint: string }> {
     if (mode === 'ollama') {
-      return [{ kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/generate` }]
+      return [{ kind: 'ollama', endpoint: joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/generate') }]
     }
 
-    const openAiAttempt = { kind: 'openai' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/completions` }
+    const openAiAttempt = { kind: 'openai' as const, endpoint: joinEndpoint(getOpenAiBaseUrl(this.baseUrl), 'completions') }
 
     if (mode === 'openai-compatible' || isExplicitOpenAiUrl(this.baseUrl)) {
       return [openAiAttempt]
     }
 
-    return [openAiAttempt, { kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/generate` }]
+    return [openAiAttempt, { kind: 'ollama', endpoint: joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/generate') }]
   }
 
   private getCompletionRequest(

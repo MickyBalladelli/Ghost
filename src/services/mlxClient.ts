@@ -4,6 +4,7 @@ import { TextDecoder } from 'node:util'
 import fetch, { type RequestInit, type Response } from 'node-fetch'
 import { GenerationSettings } from './generationSettings'
 import { buildMlxChatBody } from './providerRequestBuilders'
+import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
@@ -69,13 +70,8 @@ const MIME_TYPES: Record<string, string> = {
 }
 
 export function normalizeMlxApiUrl(baseUrl = DEFAULT_MLX_URL): string {
-  const normalized = baseUrl.trim().replace(/\/+$/, '')
-
-  if (normalized.endsWith('/v1')) {
-    return normalized
-  }
-
-  return `${normalized}/v1`
+  const normalized = normalizeEndpoint(baseUrl)
+  return hasEndpointSuffix(normalized, 'v1') ? normalized : joinEndpoint(normalized, 'v1')
 }
 
 export function inferImageMimeType(filePath: string): string {
@@ -245,7 +241,8 @@ export class MlxClient {
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
-      const response = await this.request(`${this.apiUrl}/models`, {
+      const endpoint = joinEndpoint(this.apiUrl, 'models')
+      const response = await this.request(endpoint, {
         method: 'GET',
         headers: this.authorizationHeaders(),
         signal: withTimeout(undefined, timeoutMs)
@@ -258,7 +255,8 @@ export class MlxClient {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
-    const response = await this.request(`${this.apiUrl}/models`, {
+    const endpoint = joinEndpoint(this.apiUrl, 'models')
+    const response = await this.request(endpoint, {
       method: 'GET',
       headers: this.authorizationHeaders(),
       signal
@@ -281,7 +279,8 @@ export class MlxClient {
       body,
       signal: options.signal
     }
-    const response = await this.request(`${this.apiUrl}/chat/completions`, requestOptions)
+    const endpoint = joinEndpoint(this.apiUrl, 'chat/completions')
+    const response = await this.request(endpoint, requestOptions)
     await throwForHttpError(response)
 
     if (!response.body) {

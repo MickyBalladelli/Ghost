@@ -7,6 +7,7 @@ All notable changes to this extension are documented here.
 - Replaced raw tool and terminal environment permission fields with clear Allow, Ask, and Deny dialogs.
 - Added tool and terminal environment ask policies, with clearer setting descriptions.
 - Treats tools missing from an older allowlist as Ask instead of Deny.
+- Added shared endpoint normalization for trailing slashes, `/v1` paths, native Ollama routes, IPv6 hosts, and reverse-proxy prefixes.
 
 ## 1.0.98 - 2026-08-18
 

@@ -1,3 +1,5 @@
+import { normalizeEndpoint } from './endpoint'
+
 export type OpenAiProfileId =
   | 'generic'
   | 'anthropic'
@@ -107,11 +109,11 @@ export function getOpenAiProfile(value: string | undefined): OpenAiProviderProfi
 
 export function resolveOpenAiProfileEndpoint(profileId: string | undefined, configuredEndpoint: string): string {
   const profile = getOpenAiProfile(profileId)
-  const configured = configuredEndpoint.trim().replace(/\/+$/, '')
-  if (configured && configured !== DEFAULT_OPENAI_ENDPOINT.replace(/\/+$/, '')) {
+  const configured = normalizeEndpoint(configuredEndpoint)
+  if (configured && configured !== normalizeEndpoint(DEFAULT_OPENAI_ENDPOINT)) {
     return configured
   }
-  return profile.defaultEndpoint
+  return normalizeEndpoint(profile.defaultEndpoint)
 }
 
 export function isFimCompatibleProfile(profileId: string | undefined): boolean {

@@ -65,7 +65,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add configurable authentication headers, API key name, organization/project headers, proxy, TLS, and no-proxy settings for OpenAI-compatible servers.
 - [x] Add adapters or tested compatibility profiles for Anthropic, Google/Gemini, Azure OpenAI, LM Studio, llama.cpp/llama-server, vLLM, and LiteLLM.
 - [x] Keep an extension point for local HTTP servers with custom model discovery and request templates.
-- [ ] Make endpoint joining robust for trailing slashes, `/v1`, native Ollama routes, IPv6, and reverse proxies.
+- [x] Make endpoint joining robust for trailing slashes, `/v1`, native Ollama routes, IPv6, and reverse proxies.
 - [ ] Add shared timeout, retry, status parsing, rate-limit handling, and normalized provider errors.
 - [ ] Cache model discovery and health checks with a manual refresh button. Do not fall back silently to a different model.
 - [ ] Show model metadata and capabilities in settings. Explain when Top K, Min P, penalties, vision, tools, or FIM are ignored.

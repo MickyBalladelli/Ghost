@@ -8,6 +8,7 @@ import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTrans
 import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWireProtocol, resolveOpenAiProfileEndpoint } from './providerProfiles'
 import { ProviderClient } from './providerAdapter'
 import { streamOpenAiTokens } from './openAiStream'
+import { joinEndpoint, normalizeEndpoint } from './endpoint'
 
 type FetchLike = typeof fetch
 
@@ -24,10 +25,6 @@ interface GeminiResponse {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> }
   }>
-}
-
-function normalizeEndpoint(endpoint: string): string {
-  return endpoint.trim().replace(/\/+$/, '')
 }
 
 function withTimeout(timeoutMs: number): AbortSignal {
@@ -116,7 +113,7 @@ function joinCustomEndpoint(baseUrl: string, path: string, model?: string): stri
   if (/^https?:\/\//i.test(resolvedPath)) {
     return resolvedPath
   }
-  return `${normalizeEndpoint(baseUrl)}/${resolvedPath.replace(/^\/+/, '')}`
+  return joinEndpoint(baseUrl, resolvedPath)
 }
 
 function renderCustomTemplate(template: string, options: MlxChatOptions): Record<string, unknown> {
@@ -206,11 +203,12 @@ class AnthropicClient implements ProviderClient {
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
-      const response = await this.request(`${this.baseUrl}/v1/models`, {
+      const endpoint = joinEndpoint(this.baseUrl, 'v1/models')
+      const response = await this.request(endpoint, {
         method: 'GET',
         headers: this.headers(),
         signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(`${this.baseUrl}/v1/models`, this.transport)
+        agent: createOpenAiRequestAgent(endpoint, this.transport)
       })
       return response.ok
     } catch {
@@ -219,7 +217,7 @@ class AnthropicClient implements ProviderClient {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
-    const endpoint = `${this.baseUrl}/v1/models`
+    const endpoint = joinEndpoint(this.baseUrl, 'v1/models')
     const response = await this.request(endpoint, {
       method: 'GET',
       headers: this.headers(),
@@ -232,7 +230,7 @@ class AnthropicClient implements ProviderClient {
   }
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
-    const endpoint = `${this.baseUrl}/v1/messages`
+    const endpoint = joinEndpoint(this.baseUrl, 'v1/messages')
     const settings = generation(options)
     const response = await this.request(endpoint, {
       method: 'POST',
@@ -276,11 +274,12 @@ class GeminiClient implements ProviderClient {
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
-      const response = await this.request(`${this.baseUrl}/v1beta/models`, {
+      const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
+      const response = await this.request(endpoint, {
         method: 'GET',
         headers: this.headers(),
         signal: withTimeout(timeoutMs),
-        agent: createOpenAiRequestAgent(`${this.baseUrl}/v1beta/models`, this.transport)
+        agent: createOpenAiRequestAgent(endpoint, this.transport)
       })
       return response.ok
     } catch {
@@ -289,7 +288,7 @@ class GeminiClient implements ProviderClient {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
-    const endpoint = `${this.baseUrl}/v1beta/models`
+    const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
     const response = await this.request(endpoint, {
       method: 'GET',
       headers: this.headers(),
@@ -302,7 +301,7 @@ class GeminiClient implements ProviderClient {
   }
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
-    const endpoint = `${this.baseUrl}/v1beta/models/${encodeURIComponent(options.model)}:streamGenerateContent?alt=sse`
+    const endpoint = joinEndpoint(this.baseUrl, `v1beta/models/${encodeURIComponent(options.model)}:streamGenerateContent?alt=sse`)
     const response = await this.request(endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
@@ -411,7 +410,7 @@ class AzureOpenAiClient implements ProviderClient {
   ) {}
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
-    const endpoint = `${this.baseUrl}/openai/models?api-version=${encodeURIComponent(this.apiVersion)}`
+    const endpoint = joinEndpoint(this.baseUrl, `openai/models?api-version=${encodeURIComponent(this.apiVersion)}`)
     try {
       const response = await this.request(endpoint, {
         method: 'GET',
@@ -430,7 +429,7 @@ class AzureOpenAiClient implements ProviderClient {
   }
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
-    const endpoint = `${this.baseUrl}/openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`
+    const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
     const response = await this.request(endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
