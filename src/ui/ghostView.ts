@@ -3492,6 +3492,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         line-height: 1;
       }
 
+      .status-footer.thinking #status-text {
+        animation: ghost-thinking-pulse 1.2s ease-in-out infinite;
+        display: inline-block;
+      }
+
       .status-footer.offline .status-dot {
         background: var(--vscode-testing-iconFailed, #f14c4c);
       }
@@ -3516,6 +3521,26 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
         50% {
           translate: 0 -3px;
+        }
+      }
+
+      @keyframes ghost-thinking-pulse {
+        0%,
+        100% {
+          opacity: 0.62;
+          text-shadow: none;
+        }
+
+        50% {
+          opacity: 1;
+          text-shadow: 0 0 8px color-mix(in srgb, var(--ghost-accent) 45%, transparent);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .status-footer.busy .thinking-ghost,
+        .status-footer.thinking #status-text {
+          animation: none;
         }
       }
 

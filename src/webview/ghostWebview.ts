@@ -2359,6 +2359,7 @@ const updateComposer = () => {
   promptElement.disabled = busy
   composerElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('busy', busy)
+  statusFooterElement.classList.toggle('thinking', activeRequest?.status === 'thinking')
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
 }
 
