@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.96 - 2026-08-18
+
+- Included proxy transport dependencies in the VSIX so Ghost can activate.
+
 ## 1.0.94 - 2026-08-18
 
 - Fixed file reads after directory scans by preserving workspace-relative nested paths and resolving a unique missing basename to its discovered file.
