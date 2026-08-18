@@ -806,9 +806,9 @@ app.innerHTML = `
       <label class="control-label" for="model-profile">Profile</label>
       <select id="model-profile" aria-label="Model profile"></select>
       <span class="model-profile-effective" id="model-profile-effective" aria-live="polite"></span>
-      <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
-      <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
-      <span class="auto-accept-indicator" id="auto-accept-indicator" aria-live="polite"></span>
+      <span class="model-capabilities" id="model-capabilities" aria-live="polite" aria-atomic="true"></span>
+      <span class="connection-indicator" id="connection-indicator" role="status" aria-live="polite" aria-atomic="true"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
+      <span class="auto-accept-indicator" id="auto-accept-indicator" role="status" aria-live="polite" aria-atomic="true"></span>
       <button type="button" class="context-button quick-switch-button" id="quick-switch" aria-haspopup="dialog">Quick switch</button>
       <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
     </section>
@@ -2063,11 +2063,23 @@ const renderPresets = () => {
   presetSelectElement.value = presets().some(preset => preset.id === selected) ? selected : ''
 }
 
+const modalReturnFocus = new WeakMap<HTMLElement, HTMLElement>()
+
 const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
   modal.hidden = !visible
   if (visible) {
+    const activeElement = document.activeElement
+    if (activeElement instanceof HTMLElement && activeElement !== document.body && !modal.contains(activeElement)) {
+      modalReturnFocus.set(modal, activeElement)
+    }
     const focusable = modal.querySelector<HTMLElement>('button, input, select, textarea')
     focusable?.focus()
+    return
+  }
+  const returnFocus = modalReturnFocus.get(modal)
+  modalReturnFocus.delete(modal)
+  if (returnFocus && document.contains(returnFocus) && !returnFocus.closest('.modal-backdrop:not([hidden])')) {
+    returnFocus.focus()
   }
 }
 
@@ -2238,8 +2250,20 @@ const animatedStatusLabel = (value: string): string => {
 }
 
 let animatedStatusFrame: number | undefined
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+const clearAnimatedStatusHighlights = (): void => {
+  document.querySelectorAll<HTMLElement>('.animated-status-character.highlighted').forEach(character => {
+    character.classList.remove('highlighted')
+  })
+}
 
 const updateAnimatedStatusLabels = (timestamp: number): void => {
+  if (reducedMotionQuery.matches) {
+    clearAnimatedStatusHighlights()
+    animatedStatusFrame = undefined
+    return
+  }
   const labels = Array.from(document.querySelectorAll<HTMLElement>('.animated-status-label'))
   if (labels.length === 0) {
     animatedStatusFrame = undefined
@@ -2261,10 +2285,26 @@ const updateAnimatedStatusLabels = (timestamp: number): void => {
 }
 
 const ensureAnimatedStatusLabels = (): void => {
+  if (reducedMotionQuery.matches) {
+    clearAnimatedStatusHighlights()
+    return
+  }
   if (animatedStatusFrame === undefined) {
     animatedStatusFrame = requestAnimationFrame(updateAnimatedStatusLabels)
   }
 }
+
+reducedMotionQuery.addEventListener('change', () => {
+  if (reducedMotionQuery.matches) {
+    if (animatedStatusFrame !== undefined) {
+      cancelAnimationFrame(animatedStatusFrame)
+      animatedStatusFrame = undefined
+    }
+    clearAnimatedStatusHighlights()
+  } else {
+    ensureAnimatedStatusLabels()
+  }
+})
 
 const safeLink = (value: string): string | undefined => {
   try {
@@ -4769,6 +4809,23 @@ document.querySelectorAll<HTMLElement>('.modal-backdrop').forEach(backdrop => {
   })
 })
 document.addEventListener('keydown', event => {
+  const activeModal = Array.from(document.querySelectorAll<HTMLElement>('.modal-backdrop'))
+    .find(modal => !modal.hidden)
+  if (activeModal && event.key === 'Tab') {
+    const focusable = Array.from(activeModal.querySelectorAll<HTMLElement>('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])'))
+      .filter(element => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+    if (focusable.length > 0) {
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        last.focus()
+        event.preventDefault()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        first.focus()
+        event.preventDefault()
+      }
+    }
+  }
   const approvalCard = (event.target as HTMLElement).closest<HTMLElement>('.tool-approval-card')
   if (approvalCard && !event.altKey && !event.metaKey && !event.ctrlKey) {
     if (event.key === 'j' || event.key === 'ArrowDown') {

@@ -2357,6 +2357,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         --ghost-accent: var(--vscode-textLink-foreground, #3794ff);
         --ghost-border: var(--vscode-panel-border, var(--vscode-widget-border, transparent));
         --ghost-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        --ghost-eye-background: var(--vscode-editor-foreground, #fff);
+        --ghost-pupil-background: var(--vscode-textLink-foreground, #0d468e);
+        --ghost-gradient-red: var(--vscode-charts-red, #ff5f6d);
+        --ghost-gradient-yellow: var(--vscode-charts-yellow, #ffc371);
+        --ghost-gradient-green: var(--vscode-charts-green, #64f38c);
+        --ghost-gradient-blue: var(--vscode-charts-blue, #4facfe);
+        --ghost-gradient-purple: var(--vscode-charts-purple, #c471ed);
       }
 
       * {
@@ -2443,7 +2450,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .ghost-eye {
-        background: #fff;
+        background: var(--ghost-eye-background);
         border-radius: 50%;
         height: 23%;
         overflow: hidden;
@@ -2461,7 +2468,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .ghost-pupil {
-        background: #0d468e;
+        background: var(--ghost-pupil-background);
         border-radius: 50%;
         height: 46%;
         left: 50%;
@@ -3923,15 +3930,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .composer::before {
         background: conic-gradient(
           from var(--ghost-border-angle),
-          #ff5f6d 0deg,
-          #ffc371 55deg,
-          #64f38c 110deg,
-          #4facfe 165deg,
-          #c471ed 220deg,
-          #ff5f6d 275deg,
+          var(--ghost-gradient-red) 0deg,
+          var(--ghost-gradient-yellow) 55deg,
+          var(--ghost-gradient-green) 110deg,
+          var(--ghost-gradient-blue) 165deg,
+          var(--ghost-gradient-purple) 220deg,
+          var(--ghost-gradient-red) 275deg,
           var(--vscode-foreground) 330deg,
           var(--vscode-foreground) 345deg,
-          #ff5f6d 360deg
+          var(--ghost-gradient-red) 360deg
         );
         border-radius: inherit;
         content: '';
@@ -4162,13 +4169,47 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       @media (forced-colors: active) {
+        :root {
+          --ghost-accent: Highlight;
+          --ghost-border: CanvasText;
+          --ghost-surface: Canvas;
+          --ghost-eye-background: Canvas;
+          --ghost-pupil-background: CanvasText;
+        }
+
         button,
-        .empty-state {
-          border: 1px solid CanvasText;
+        input,
+        select,
+        textarea,
+        .empty-state,
+        .message,
+        .tool-progress,
+        .modal,
+        .composer,
+        .control-strip {
+          border-color: ButtonText;
         }
 
         .status-dot {
-          background: CanvasText;
+          background: Highlight;
+          forced-color-adjust: none;
+        }
+
+        .composer.busy {
+          border: 1px solid Highlight;
+        }
+
+        .composer.busy::before {
+          display: none;
+        }
+
+        .animated-status-character.highlighted {
+          color: Highlight;
+          text-shadow: none;
+        }
+
+        :focus-visible {
+          outline-color: Highlight;
         }
       }
 

@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Add searchable settings sections for Generation, Provider, Agent Safety, Appearance, Persistence, and Advanced options.
 - Add built-in Coding, Balanced, and Creative model profiles with effective-value display and restore defaults.
 - Add a first-run setup flow with provider checks, model discovery, capability notes, and an optional test request.
+- Improve accessibility with VS Code theme variables, forced-colors styling, reduced-motion handling, screen-reader status updates, and modal keyboard focus trapping.
 
 ## 1.1.17 - 2026-08-18
 
