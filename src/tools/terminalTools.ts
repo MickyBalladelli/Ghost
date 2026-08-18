@@ -1,11 +1,10 @@
-import { spawn } from 'node:child_process'
-
 import * as vscode from 'vscode'
 
 import { DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST, getGhostSettings } from '../config'
 import { redactSensitiveText } from '../privacy/redact'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
 
 export interface RunTerminalCommandInput {
   command: string
@@ -118,7 +117,7 @@ class TerminalOutputRingBuffer {
   }
 }
 
-function terminateProcessTree(child: ReturnType<typeof spawn>, force: boolean): void {
+function terminateProcessTree(child: ReturnType<GhostProcessRunner['spawn']>, force: boolean, processRunner: GhostProcessRunner): void {
   if (!child.pid) {
     child.kill(force ? 'SIGKILL' : 'SIGTERM')
     return
@@ -128,7 +127,7 @@ function terminateProcessTree(child: ReturnType<typeof spawn>, force: boolean): 
     if (force) {
       args.push('/f')
     }
-    const taskkill = spawn('taskkill', args, { windowsHide: true, stdio: 'ignore' })
+    const taskkill = processRunner.spawn('taskkill', args, { windowsHide: true, stdio: 'ignore' })
     taskkill.on('error', () => child.kill(force ? 'SIGKILL' : 'SIGTERM'))
     return
   }
@@ -200,11 +199,11 @@ function getShellInvocation(command: string): { shell: string; args: string[] } 
   return { shell: '/bin/bash', args: ['-lc', command] }
 }
 
-function runCommand(command: string, cwd: string, token: vscode.CancellationToken): Promise<string> {
+function runCommand(command: string, cwd: string, token: vscode.CancellationToken, processRunner: GhostProcessRunner): Promise<string> {
   return new Promise((resolve, reject) => {
     const invocation = getShellInvocation(command)
     const environment = getTerminalEnvironment()
-    const child = spawn(invocation.shell, invocation.args, {
+    const child = processRunner.spawn(invocation.shell, invocation.args, {
       cwd,
       env: environment,
       detached: process.platform !== 'win32',
@@ -222,8 +221,8 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
         return
       }
       terminationReason = reason
-      terminateProcessTree(child, false)
-      forceTerminationTimer = setTimeout(() => terminateProcessTree(child, true), PROCESS_TERMINATION_GRACE_MS)
+      terminateProcessTree(child, false, processRunner)
+      forceTerminationTimer = setTimeout(() => terminateProcessTree(child, true, processRunner), PROCESS_TERMINATION_GRACE_MS)
     }
 
     const append = (chunk: string) => {
@@ -249,6 +248,10 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
       callback()
     }
 
+    if (!child.stdout || !child.stderr) {
+      finish(() => reject(new Error('Terminal command did not expose output streams')))
+      return
+    }
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
     child.stdout.on('data', append)
@@ -281,6 +284,8 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
 }
 
 export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTerminalCommandInput> {
+  constructor(private readonly processRunner: GhostProcessRunner = systemProcessRunner) {}
+
   async invoke(
     options: vscode.LanguageModelToolInvocationOptions<RunTerminalCommandInput>,
     token: vscode.CancellationToken
@@ -296,7 +301,7 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
     const cwd = options.input.cwd
       ? resolveWorkspacePath(options.input.cwd).fsPath
       : getWorkspaceRoot().fsPath
-    const output = await runCommand(options.input.command, cwd, token)
+    const output = await runCommand(options.input.command, cwd, token, this.processRunner)
 
     return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(output)])
   }

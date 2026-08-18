@@ -1,6 +1,7 @@
 import fetch, { type RequestInit, type Response } from 'node-fetch'
 
 import { requestWithRetry, type ProviderRequestOptions } from './providerRequest'
+import { GhostClock, systemClock } from '../runtimeDependencies'
 
 type FetchLike = typeof fetch
 type RequestAgent = NonNullable<RequestInit['agent']>
@@ -54,12 +55,14 @@ export class ProviderHttpTransport {
     init: RequestInit = {},
     options: ProviderTransportOptions = {}
   ): Promise<Response> {
-    const startedAt = Date.now()
+    const clock: GhostClock = options.clock ?? systemClock
+    const startedAt = clock.now()
     let attempts = 0
     const requestOptions: ProviderRequestOptions = {
       signal: options.signal,
       timeoutMs: options.timeoutMs,
-      maxAttempts: options.maxAttempts
+      maxAttempts: options.maxAttempts,
+      clock
     }
 
     try {
@@ -75,7 +78,7 @@ export class ProviderHttpTransport {
         },
         requestOptions
       )
-      const completedAt = Date.now()
+      const completedAt = clock.now()
       this.lastDiagnostics = {
         endpoint,
         startedAt,
@@ -87,7 +90,7 @@ export class ProviderHttpTransport {
       }
       return response
     } catch (error) {
-      const completedAt = Date.now()
+      const completedAt = clock.now()
       this.lastDiagnostics = {
         endpoint,
         startedAt,

@@ -6,6 +6,7 @@ import * as vscode from 'vscode'
 import { isFileNotFound, readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { awaitCancellable, throwIfCancelled } from './cancellation'
 import { invalidateWorkspaceCache } from './workspaceCache'
+import { GhostFileSystem, vscodeFileSystem } from '../runtimeDependencies'
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) {
@@ -15,9 +16,9 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.every((byte, index) => byte === right[index])
 }
 
-async function deleteIfPresent(uri: vscode.Uri): Promise<void> {
+async function deleteIfPresent(uri: vscode.Uri, filesystem: GhostFileSystem): Promise<void> {
   try {
-    await vscode.workspace.fs.delete(uri, { useTrash: false })
+    await filesystem.delete(uri, { useTrash: false })
   } catch (error) {
     if (!isFileNotFound(error)) {
       throw error
@@ -29,7 +30,8 @@ export async function atomicWriteFile(
   uri: vscode.Uri,
   content: Uint8Array,
   expected?: WorkspaceFileSnapshot,
-  token?: vscode.CancellationToken
+  token?: vscode.CancellationToken,
+  filesystem: GhostFileSystem = vscodeFileSystem
 ): Promise<void> {
   const parent = vscode.Uri.file(path.dirname(uri.fsPath))
   const suffix = randomBytes(8).toString('hex')
@@ -37,8 +39,8 @@ export async function atomicWriteFile(
   const temporary = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.tmp`)
   const backup = vscode.Uri.joinPath(parent, `.${baseName}.ghost-${suffix}.bak`)
   throwIfCancelled(token)
-  await vscode.workspace.fs.createDirectory(parent)
-  const initial = await readWorkspaceFile(uri, token)
+  await filesystem.createDirectory(parent)
+  const initial = await readWorkspaceFile(uri, token, filesystem)
   if (expected && !sameWorkspaceFile(initial, expected)) {
     throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
   }
@@ -49,32 +51,32 @@ export async function atomicWriteFile(
   try {
     if (targetExists) {
       throwIfCancelled(token)
-      await vscode.workspace.fs.copy(uri, backup)
+      await filesystem.copy(uri, backup)
       backupCreated = true
     }
 
     throwIfCancelled(token)
-    await vscode.workspace.fs.writeFile(temporary, content)
+    await filesystem.writeFile(temporary, content)
     throwIfCancelled(token)
-    const temporaryContent = await awaitCancellable(vscode.workspace.fs.readFile(temporary), token)
+    const temporaryContent = await awaitCancellable(filesystem.readFile(temporary), token)
     if (!sameBytes(temporaryContent, content)) {
       throw new Error(`Atomic write verification failed for ${uri.fsPath}`)
     }
 
     if (expected) {
-      const latest = await readWorkspaceFile(uri, token)
+      const latest = await readWorkspaceFile(uri, token, filesystem)
       if (!sameWorkspaceFile(latest, expected)) {
         throw new Error(`File changed externally. Refresh and rebase the edit before retrying: ${uri.fsPath}`)
       }
     }
 
     throwIfCancelled(token)
-    await vscode.workspace.fs.rename(temporary, uri, { overwrite: true })
+    await filesystem.rename(temporary, uri, { overwrite: true })
     targetReplaced = true
     invalidateWorkspaceCache(uri)
     throwIfCancelled(token)
 
-    const savedContent = await awaitCancellable(vscode.workspace.fs.readFile(uri), token)
+    const savedContent = await awaitCancellable(filesystem.readFile(uri), token)
     if (!sameBytes(savedContent, content)) {
       throw new Error(`Atomic write verification failed for ${uri.fsPath}`)
     }
@@ -82,9 +84,9 @@ export async function atomicWriteFile(
     if (targetReplaced) {
       try {
         if (targetExists) {
-          await vscode.workspace.fs.rename(backup, uri, { overwrite: true })
+          await filesystem.rename(backup, uri, { overwrite: true })
         } else {
-          await deleteIfPresent(uri)
+          await deleteIfPresent(uri, filesystem)
         }
         invalidateWorkspaceCache(uri)
       } catch (restoreError) {
@@ -96,9 +98,9 @@ export async function atomicWriteFile(
     throw error
   } finally {
     try {
-      await deleteIfPresent(temporary)
+      await deleteIfPresent(temporary, filesystem)
       if (backupCreated) {
-        await deleteIfPresent(backup)
+        await deleteIfPresent(backup, filesystem)
       }
     } catch {
       // The write result is already known. Do not hide it behind cleanup failure.

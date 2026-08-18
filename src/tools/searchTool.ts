@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -7,6 +6,7 @@ import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
 
 export interface SearchWorkspaceInput {
   query: string
@@ -69,10 +69,11 @@ function runRipgrep(
   args: string[],
   cwd: string,
   token: vscode.CancellationToken,
-  maxResults: number
+  maxResults: number,
+  processRunner: GhostProcessRunner
 ): Promise<RipgrepResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(findRipgrepExecutable(), args, { cwd, shell: false, windowsHide: true })
+    const child = processRunner.spawn(findRipgrepExecutable(), args, { cwd, shell: false, windowsHide: true })
     let errorOutput = ''
     let pending = ''
     let matches: SearchMatch[] = []
@@ -107,6 +108,10 @@ function runRipgrep(
       }
       finish(error instanceof Error ? error : new Error('Could not start ripgrep'))
     })
+    if (!child.stdout || !child.stderr) {
+      finish(new Error('Ripgrep did not expose output streams'))
+      return
+    }
     child.stdout.on('data', chunk => {
       pending += Buffer.from(chunk).toString('utf8')
       const lines = pending.split(/\r?\n/)
@@ -156,6 +161,8 @@ function runRipgrep(
 }
 
 export class SearchWorkspaceTool implements vscode.LanguageModelTool<SearchWorkspaceInput> {
+  constructor(private readonly processRunner: GhostProcessRunner = systemProcessRunner) {}
+
   async invoke(
     options: vscode.LanguageModelToolInvocationOptions<SearchWorkspaceInput>,
     token: vscode.CancellationToken
@@ -173,7 +180,7 @@ export class SearchWorkspaceTool implements vscode.LanguageModelTool<SearchWorks
     if (options.input.glob?.trim()) args.push('--glob', options.input.glob.trim())
     args.push(query, relativeTarget)
 
-    const result = await runRipgrep(args, workspace.fsPath, token, maxResults)
+    const result = await runRipgrep(args, workspace.fsPath, token, maxResults, this.processRunner)
     return textResult(JSON.stringify({
       query,
       path: target.fsPath,

@@ -5,10 +5,12 @@ import { applyGhostEdit, GhostFileEdit } from './editWorkflow'
 import { readWorkspaceFile, sameWorkspaceFile, assertNoUnsavedEditorChanges, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { resolveWorkspacePath } from './workspacePath'
 import { GhostError } from '../ghostErrors'
+import { GhostFileSystem, vscodeFileSystem } from '../runtimeDependencies'
 
 export interface FileMutationOptions {
   expectedContent?: string
   expectedFileExists?: boolean
+  fileSystem?: GhostFileSystem
 }
 
 export interface WorkspaceFileChange {
@@ -27,10 +29,11 @@ export function assertFileMutationAllowed(filePaths: string[]): void {
 
 export async function readFileMutation(
   filePath: string,
-  token: vscode.CancellationToken
+  token: vscode.CancellationToken,
+  filesystem: GhostFileSystem = vscodeFileSystem
 ): Promise<{ uri: vscode.Uri; snapshot: WorkspaceFileSnapshot }> {
   const uri = resolveFileMutationPath(filePath)
-  return { uri, snapshot: await readWorkspaceFile(uri, token) }
+  return { uri, snapshot: await readWorkspaceFile(uri, token, filesystem) }
 }
 
 export function expectedWorkspaceSnapshot(options: FileMutationOptions): WorkspaceFileSnapshot | undefined {
@@ -82,11 +85,12 @@ export async function applyWorkspaceFileChange(
   uri: vscode.Uri,
   change: WorkspaceFileChange,
   expected: WorkspaceFileSnapshot,
-  token: vscode.CancellationToken
+  token: vscode.CancellationToken,
+  filesystem: GhostFileSystem = vscodeFileSystem
 ): Promise<void> {
   if (!change.changed) {
     return
   }
-  await atomicWriteFile(uri, Buffer.from(change.after.content, 'utf8'), expected, token)
-  await verifyWorkspaceFile(uri, change.after, token)
+  await atomicWriteFile(uri, Buffer.from(change.after.content, 'utf8'), expected, token, filesystem)
+  await verifyWorkspaceFile(uri, change.after, token, filesystem)
 }

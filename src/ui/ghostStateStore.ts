@@ -13,6 +13,7 @@ import type { ProviderStatus, ProviderStatusCache } from './ghostProviderState'
 import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { GhostRequestOrchestrator } from './ghostRequestOrchestrator'
 import type { WorkspaceFileSnapshot } from '../tools/workspaceFile'
+import type { GhostStorage } from '../runtimeDependencies'
 
 export type GhostStateEventType = 'settings' | 'conversation' | 'request' | 'approval' | 'provider' | 'persistence' | 'status'
 
@@ -113,8 +114,8 @@ export class GhostStateStore {
   readonly recoveryRecords = new Map<string, RecoveryRecord>()
   readonly failedToolRetries = new Map<string, FailedToolRetry>()
   readonly sessionApprovedTools = new Set<string>()
-  readonly globalState?: vscode.Memento
-  readonly workspaceState?: vscode.Memento
+  readonly globalState?: GhostStorage
+  readonly workspaceState?: GhostStorage
 
   sessionApprovedFileEdits = false
   workspaceApprovedFileEdits = false
@@ -131,8 +132,8 @@ export class GhostStateStore {
 
   constructor(options: {
     settings: GhostSettings
-    globalState?: vscode.Memento
-    workspaceState?: vscode.Memento
+    globalState?: GhostStorage
+    workspaceState?: GhostStorage
   }) {
     this.settings = options.settings
     this.globalState = options.globalState

@@ -44,6 +44,7 @@ All notable changes to this extension are documented here.
 - Group tool, agent, provider, persistence, protocol, and context limits in one shared policy module.
 - Add shared Ghost error codes and error classes across provider, tool, persistence, approval, and UI boundaries.
 - Add Ghost settings schema versioning with activation-time migrations for legacy approval and debug settings.
+- Add injectable runtime dependencies for clocks, process runners, filesystems, storage, webview messaging, and local tool execution.
 
 ## 1.1.17 - 2026-08-18
 

@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process'
 import * as path from 'node:path'
 
 import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
 
 export interface GitContextInput {
   operation: 'status' | 'diff' | 'stagedDiff' | 'branch' | 'history'
@@ -30,9 +30,9 @@ function textResult(value: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(value)])
 }
 
-function runGit(args: string[], cwd: string, token: vscode.CancellationToken): Promise<GitCommandResult> {
+function runGit(args: string[], cwd: string, token: vscode.CancellationToken, processRunner: GhostProcessRunner): Promise<GitCommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', args, { cwd, shell: false, windowsHide: true })
+    const child = processRunner.spawn('git', args, { cwd, shell: false, windowsHide: true })
     let stdout = ''
     let stderr = ''
     let truncated = false
@@ -73,6 +73,10 @@ function runGit(args: string[], cwd: string, token: vscode.CancellationToken): P
       finish(new Error('Git command cancelled'))
     })
 
+    if (!child.stdout || !child.stderr) {
+      finish(new Error('Git did not expose output streams'))
+      return
+    }
     child.stdout.on('data', chunk => {
       stdout = append(stdout, chunk)
     })
@@ -102,7 +106,7 @@ function relativeGitPath(root: string, target: string): string {
   return relative
 }
 
-async function getGitScope(input: GitContextInput, token: vscode.CancellationToken): Promise<GitScope> {
+async function getGitScope(input: GitContextInput, token: vscode.CancellationToken, processRunner: GhostProcessRunner): Promise<GitScope> {
   const workspaceRoot = getWorkspaceRoot().fsPath
   const requestedPath = input.path?.trim() || (input.operation === 'diff' || input.operation === 'stagedDiff' || input.operation === 'history' ? activeFilePath() : undefined)
   const targetUri = requestedPath
@@ -110,7 +114,7 @@ async function getGitScope(input: GitContextInput, token: vscode.CancellationTok
     : undefined
   const targetFolder = targetUri ? vscode.workspace.getWorkspaceFolder(targetUri) : undefined
   const folderRoot = targetFolder?.uri.fsPath ?? workspaceRoot
-  const repositoryResult = await runGit(['rev-parse', '--show-toplevel'], folderRoot, token)
+  const repositoryResult = await runGit(['rev-parse', '--show-toplevel'], folderRoot, token, processRunner)
   const repository = repositoryResult.stdout.trim().split(/\r?\n/)[0]
   if (!repository) {
     throw new Error('The current workspace is not inside a Git repository')
@@ -138,6 +142,8 @@ function formatOutput(scope: GitScope, operation: GitContextInput['operation'], 
 }
 
 export class GitContextTool implements vscode.LanguageModelTool<GitContextInput> {
+  constructor(private readonly processRunner: GhostProcessRunner = systemProcessRunner) {}
+
   async invoke(
     options: vscode.LanguageModelToolInvocationOptions<GitContextInput>,
     token: vscode.CancellationToken
@@ -150,15 +156,15 @@ export class GitContextTool implements vscode.LanguageModelTool<GitContextInput>
     if (!['status', 'diff', 'stagedDiff', 'branch', 'history'].includes(input.operation)) {
       throw new Error('operation must be status, diff, stagedDiff, branch, or history')
     }
-    const scope = await getGitScope(input, token)
+    const scope = await getGitScope(input, token, this.processRunner)
     const maxEntries = Math.min(input.maxEntries ?? 100, MAX_ENTRIES)
     if (!Number.isInteger(maxEntries) || maxEntries < 1) {
       throw new Error('maxEntries must be a positive integer')
     }
 
     if (input.operation === 'branch') {
-      const branch = await runGit(['branch', '--show-current'], scope.repository, token)
-      const commit = await runGit(['rev-parse', '--short', 'HEAD'], scope.repository, token)
+      const branch = await runGit(['branch', '--show-current'], scope.repository, token, this.processRunner)
+      const commit = await runGit(['rev-parse', '--short', 'HEAD'], scope.repository, token, this.processRunner)
       return textResult(formatOutput(scope, input.operation, `branch: ${branch.stdout.trim() || '(detached HEAD)'}\ncommit: ${commit.stdout.trim()}`, branch.truncated || commit.truncated))
     }
 
@@ -179,7 +185,7 @@ export class GitContextTool implements vscode.LanguageModelTool<GitContextInput>
     } else {
       args = ['log', '--follow', `-n${maxEntries}`, '--date=iso-strict', '--format=%h%x09%ad%x09%an%x09%s', '--', pathSpec as string]
     }
-    const result = await runGit(args, scope.repository, token)
+    const result = await runGit(args, scope.repository, token, this.processRunner)
     const output = input.operation === 'status'
       ? result.stdout.split(/\r?\n/).filter(Boolean).slice(0, maxEntries).join('\n')
       : result.stdout

@@ -1,6 +1,7 @@
 import type { Response } from 'node-fetch'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { GhostError } from '../ghostErrors'
+import { GhostClock, systemClock } from '../runtimeDependencies'
 
 const { requestTimeoutMs: DEFAULT_TIMEOUT_MS, defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS, maxRetryDelayMs: MAX_RETRY_DELAY_MS, retryBaseDelayMs: RETRY_BASE_DELAY_MS } = GHOST_POLICY.provider
 
@@ -8,6 +9,7 @@ export interface ProviderRequestOptions {
   signal?: AbortSignal
   timeoutMs?: number
   maxAttempts?: number
+  clock?: GhostClock
 }
 
 export class ProviderHttpError extends GhostError {
@@ -41,7 +43,7 @@ function isRetryableNetworkError(error: unknown): boolean {
   return /abort|econn|enotfound|eai_again|etimedout|socket|network|fetch|reset/.test(message)
 }
 
-export function parseRetryAfter(headers: Pick<Headers, 'get'>): number | undefined {
+export function parseRetryAfter(headers: Pick<Headers, 'get'>, clock: GhostClock = systemClock): number | undefined {
   const retryAfter = headers.get('retry-after')?.trim()
   if (retryAfter) {
     const seconds = Number(retryAfter)
@@ -50,7 +52,7 @@ export function parseRetryAfter(headers: Pick<Headers, 'get'>): number | undefin
     }
     const timestamp = Date.parse(retryAfter)
     if (Number.isFinite(timestamp)) {
-      return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()))
+      return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, timestamp - clock.now()))
     }
   }
 
@@ -58,7 +60,7 @@ export function parseRetryAfter(headers: Pick<Headers, 'get'>): number | undefin
   const timestamp = reset ? Number(reset) : NaN
   if (Number.isFinite(timestamp) && timestamp > 0) {
     const milliseconds = timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000
-    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, milliseconds - Date.now()))
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, milliseconds - clock.now()))
   }
   return undefined
 }
@@ -70,18 +72,18 @@ function retryDelay(attempt: number, retryAfterMs?: number): number {
   return Math.min(MAX_RETRY_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1))
 }
 
-function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+function waitForRetry(delayMs: number, signal: AbortSignal | undefined, clock: GhostClock): Promise<void> {
   if (delayMs <= 0) {
     return Promise.resolve()
   }
   return new Promise((resolve, reject) => {
     const cleanup = () => signal?.removeEventListener('abort', abort)
-    const timer = setTimeout(() => {
+    const timer = clock.setTimeout(() => {
       cleanup()
       resolve()
     }, delayMs)
     const abort = () => {
-      clearTimeout(timer)
+      clock.clearTimeout(timer)
       cleanup()
       reject(new GhostError('Provider request cancelled during retry backoff', { code: 'provider.cancelled', retryable: false }))
     }
@@ -99,6 +101,7 @@ export async function requestWithRetry(
 ): Promise<Response> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
+  const clock = options.clock ?? systemClock
   let lastError: unknown
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -107,7 +110,7 @@ export async function requestWithRetry(
     }
     const controller = new AbortController()
     let timedOut = false
-    const timeout = setTimeout(() => {
+    const timeout = clock.setTimeout(() => {
       timedOut = true
       controller.abort()
     }, timeoutMs)
@@ -119,15 +122,15 @@ export async function requestWithRetry(
       if (!isRetryableStatus(response.status) || attempt >= maxAttempts) {
         return response
       }
-      await waitForRetry(retryDelay(attempt, parseRetryAfter(response.headers)), options.signal)
+      await waitForRetry(retryDelay(attempt, parseRetryAfter(response.headers, clock)), options.signal, clock)
     } catch (error) {
       lastError = timedOut ? new ProviderTimeoutError(timeoutMs) : error
       if (options.signal?.aborted || (!timedOut && !isRetryableNetworkError(error)) || attempt >= maxAttempts) {
         throw lastError
       }
-      await waitForRetry(retryDelay(attempt), options.signal)
+      await waitForRetry(retryDelay(attempt), options.signal, clock)
     } finally {
-      clearTimeout(timeout)
+      clock.clearTimeout(timeout)
       options.signal?.removeEventListener('abort', abort)
     }
   }

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { throwIfCancelled } from './cancellation'
 import { readCachedWorkspaceFile } from './workspaceCache'
+import { GhostFileSystem, vscodeFileSystem } from '../runtimeDependencies'
 
 export interface WorkspaceFileSnapshot {
   exists: boolean
@@ -11,12 +12,15 @@ export function isFileNotFound(error: unknown): boolean {
   return error instanceof vscode.FileSystemError && error.code === 'FileNotFound'
 }
 
-export async function readWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken): Promise<WorkspaceFileSnapshot> {
+export async function readWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken, filesystem: GhostFileSystem = vscodeFileSystem): Promise<WorkspaceFileSnapshot> {
   throwIfCancelled(token)
   try {
+    const bytes = filesystem === vscodeFileSystem
+      ? await readCachedWorkspaceFile(uri, token)
+      : await filesystem.readFile(uri)
     return {
       exists: true,
-      content: Buffer.from(await readCachedWorkspaceFile(uri, token)).toString('utf8')
+      content: Buffer.from(bytes).toString('utf8')
     }
   } catch (error) {
     if (isFileNotFound(error)) {
@@ -41,8 +45,8 @@ export function assertNoUnsavedEditorChanges(uris: vscode.Uri[]): void {
   }
 }
 
-export async function verifyWorkspaceFile(uri: vscode.Uri, expected: WorkspaceFileSnapshot, token?: vscode.CancellationToken): Promise<void> {
-  const actual = await readWorkspaceFile(uri, token)
+export async function verifyWorkspaceFile(uri: vscode.Uri, expected: WorkspaceFileSnapshot, token?: vscode.CancellationToken, filesystem: GhostFileSystem = vscodeFileSystem): Promise<void> {
+  const actual = await readWorkspaceFile(uri, token, filesystem)
   if (!sameWorkspaceFile(actual, expected)) {
     throw new Error(`Verification failed: ${uri.fsPath} does not contain the expected content`)
   }

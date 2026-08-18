@@ -21,6 +21,7 @@ import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summa
 import { awaitCancellable } from './cancellation'
 import { validateLocalToolCall } from '../agent/toolSchema'
 import { createToolErrorResult, createToolResult, ToolResult } from './toolResult'
+import { GhostFileSystem, GhostProcessRunner, vscodeFileSystem } from '../runtimeDependencies'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -76,8 +77,8 @@ function resultText(result: vscode.LanguageModelToolResult): string {
     .join('\n')
 }
 
-async function readCurrentFile(filePath: string, token: vscode.CancellationToken): Promise<WorkspaceFileSnapshot> {
-  return (await readFileMutation(filePath, token)).snapshot
+async function readCurrentFile(filePath: string, token: vscode.CancellationToken, filesystem: GhostFileSystem): Promise<WorkspaceFileSnapshot> {
+  return (await readFileMutation(filePath, token, filesystem)).snapshot
 }
 
 async function confirmAction(title: string, message: string, token: vscode.CancellationToken): Promise<boolean> {
@@ -92,14 +93,28 @@ async function confirmAction(title: string, message: string, token: vscode.Cance
 }
 
 export class LocalToolExecutor {
-  private readonly readFileTool = new ReadFileTool()
-  private readonly listDirectoryTool = new ListDirectoryTool()
-  private readonly terminalTool = new RunTerminalCommandTool()
-  private readonly searchTool = new SearchWorkspaceTool()
-  private readonly diagnosticsTool = new DiagnosticsTool()
-  private readonly gitContextTool = new GitContextTool()
-  private readonly taskPlanTool = new TaskPlanTool()
-  private readonly completionRecordTool = new CompletionRecordTool()
+  private readonly readFileTool: ReadFileTool
+  private readonly listDirectoryTool: ListDirectoryTool
+  private readonly terminalTool: RunTerminalCommandTool
+  private readonly searchTool: SearchWorkspaceTool
+  private readonly diagnosticsTool: DiagnosticsTool
+  private readonly gitContextTool: GitContextTool
+  private readonly taskPlanTool: TaskPlanTool
+  private readonly completionRecordTool: CompletionRecordTool
+
+  private readonly fileSystem: GhostFileSystem
+
+  constructor(options: { processRunner?: GhostProcessRunner; fileSystem?: GhostFileSystem } = {}) {
+    this.fileSystem = options.fileSystem ?? vscodeFileSystem
+    this.readFileTool = new ReadFileTool()
+    this.listDirectoryTool = new ListDirectoryTool()
+    this.terminalTool = new RunTerminalCommandTool(options.processRunner)
+    this.searchTool = new SearchWorkspaceTool(options.processRunner)
+    this.diagnosticsTool = new DiagnosticsTool()
+    this.gitContextTool = new GitContextTool(options.processRunner)
+    this.taskPlanTool = new TaskPlanTool()
+    this.completionRecordTool = new CompletionRecordTool()
+  }
 
   async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<ToolResult> {
     const changedFiles = changedFilesForCall(call)
@@ -206,7 +221,7 @@ export class LocalToolExecutor {
         }
 
         if (options.alreadyApplied) {
-          const current = await readCurrentFile(input.path, token)
+          const current = await readCurrentFile(input.path, token, this.fileSystem)
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
@@ -214,14 +229,14 @@ export class LocalToolExecutor {
         }
 
         const expected = expectedWorkspaceSnapshot(options)
-        const { uri, snapshot: current } = await readFileMutation(input.path, token)
+        const { uri, snapshot: current } = await readFileMutation(input.path, token, this.fileSystem)
         assertExpectedWorkspaceSnapshot(current, expected)
         const change = createWorkspaceFileChange(current, input.content)
         if (!change.changed) {
           return `${input.path}: no changes needed.`
         }
 
-        await applyWorkspaceFileChange(uri, change, expected ?? current, token)
+        await applyWorkspaceFileChange(uri, change, expected ?? current, token, this.fileSystem)
         return `${input.path}: wrote ${input.content.length} characters.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_edit': {
@@ -237,7 +252,7 @@ export class LocalToolExecutor {
         }
 
         if (options.alreadyApplied) {
-          const current = await readCurrentFile(edit.path, token)
+          const current = await readCurrentFile(edit.path, token, this.fileSystem)
           if (!current.exists || (options.appliedContent !== undefined && current.content !== options.appliedContent)) {
             throw new Error('The accepted edit changed before Ghost could finish the request')
           }
@@ -245,14 +260,14 @@ export class LocalToolExecutor {
         }
 
         const expected = expectedWorkspaceSnapshot(options)
-        const { uri, snapshot: current } = await readFileMutation(edit.path, token)
+        const { uri, snapshot: current } = await readFileMutation(edit.path, token, this.fileSystem)
         assertExpectedWorkspaceSnapshot(current, expected)
         const selectedHunks = options.selectedHunkIndexes ? new Set(options.selectedHunkIndexes) : undefined
         const change = createWorkspaceEditChange(current, edit, selectedHunks)
         if (!change.changed) {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
-        await applyWorkspaceFileChange(uri, change, expected ?? current, token)
+        await applyWorkspaceFileChange(uri, change, expected ?? current, token, this.fileSystem)
         return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_transaction': {

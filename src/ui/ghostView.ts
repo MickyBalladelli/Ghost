@@ -68,6 +68,7 @@ import { awaitCancellable } from '../tools/cancellation'
 import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
 import { effectiveGhostLogLevel, writeGhostLog } from '../logging/ghostLogger'
 import { GhostError, toGhostError } from '../ghostErrors'
+import { GhostClock, GhostStorage, GhostWebviewMessenger, systemClock } from '../runtimeDependencies'
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
@@ -78,6 +79,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly disposables: vscode.Disposable[] = []
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
+  private readonly clock: GhostClock
+  private readonly messenger?: GhostWebviewMessenger
   private negotiatedProtocolVersion: GhostProtocolVersion = GHOST_WEBVIEW_PROTOCOL_VERSION
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
@@ -132,7 +135,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   constructor(
     private readonly extensionUri: vscode.Uri,
-    options: { chatHandler?: vscode.ChatRequestHandler; globalState?: vscode.Memento; workspaceState?: vscode.Memento; providerApiKey?: (provider: GhostProvider) => string | undefined } = {}
+    options: { chatHandler?: vscode.ChatRequestHandler; globalState?: GhostStorage; workspaceState?: GhostStorage; providerApiKey?: (provider: GhostProvider) => string | undefined; clock?: GhostClock; messenger?: GhostWebviewMessenger } = {}
   ) {
     this.stateStore = new GhostStateStore({
       settings: getGhostSettings(),
@@ -140,6 +143,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       workspaceState: options.workspaceState
     })
     this.providerApiKey = options.providerApiKey
+    this.clock = options.clock ?? systemClock
+    this.messenger = options.messenger
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
     const invalidateWorkspaceContext = (): void => {
@@ -277,8 +282,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       codeMode: false,
       status: 'preparing',
       attempt: 0,
-      startedAt: Date.now(),
-      lastActivityAt: Date.now(),
+      startedAt: this.clock.now(),
+      lastActivityAt: this.clock.now(),
       timedOut: false,
       model: modelSettings.model,
       provider: modelSettings.provider,
@@ -463,7 +468,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       for (let attempt = 1; attempt <= GHOST_RETRY_POLICIES.providerConnectivity.maxRetries + 1; attempt += 1) {
         request.attempt = attempt
         request.status = 'connecting'
-        request.lastActivityAt = Date.now()
+        request.lastActivityAt = this.clock.now()
         this.postStreamEvent(requestId, request, {
           type: 'thinking',
           state: 'connecting',
@@ -615,7 +620,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private createToolCallId(): string {
-    return `tool-${Date.now()}-${randomBytes(6).toString('hex')}`
+    return `tool-${this.clock.now()}-${randomBytes(6).toString('hex')}`
   }
 
   private async retryFailedTool(
@@ -640,8 +645,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       codeMode: false,
       status: 'preparing',
       attempt: 1,
-      startedAt: Date.now(),
-      lastActivityAt: Date.now(),
+      startedAt: this.clock.now(),
+      lastActivityAt: this.clock.now(),
       timedOut: false,
       model: this.settings.chatModel,
       outputTokens: 0,
@@ -1416,7 +1421,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     const request = this.requests.get(pending.requestId)
     if (request) {
-      request.timing.verificationStartedAt = Date.now()
+      request.timing.verificationStartedAt = this.clock.now()
     }
     try {
       this.pendingApprovals.delete(pending.toolCallId)
@@ -1454,7 +1459,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       pending.resolve({ decision: 'reject', reason: 'Edit path is outside the workspace.' })
     } finally {
       if (request?.timing.verificationStartedAt !== undefined) {
-        request.timing.verificationMs += Math.max(0, Date.now() - request.timing.verificationStartedAt)
+        request.timing.verificationMs += Math.max(0, this.clock.now() - request.timing.verificationStartedAt)
         request.timing.verificationStartedAt = undefined
       }
     }
@@ -1564,7 +1569,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private startToolExecution(request: GhostRequestState, toolCallId: string): void {
     if (!request.timing.toolStartedAt.has(toolCallId)) {
-      request.timing.toolStartedAt.set(toolCallId, Date.now())
+      request.timing.toolStartedAt.set(toolCallId, this.clock.now())
     }
   }
 
@@ -1573,11 +1578,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (startedAt === undefined) {
       return
     }
-    request.timing.toolExecutionMs += Math.max(0, Date.now() - startedAt)
+    request.timing.toolExecutionMs += Math.max(0, this.clock.now() - startedAt)
     request.timing.toolStartedAt.delete(toolCallId)
   }
 
-  private timingSummary(request: GhostRequestState, endedAt = Date.now()): Record<string, number> {
+  private timingSummary(request: GhostRequestState, endedAt = this.clock.now()): Record<string, number> {
     const providerStartedAt = request.timing.providerStartedAt
     const firstTokenAt = request.timing.firstTokenAt
     return {
@@ -1595,7 +1600,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request: GhostRequestState,
     event: { type: GhostStreamEvent['type']; [key: string]: unknown }
   ): void {
-    const timestamp = Date.now()
+    const timestamp = this.clock.now()
     request.lastActivityAt = timestamp
     request.status = getRequestStatusForEvent(event, request.status)
     if (event.phase === 'provider' && request.timing.providerStartedAt === undefined) {
@@ -1628,13 +1633,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       sequence: request.sequence,
       state: request.status,
       phase: event.phase as GhostStreamEvent['phase'],
-      elapsedMs: Date.now() - request.startedAt,
+      elapsedMs: this.clock.now() - request.startedAt,
       model: request.model,
       provider: request.provider,
       tokenCount: request.outputTokens,
       startedAt: request.startedAt,
       ...(request.outputTokens > 0
-        ? { tokensPerSecond: request.outputTokens / Math.max((Date.now() - request.startedAt) / 1000, 0.001) }
+        ? { tokensPerSecond: request.outputTokens / Math.max((this.clock.now() - request.startedAt) / 1000, 0.001) }
         : {}),
       ...redactSensitiveValue(Object.fromEntries(Object.entries(event).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value]))),
       ...(event.type === 'request-completed' && request.completionRecord ? { completionRecord: request.completionRecord } : {}),
@@ -1798,7 +1803,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private async getProviderStatus(settings: GhostSettings, forceRefresh = false): Promise<ProviderStatus> {
     const key = providerStatusKey(settings, Boolean(this.providerApiKey?.(settings.provider)))
     const cached = this.providerStatusCache
-    if (!forceRefresh && cached?.key === key && Date.now() - cached.checkedAt < GhostViewProvider.providerStatusCacheTtlMs) {
+    if (!forceRefresh && cached?.key === key && this.clock.now() - cached.checkedAt < GhostViewProvider.providerStatusCacheTtlMs) {
       return cached
     }
     if (this.providerStatusRequest?.key === key) {
@@ -1812,7 +1817,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.providerStatusRequest = { key, promise }
     try {
       const result = await promise
-      this.providerStatusCache = { ...result, key, checkedAt: Date.now() }
+      this.providerStatusCache = { ...result, key, checkedAt: this.clock.now() }
       this.stateStore.notify('provider')
       return result
     } finally {
@@ -2302,7 +2307,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (this.disposed) {
       return
     }
-    if (!this.view) {
+    if (!this.view && !this.messenger) {
       if (['request-started', 'thinking', 'text-delta', 'code-delta', 'tool-requested', 'tool-result', 'warning', 'error', 'request-completed'].includes(message.type)) {
         return
       }
@@ -2311,7 +2316,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const safeMessage = redactSensitiveValue(message) as GhostExtensionMessage
-    void this.view.webview.postMessage({ ...safeMessage, version: this.negotiatedProtocolVersion })
+    const outbound = { ...safeMessage, version: this.negotiatedProtocolVersion }
+    if (this.messenger) {
+      void this.messenger.postMessage(outbound)
+      return
+    }
+    void this.view?.webview.postMessage(outbound)
   }
 
   private createMessage(type: 'reset' | 'clear'): GhostExtensionMessage {
