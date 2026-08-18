@@ -14,6 +14,7 @@ All notable changes to this extension are documented here.
 - Show the detailed stop message and recovery hint in stopped request cards.
 - Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
 - Add approve-all-pending-files plus request, session, workspace, and single-file approval scopes.
+- Replace the Edit Arguments prompt with a validated JSON editor modal.
 
 ## 1.1.16 - 2026-08-18
 

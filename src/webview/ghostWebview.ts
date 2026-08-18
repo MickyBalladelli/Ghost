@@ -974,6 +974,20 @@ app.innerHTML = `
         <div class="modal-footer"><button type="button" class="secondary" id="new-history-chat">New conversation</button><button type="button" class="secondary" data-close-modal="history-modal">Close</button></div>
       </section>
     </div>
+    <div class="modal-backdrop" id="edit-tool-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-tool-title">
+        <div class="modal-header"><h2 id="edit-tool-title">Edit tool arguments</h2><button type="button" class="icon-button" data-close-modal="edit-tool-modal" aria-label="Close edit tool arguments">×</button></div>
+        <form id="edit-tool-form">
+          <div class="modal-scroll">
+            <p class="modal-description">Edit the JSON arguments, then send them back through the approval flow.</p>
+            <label for="edit-tool-arguments">Arguments</label>
+            <textarea id="edit-tool-arguments" class="edit-tool-arguments" spellcheck="false" aria-describedby="edit-tool-error"></textarea>
+            <p class="form-error" id="edit-tool-error" role="alert"></p>
+          </div>
+          <div class="modal-footer"><button type="button" class="secondary" data-close-modal="edit-tool-modal">Cancel</button><button type="submit" id="edit-tool-save">Validate and send</button></div>
+        </form>
+      </section>
+    </div>
   </div>
 `
 
@@ -1060,6 +1074,10 @@ const settingsModalElement = document.getElementById('settings-modal') as HTMLEl
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
+const editToolModalElement = document.getElementById('edit-tool-modal') as HTMLElement
+const editToolFormElement = document.getElementById('edit-tool-form') as HTMLFormElement
+const editToolArgumentsElement = document.getElementById('edit-tool-arguments') as HTMLTextAreaElement
+const editToolErrorElement = document.getElementById('edit-tool-error') as HTMLElement
 const contextPreviewElement = document.getElementById('context-preview-list') as HTMLElement
 const historySearchElement = document.getElementById('history-search') as HTMLInputElement
 const historyListElement = document.getElementById('history-list') as HTMLElement
@@ -1737,6 +1755,64 @@ const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
     focusable?.focus()
   }
 }
+
+const validateEditedToolArguments = (toolCall: ToolCall, value: Record<string, unknown>): string | undefined => {
+  const pathTools = new Set(['ghost_read_file', 'ghost_write_file', 'ghost_apply_edit', 'ghost_list_directory'])
+  const requiredArgument = pathTools.has(toolCall.name)
+    ? 'path'
+    : toolCall.name === 'ghost_run_terminal_command'
+      ? 'command'
+      : undefined
+  if (requiredArgument && (typeof value[requiredArgument] !== 'string' || !String(value[requiredArgument]).trim())) {
+    return `${toolCall.name} needs a non-empty '${requiredArgument}'.`
+  }
+  if (toolCall.name === 'ghost_apply_transaction' && (!Array.isArray(value.edits) || value.edits.length < 2)) {
+    return 'ghost_apply_transaction needs at least two edits.'
+  }
+  return undefined
+}
+
+const openToolArgumentsEditor = (found: { message: ChatMessage; toolCall: ToolCall }, requestId: string, conversationId: string): void => {
+  editToolModalElement.dataset.toolCallId = found.toolCall.id
+  editToolModalElement.dataset.requestId = requestId
+  editToolModalElement.dataset.conversationId = conversationId
+  editToolArgumentsElement.value = found.toolCall.arguments ?? '{}'
+  editToolErrorElement.textContent = ''
+  setModalVisibility(editToolModalElement, true)
+  editToolArgumentsElement.focus()
+}
+
+editToolFormElement.addEventListener('submit', event => {
+  event.preventDefault()
+  const toolCallId = editToolModalElement.dataset.toolCallId
+  const requestId = editToolModalElement.dataset.requestId
+  const conversationId = editToolModalElement.dataset.conversationId
+  if (!toolCallId || !requestId || !conversationId) {
+    setModalVisibility(editToolModalElement, false)
+    return
+  }
+  const found = findToolCall(toolCallId)
+  if (!found) {
+    editToolErrorElement.textContent = 'This tool request is no longer waiting for approval.'
+    return
+  }
+  try {
+    const parsed = JSON.parse(editToolArgumentsElement.value) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Arguments must be a JSON object.')
+    }
+    const validationError = validateEditedToolArguments(found.toolCall, parsed as Record<string, unknown>)
+    if (validationError) {
+      throw new Error(validationError)
+    }
+    found.toolCall.arguments = JSON.stringify(parsed, null, 2)
+    post('edit-tool', { requestId, conversationId, toolCallId, arguments: parsed })
+    setModalVisibility(editToolModalElement, false)
+    renderMessages(false)
+  } catch (error) {
+    editToolErrorElement.textContent = error instanceof Error ? error.message : 'Arguments must be valid JSON.'
+  }
+})
 
 const buildRequestOptions = (): WebviewRequestOptions => ({
   provider: controls.provider,
@@ -3150,21 +3226,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     return
   }
   if (action === 'edit') {
-    const edited = window.prompt('Edit tool arguments as JSON', found.toolCall.arguments ?? '{}')
-    if (edited === null) {
-      return
-    }
-    try {
-      const parsed = JSON.parse(edited) as unknown
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Arguments must be a JSON object')
-      }
-      found.toolCall.arguments = JSON.stringify(parsed, null, 2)
-      post('edit-tool', { requestId, conversationId, toolCallId, arguments: parsed })
-      renderMessages(false)
-    } catch {
-      setNotice('error', 'Tool arguments must be a JSON object.')
-    }
+    openToolArgumentsEditor(found, requestId, conversationId)
     return
   }
   if (action === 'approve' || action === 'approve-file' || action === 'approve-request' || action === 'approve-session' || action === 'approve-workspace' || action === 'approve-selected') {

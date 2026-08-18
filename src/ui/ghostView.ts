@@ -2978,6 +2978,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         line-height: 1.4;
       }
 
+      .edit-tool-arguments {
+        box-sizing: border-box;
+        font-family: var(--vscode-editor-font-family, monospace);
+        min-height: 260px;
+        resize: vertical;
+        width: 100%;
+      }
+
+      .form-error {
+        color: var(--vscode-errorForeground);
+        min-height: 1.2em;
+      }
+
       .context-preview,
       .history-list {
         margin: 12px 0;
