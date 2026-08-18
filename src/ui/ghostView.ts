@@ -2938,6 +2938,29 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         margin: 16px 0;
       }
 
+      .settings-search-label {
+        color: var(--vscode-descriptionForeground);
+        display: block;
+        font-size: 0.8em;
+        margin-top: 4px;
+      }
+
+      #settings-search {
+        box-sizing: border-box;
+        margin-top: 4px;
+        width: 100%;
+      }
+
+      .settings-section-heading {
+        border-bottom: 1px solid var(--ghost-border);
+        color: var(--vscode-foreground);
+        font-size: 0.9em;
+        font-weight: 600;
+        grid-column: 1 / -1;
+        margin-top: 10px;
+        padding-bottom: 4px;
+      }
+
       .settings-grid label {
         align-self: center;
         color: var(--vscode-descriptionForeground);

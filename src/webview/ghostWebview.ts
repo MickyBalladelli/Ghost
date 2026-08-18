@@ -829,7 +829,10 @@ app.innerHTML = `
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-header"><h2 id="settings-title">Composer controls</h2><div><button type="button" class="secondary" id="privacy-page">Privacy</button><button type="button" class="icon-button" data-close-modal="settings-modal" aria-label="Close controls">×</button></div></div>
         <div class="modal-scroll">
+          <label class="settings-search-label" for="settings-search">Search settings</label>
+          <input id="settings-search" type="search" placeholder="Search settings" aria-label="Search settings">
           <div class="settings-grid">
+          <div class="settings-section-heading" data-settings-section-heading="generation">Generation</div>
           <label for="temperature" title="Temperature controls randomness. Lower values make answers more predictable; higher values make them more varied. Range: 0 to 2.">Temperature <output id="temperature-value">0.3</output></label>
           <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.3" title="Temperature: 0 is most focused, 1 is balanced, and 2 is most varied.">
           <label for="top-p" title="Top P, or nucleus sampling, keeps only the smallest group of likely tokens whose probabilities add up to this value. Lower values focus the answer. Range: 0 to 1.">Top P</label>
@@ -848,6 +851,7 @@ app.innerHTML = `
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent — implement changes</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <div class="settings-section-heading" data-settings-section-heading="agent safety">Agent safety</div>
           <label for="file-edit-approval">File edit approval</label>
           <select id="file-edit-approval"><option value="confirm">Confirm each edit</option><option value="one-edit">Auto-accept one edit</option><option value="current-file">Auto-accept current file</option><option value="request">Auto-accept this request</option><option value="session">Auto-accept this session</option><option value="workspace">Auto-accept this workspace</option><option value="always">Always auto-accept file edits</option></select>
           <p class="settings-help">Auto-accept can change files without asking. Terminal and other dangerous tools always need approval.</p>
@@ -857,6 +861,7 @@ app.innerHTML = `
           <input id="prompt-rows" type="number" min="1" max="12" step="1" value="3">
           <label for="prompt-history-limit">Prompt history entries</label>
           <input id="prompt-history-limit" type="number" min="10" max="500" step="10" value="100">
+          <div class="settings-section-heading" data-settings-section-heading="provider">Provider</div>
           <label for="provider-endpoint">Provider endpoint</label>
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
@@ -902,12 +907,14 @@ app.innerHTML = `
           <div class="settings-help"><strong>Tool permissions</strong><br><span id="tool-permissions-summary">Configure which tools Ghost can use.</span></div>
           <button type="button" class="permission-action-button" id="open-terminal-environment-permissions">Configure terminal environment…</button>
           <div class="settings-help"><strong>Terminal environment</strong><br><span id="terminal-environment-permissions-summary">Configure which environment variables Ghost passes to commands.</span></div>
+          <div class="settings-section-heading" data-settings-section-heading="appearance">Appearance</div>
           <label for="assistant-name">Assistant name</label>
           <input id="assistant-name" type="text" maxlength="40" value="Ghost">
           <label for="assistant-avatar">Assistant avatar</label>
           <input id="assistant-avatar" type="text" maxlength="4" value="✦">
           <label for="accent-color">Accent color</label>
           <input id="accent-color" type="color" value="#3794ff">
+          <div class="settings-section-heading" data-settings-section-heading="persistence">Persistence</div>
           <label class="settings-checkbox" for="show-reasoning"><input id="show-reasoning" type="checkbox"> Show provider reasoning when explicitly returned</label>
           <label class="settings-checkbox" for="persist-conversations"><input id="persist-conversations" type="checkbox"> Save conversations and preferences in VS Code storage</label>
           <label class="settings-checkbox" for="compact-layout"><input id="compact-layout" type="checkbox"> Compact conversation layout</label>
@@ -917,6 +924,7 @@ app.innerHTML = `
           <label class="settings-checkbox" for="debug-logging"><input id="debug-logging" type="checkbox"> Enable local debug logging</label>
           <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
           <label class="settings-checkbox" for="workspace-settings"><input id="workspace-settings" type="checkbox"> Use workspace-specific settings</label>
+          <div class="settings-section-heading" data-settings-section-heading="advanced">Advanced</div>
           <label for="system-instructions">Custom system instructions</label>
           <textarea id="system-instructions" rows="4" maxlength="8000" placeholder="Optional instructions for Ghost"></textarea>
           <button type="button" class="secondary" id="reset-system-instructions">Reset system instructions</button>
@@ -1147,6 +1155,8 @@ const quickConnectionStatusElement = document.getElementById('quick-connection-s
 const quickConnectionDetailsElement = document.getElementById('quick-connection-details') as HTMLElement
 const copyDiagnosticsElement = document.getElementById('copy-diagnostics') as HTMLButtonElement
 const quickRefreshModelsElement = document.getElementById('quick-refresh-models') as HTMLButtonElement
+const settingsSearchElement = document.getElementById('settings-search') as HTMLInputElement
+const settingsGridElement = document.querySelector<HTMLElement>('.settings-grid') as HTMLElement
 const promptHistorySearchElement = document.getElementById('prompt-history-search') as HTMLInputElement
 const promptHistoryListElement = document.getElementById('prompt-history-list') as HTMLElement
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
@@ -1624,6 +1634,36 @@ const renderQuickSwitch = (): void => {
     `Capabilities: ${metadata?.capabilities?.join(', ') || 'unknown'}`,
     `Workspace root: ${uiPreferences.workspaceRoot || 'all roots'}`
   ].join(' · ')
+}
+
+const renderSettingsSearch = (): void => {
+  const query = settingsSearchElement.value.trim().toLowerCase()
+  const children = Array.from(settingsGridElement.children) as HTMLElement[]
+  const sections: HTMLElement[][] = []
+  let current: HTMLElement[] = []
+  const flush = (): void => {
+    if (current.length > 0) {
+      sections.push(current)
+      current = []
+    }
+  }
+  for (const child of children) {
+    if (child.dataset.settingsSectionHeading !== undefined) {
+      flush()
+    }
+    current.push(child)
+  }
+  flush()
+  for (const section of sections) {
+    const matches = !query || section.some(item => item.textContent?.toLowerCase().includes(query) || Array.from(item.querySelectorAll('[id]')).some(element => element.id.toLowerCase().includes(query)))
+    for (const item of section) {
+      item.hidden = !matches
+    }
+  }
+  const presetSection = document.querySelector<HTMLElement>('.preset-section')
+  if (presetSection) {
+    presetSection.hidden = Boolean(query) && !presetSection.textContent?.toLowerCase().includes(query)
+  }
 }
 
 const renderControls = () => {
@@ -4546,8 +4586,10 @@ workspaceRootElement.addEventListener('change', () => {
 })
 
 document.getElementById('settings')?.addEventListener('click', () => {
+  renderSettingsSearch()
   setModalVisibility(settingsModalElement, true)
 })
+settingsSearchElement.addEventListener('input', renderSettingsSearch)
 document.getElementById('privacy-page')?.addEventListener('click', () => {
   setModalVisibility(settingsModalElement, false)
   setModalVisibility(privacyModalElement, true)

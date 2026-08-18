@@ -5,6 +5,7 @@ All notable changes to this extension are documented here.
 ## 1.1.19 - 2026-08-18
 
 - Add a provider/model quick switcher with connection diagnostics, refresh, and copy controls.
+- Add searchable settings sections for Generation, Provider, Agent Safety, Appearance, Persistence, and Advanced options.
 
 ## 1.1.17 - 2026-08-18
 
