@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -266,7 +266,9 @@
         },
         "ghost.stopSequences": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Sequences that stop generation when the provider supports them."
         },
@@ -363,7 +365,9 @@
               },
               "stopSequences": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
               "contextWindow": {
                 "type": "integer",
