@@ -22,9 +22,10 @@ export interface TerminalCommandAudit {
 
 const COMMAND_TIMEOUT_MS = 120000
 const MAX_OUTPUT_CHARS = 200000
+const OUTPUT_RING_CHUNK_CHARS = 8192
 const PROCESS_TERMINATION_GRACE_MS = 500
 
-type TerminationReason = 'timeout' | 'cancelled' | 'output-limit'
+type TerminationReason = 'timeout' | 'cancelled'
 const SECRET_ENVIRONMENT_NAME = /(?:API|ACCESS|AUTH|BEARER|CERT|COOKIE|CREDENTIAL|KEY|PASSWORD|PASSWD|PRIVATE|SECRET|TOKEN)/i
 const VALID_ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -63,6 +64,60 @@ function redactTerminalOutput(output: string, environment: NodeJS.ProcessEnv): s
     .filter((value): value is string => typeof value === 'string' && value.length >= 4)
     .sort((left, right) => right.length - left.length)
   return values.reduce((redacted, value) => redacted.split(value).join('[REDACTED_ENV]'), redactSensitiveText(output))
+}
+
+class TerminalOutputRingBuffer {
+  private readonly chunks: string[] = []
+  private totalCharacters = 0
+  private truncated = false
+
+  append(value: string): void {
+    let remaining = value
+    while (remaining) {
+      const lastIndex = this.chunks.length - 1
+      const last = lastIndex >= 0 ? this.chunks[lastIndex] : ''
+      const available = OUTPUT_RING_CHUNK_CHARS - last.length
+      if (available > 0) {
+        const part = remaining.slice(0, available)
+        if (lastIndex >= 0) {
+          this.chunks[lastIndex] += part
+        } else {
+          this.chunks.push(part)
+        }
+        this.totalCharacters += part.length
+        remaining = remaining.slice(part.length)
+      } else {
+        this.chunks.push(remaining.slice(0, OUTPUT_RING_CHUNK_CHARS))
+        const partLength = Math.min(remaining.length, OUTPUT_RING_CHUNK_CHARS)
+        this.totalCharacters += partLength
+        remaining = remaining.slice(partLength)
+      }
+      this.trim()
+    }
+  }
+
+  wasTruncated(): boolean {
+    return this.truncated
+  }
+
+  toString(): string {
+    return this.chunks.join('')
+  }
+
+  private trim(): void {
+    while (this.totalCharacters > MAX_OUTPUT_CHARS && this.chunks.length > 0) {
+      const overflow = this.totalCharacters - MAX_OUTPUT_CHARS
+      const first = this.chunks[0]
+      if (first.length <= overflow) {
+        this.chunks.shift()
+        this.totalCharacters -= first.length
+      } else {
+        this.chunks[0] = first.slice(overflow)
+        this.totalCharacters -= overflow
+      }
+      this.truncated = true
+    }
+  }
 }
 
 function terminateProcessTree(child: ReturnType<typeof spawn>, force: boolean): void {
@@ -157,9 +212,8 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
       detached: process.platform !== 'win32',
       windowsHide: true
     })
-    let output = ''
+    const output = new TerminalOutputRingBuffer()
     let timedOut = false
-    let outputLimitReached = false
     let terminationReason: TerminationReason | undefined
     let settled = false
     let cancellationSubscription: vscode.Disposable | undefined
@@ -175,15 +229,7 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
     }
 
     const append = (chunk: string) => {
-      if (output.length >= MAX_OUTPUT_CHARS) {
-        terminate('output-limit')
-        return
-      }
-      output += chunk.slice(0, MAX_OUTPUT_CHARS - output.length)
-      if (output.length >= MAX_OUTPUT_CHARS) {
-        outputLimitReached = true
-        terminate('output-limit')
-      }
+      output.append(chunk)
     }
 
     const timeout = setTimeout(() => {
@@ -211,10 +257,10 @@ function runCommand(command: string, cwd: string, token: vscode.CancellationToke
     child.stderr.on('data', (chunk: string) => append(`\n${chunk}`))
     child.on('error', error => finish(() => reject(error)))
     child.on('close', code => {
-      const outputMessage = outputLimitReached ? '\n[Output limit reached; process stopped]' : ''
+      const outputMessage = output.wasTruncated() ? `\n[Output exceeded ${MAX_OUTPUT_CHARS} characters; showing the tail]` : ''
       const timeoutMessage = timedOut ? `\n[Command timed out after ${COMMAND_TIMEOUT_MS / 1000} seconds; process tree stopped]` : ''
       const exitMessage = `\n[Exit code: ${code ?? 'unknown'}]`
-      const result = `${redactTerminalOutput(output, environment)}${outputMessage}${timeoutMessage}${exitMessage}`
+      const result = `${redactTerminalOutput(output.toString(), environment)}${outputMessage}${timeoutMessage}${exitMessage}`
       if (terminationReason === 'cancelled') {
         finish(() => reject(new Error(`Terminal command cancelled; process tree stopped.\n${result}`)))
         return
