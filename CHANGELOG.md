@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.0.94 - 2026-08-18
 
+- Fixed file reads after directory scans by preserving workspace-relative nested paths and resolving a unique missing basename to its discovered file.
 - Added configurable OpenAI-compatible API-key headers, organization/project headers, proxy and no-proxy routing, TLS verification, and client certificate files.
 
 ## 1.0.93 - 2026-08-18

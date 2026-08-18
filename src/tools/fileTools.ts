@@ -54,6 +54,42 @@ export interface ListDirectoryInput {
   maxDepth?: number
 }
 
+async function resolveReadableFilePath(input: string, token: vscode.CancellationToken): Promise<vscode.Uri> {
+  const uri = resolveWorkspacePath(input)
+
+  try {
+    await vscode.workspace.fs.stat(uri)
+    return uri
+  } catch (error) {
+    const code = error instanceof vscode.FileSystemError
+      ? error.code
+      : (error as NodeJS.ErrnoException).code
+    if (code !== 'FileNotFound' || path.isAbsolute(input) || input.includes('/') || input.includes('\\')) {
+      throw error
+    }
+  }
+
+  const fileName = path.basename(input)
+  const root = getWorkspaceRoot()
+  const matches = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(root, `**/${fileName}`),
+    undefined,
+    20,
+    token
+  )
+  if (matches.length === 1) {
+    return matches[0]
+  }
+  if (matches.length > 1) {
+    const candidates = matches
+      .map(match => path.relative(root.fsPath, match.fsPath))
+      .slice(0, 8)
+      .join(', ')
+    throw new Error(`File '${input}' was not found at the workspace root. Multiple matches exist: ${candidates}. Retry with the full workspace-relative path.`)
+  }
+  throw new Error(`File '${input}' was not found. Retry with the workspace-relative path shown by ghost_list_directory.`)
+}
+
 function decodeText(bytes: Uint8Array): string {
   if (bytes.subarray(0, Math.min(bytes.length, 4096)).includes(0)) {
     throw new Error('Binary files are not supported by the text file tool')
@@ -390,7 +426,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
-    const uri = resolveWorkspacePath(options.input.path)
+    const uri = await resolveReadableFilePath(options.input.path, token)
     if (options.input.source !== undefined && !['editor', 'disk'].includes(options.input.source)) {
       throw new Error("source must be 'editor' or 'disk'")
     }
@@ -599,6 +635,8 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const uri = resolveWorkspacePath(options.input.path)
+    const workspaceRoot = getWorkspaceRoot()
+    const relativePrefix = path.relative(workspaceRoot.fsPath, uri.fsPath)
     const entries: string[] = []
     const recursive = options.input.recursive ?? false
     const cursor = options.input.cursor === undefined ? 0 : Number(options.input.cursor)
@@ -617,7 +655,7 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
 
     const scanLimit = Math.min(5000, cursor + pageSize + 1)
 
-    await collectDirectoryEntries(uri, '', recursive, 0, maxDepth, token, entries, scanLimit)
+    await collectDirectoryEntries(uri, relativePrefix, recursive, 0, maxDepth, token, entries, scanLimit)
 
     if (token.isCancellationRequested) {
       throw new Error('Tool invocation cancelled')
@@ -629,7 +667,7 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     const suffix = hasMore
       ? `\n\n[Directory page truncated. Continue with ghost_list_directory({"path":"${uri.fsPath}","recursive":${recursive},"pageSize":${pageSize},"maxDepth":${maxDepth},"cursor":"${nextCursor}"}).]`
       : ''
-    return textResult(`Directory: ${uri.fsPath}\nDepth limit: ${maxDepth}\nEntries ${page.length === 0 ? 0 : cursor + 1}-${cursor + page.length}${hasMore ? '+' : ''}\n\n${page.join('\n') || '[empty]'}${suffix}`)
+    return textResult(`Directory: ${uri.fsPath}\nWorkspace-relative base: ${relativePrefix || '.'}\nDepth limit: ${maxDepth}\nEntries ${page.length === 0 ? 0 : cursor + 1}-${cursor + page.length}${hasMore ? '+' : ''}\n\n${page.join('\n') || '[empty]'}${suffix}`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ListDirectoryInput>): vscode.PreparedToolInvocation {
