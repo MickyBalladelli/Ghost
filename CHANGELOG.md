@@ -11,6 +11,7 @@ All notable changes to this extension are documented here.
 - Added bounded, redacted per-request event logs with timestamps and status transitions for display and export.
 - Added a shared provider adapter contract for chat, streaming, model discovery, health, capabilities, cancellation, and normalized errors.
 - Added model capability records covering context/output limits, tools, JSON mode, vision, FIM, streaming, sampling, and native API.
+- Separated shared generation settings from provider-specific request field names for chat and FIM requests.
 
 ## 1.0.92 - 2026-08-18
 

@@ -7,6 +7,7 @@ import {
   MlxMessageContent,
   streamSseTokens
 } from './mlxClient'
+import { GenerationSettings, normalizeGenerationSettings } from './generationSettings'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -23,13 +24,7 @@ export interface FimCompletionOptions {
   model: string
   prefix: string
   suffix: string
-  temperature?: number
-  topP?: number
-  topK?: number
-  minP?: number
-  presencePenalty?: number
-  repeatPenalty?: number
-  maxTokens?: number
+  generation?: GenerationSettings
   signal?: AbortSignal
   mode?: OllamaApiMode
   apiKey?: string
@@ -422,6 +417,7 @@ export class OllamaClient {
     messages: MlxMessage[],
     stream: boolean
   ): RequestInit {
+    const generation = normalizeGenerationSettings(options.generation)
     if (kind === 'ollama') {
       return {
         method: 'POST',
@@ -432,13 +428,13 @@ export class OllamaClient {
           messages: toOllamaMessages(messages),
           stream,
           options: {
-            ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
-            ...(options.topP === undefined ? {} : { top_p: options.topP }),
-            ...(options.topK === undefined ? {} : { top_k: options.topK }),
-            ...(options.minP === undefined ? {} : { min_p: options.minP }),
-            ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
-            ...(options.repeatPenalty === undefined ? {} : { repeat_penalty: options.repeatPenalty }),
-            ...(options.maxTokens === undefined ? {} : { num_predict: options.maxTokens })
+            ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
+            ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+            ...(generation.topK === undefined ? {} : { top_k: generation.topK }),
+            ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
+            ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+            ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
+            ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
           }
         })
       }
@@ -456,10 +452,10 @@ export class OllamaClient {
         model: options.model,
         messages,
         stream,
-        ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
-        ...(options.topP === undefined ? {} : { top_p: options.topP }),
-        ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
-        ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens })
+        ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
+        ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+        ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+        ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
       })
     }
   }
@@ -483,6 +479,7 @@ export class OllamaClient {
     options: FimCompletionOptions,
     prompt: string
   ): RequestInit {
+    const generation = normalizeGenerationSettings(options.generation)
     if (kind === 'ollama') {
       return {
         method: 'POST',
@@ -493,13 +490,13 @@ export class OllamaClient {
           prompt,
           stream: false,
           options: {
-            ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
-            ...(options.topP === undefined ? {} : { top_p: options.topP }),
-            ...(options.topK === undefined ? {} : { top_k: options.topK }),
-            ...(options.minP === undefined ? {} : { min_p: options.minP }),
-            ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
-            ...(options.repeatPenalty === undefined ? {} : { repeat_penalty: options.repeatPenalty }),
-            ...(options.maxTokens === undefined ? {} : { num_predict: options.maxTokens })
+            ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
+            ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+            ...(generation.topK === undefined ? {} : { top_k: generation.topK }),
+            ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
+            ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+            ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
+            ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
           }
         })
       }
@@ -517,10 +514,10 @@ export class OllamaClient {
         model: options.model,
         prompt,
         stream: false,
-        ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
-        ...(options.topP === undefined ? {} : { top_p: options.topP }),
-        ...(options.presencePenalty === undefined ? {} : { presence_penalty: options.presencePenalty }),
-        ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens })
+        ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
+        ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+        ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+        ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
       })
     }
   }

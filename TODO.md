@@ -59,7 +59,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 - [x] Define a provider adapter interface with `chat`, `stream`, `listModels`, `health`, `capabilities`, error normalization, and cancellation.
 - [x] Define a model capability record: context window, output limit, tools, JSON mode, vision, FIM, streaming, sampling parameters, and native API.
-- [ ] Separate provider-neutral generation settings from Ollama, OpenAI, MLX, and future wire-format options.
+- [x] Separate provider-neutral generation settings from Ollama, OpenAI, MLX, and future wire-format options.
 - [ ] Move request construction into small provider-specific builders and test each request body independently.
 - [ ] Support both OpenAI `/v1/chat/completions` and `/v1/responses`, including streamed tool-call deltas.
 - [ ] Add configurable authentication headers, API key name, organization/project headers, proxy, TLS, and no-proxy settings for OpenAI-compatible servers.

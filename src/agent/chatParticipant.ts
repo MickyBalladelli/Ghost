@@ -1034,13 +1034,15 @@ export function createChatParticipantHandler(
             provider: requestOptions.provider,
             model: requestOptions.model?.trim() || settings.chatModel,
             messages: redactSensitiveValue(preparedContext.messages),
-            temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
-            topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
-            topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
-            minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
-            presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
-            repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
-            maxTokens: outputTokens,
+            generation: {
+              temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
+              topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
+              topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
+              minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
+              presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
+              repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
+              maxTokens: outputTokens
+            },
             signal: cancellation.signal
           },
           response,
