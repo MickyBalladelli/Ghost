@@ -2552,6 +2552,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const conversationStoreUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewConversationStore.js')
     )
+    const protocolClientUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewProtocolClient.js'))
+    const settingsStoreUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewSettingsStore.js'))
+    const historyStoreUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewHistory.js'))
+    const renderingUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewRendering.js'))
+    const toolTimelineUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewToolTimeline.js'))
+    const composerUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewComposer.js'))
+    const modalsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewModals.js'))
     const iconUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'icon.png')
     )
@@ -4465,6 +4472,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   <body data-ghost-icon="${iconUri}">
     <div id="app"></div>
     <script nonce="${nonce}" src="${conversationStoreUri}"></script>
+    <script nonce="${nonce}" src="${protocolClientUri}"></script>
+    <script nonce="${nonce}" src="${settingsStoreUri}"></script>
+    <script nonce="${nonce}" src="${historyStoreUri}"></script>
+    <script nonce="${nonce}" src="${renderingUri}"></script>
+    <script nonce="${nonce}" src="${toolTimelineUri}"></script>
+    <script nonce="${nonce}" src="${composerUri}"></script>
+    <script nonce="${nonce}" src="${modalsUri}"></script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`

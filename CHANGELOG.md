@@ -29,6 +29,7 @@ All notable changes to this extension are documented here.
 - Profile activation time locally and lazy-load provider clients and model diagnostics until their commands are used.
 - Move shared webview state and protocol types into a dedicated module to make the webview split incremental and behavior-neutral.
 - Extract conversation creation and prompt-history operations into a runtime webview store loaded before the UI.
+- Split webview protocol, settings, history, rendering, tool timeline, composer, and modal helpers into separate runtime modules.
 
 ## 1.1.17 - 2026-08-18
 

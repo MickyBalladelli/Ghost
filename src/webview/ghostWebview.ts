@@ -85,8 +85,18 @@ if (!app) {
   throw new Error('Ghost webview root is missing')
 }
 
-const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const conversationStore = (globalThis as typeof globalThis & { GhostConversationStore: GhostConversationStoreApi }).GhostConversationStore
+const protocolClient = (globalThis as typeof globalThis & { GhostProtocolClient: GhostProtocolClientApi }).GhostProtocolClient
+const settingsStore = (globalThis as typeof globalThis & { GhostSettingsStore: GhostSettingsStoreApi }).GhostSettingsStore
+const historyStore = (globalThis as typeof globalThis & { GhostHistoryStore: GhostHistoryStoreApi }).GhostHistoryStore
+const rendering = (globalThis as typeof globalThis & { GhostRendering: GhostRenderingApi }).GhostRendering
+const toolTimeline = (globalThis as typeof globalThis & { GhostToolTimeline: GhostToolTimelineApi }).GhostToolTimeline
+const composerStore = (globalThis as typeof globalThis & { GhostComposer: GhostComposerApi }).GhostComposer
+const modalStore = (globalThis as typeof globalThis & { GhostModal: GhostModalApi }).GhostModal
+const createId = protocolClient.createId
+const escapeHtml = rendering.escapeHtml
+const escapeAttribute = rendering.escapeAttribute
+const safeLink = rendering.safeLink
 const persistenceSchemaVersion = conversationStore.persistenceSchemaVersion
 const defaultPromptHistoryLimit = conversationStore.defaultPromptHistoryLimit
 const maxPromptHistoryLimit = conversationStore.maxPromptHistoryLimit
@@ -936,13 +946,8 @@ const updateGhostEyes = (event: PointerEvent): void => {
 
 window.addEventListener('pointermove', updateGhostEyes, { passive: true })
 
-const post = (type: string, details: Record<string, unknown> = {}) => {
-  vscode.postMessage({
-    source: 'ghost-webview',
-    version: 1,
-    type,
-    ...details
-  })
+const post = (type: string, details: Record<string, unknown> = {}): void => {
+  protocolClient.post(vscode, type, details)
 }
 
 const createPersistedState = () => compactPersistedState({
@@ -1038,18 +1043,7 @@ const saveState = () => {
   }
 }
 
-const maxTokensForLength = (length: ResponseLength): number | undefined => {
-  if (length === 'short') {
-    return 512
-  }
-  if (length === 'balanced') {
-    return 1024
-  }
-  if (length === 'long') {
-    return 2048
-  }
-  return undefined
-}
+const maxTokensForLength = settingsStore.maxTokensForLength
 
 const promptHistory = (): string[] => getActiveConversation().promptHistory
 
@@ -1676,14 +1670,8 @@ const renderHistory = () => {
   const query = historySearchElement.value.trim().toLowerCase()
   const bookmarksOnly = historyBookmarksOnlyElement.checked
   historyListElement.textContent = ''
-  const entries = state.conversations.filter(conversation => (
-    !bookmarksOnly || conversation.messages.some(message => message.bookmarked)
-  )).filter(conversation => (
-    !query || conversation.title.toLowerCase().includes(query) || conversation.messages.some(message => message.content.toLowerCase().includes(query))
-  ))
-  const matchingMessages = query
-    ? entries.reduce((count, conversation) => count + conversation.messages.filter(message => message.content.toLowerCase().includes(query)).length, 0)
-    : 0
+  const entries = historyStore.filterConversations(state.conversations, query, bookmarksOnly)
+  const matchingMessages = historyStore.matchingMessageCount(entries, query)
   historySearchSummaryElement.textContent = query || bookmarksOnly
     ? `${entries.length} conversation${entries.length === 1 ? '' : 's'} · ${matchingMessages} matching message${matchingMessages === 1 ? '' : 's'}`
     : ''
@@ -1775,22 +1763,8 @@ const renderPresets = () => {
 
 const modalReturnFocus = new WeakMap<HTMLElement, HTMLElement>()
 
-const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
-  modal.hidden = !visible
-  if (visible) {
-    const activeElement = document.activeElement
-    if (activeElement instanceof HTMLElement && activeElement !== document.body && !modal.contains(activeElement)) {
-      modalReturnFocus.set(modal, activeElement)
-    }
-    const focusable = modal.querySelector<HTMLElement>('button, input, select, textarea')
-    focusable?.focus()
-    return
-  }
-  const returnFocus = modalReturnFocus.get(modal)
-  modalReturnFocus.delete(modal)
-  if (returnFocus && document.contains(returnFocus) && !returnFocus.closest('.modal-backdrop:not([hidden])')) {
-    returnFocus.focus()
-  }
+const setModalVisibility = (modal: HTMLElement, visible: boolean): void => {
+  modalStore.setVisibility(modal, visible, modalReturnFocus)
 }
 
 const validateEditedToolArguments = (toolCall: ToolCall, value: Record<string, unknown>): string | undefined => {
@@ -1943,15 +1917,6 @@ const restoreDraft = (): void => {
   updateComposer()
 }
 
-const escapeHtml = (value: string): string => value
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;')
-
-const escapeAttribute = (value: string): string => escapeHtml(value).replace(/\n/g, '&#10;')
-
 const animatedStatusLabel = (value: string): string => {
   const characters = Array.from(value).map((character, index) => (
     `<span class="animated-status-character" style="--character-index:${index}">${character === ' ' ? '&nbsp;' : escapeHtml(character)}</span>`
@@ -2017,15 +1982,6 @@ const handleReducedMotionChange = (): void => {
 }
 
 reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
-
-const safeLink = (value: string): string | undefined => {
-  try {
-    const url = new URL(value)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined
-  } catch {
-    return undefined
-  }
-}
 
 const createMarkupFragment = (markup: string): DocumentFragment => {
   const template = document.createElement('template')
@@ -2601,29 +2557,7 @@ const readScopeText = (args: Record<string, unknown>, result?: string): string =
 }
 
 const toolActionText = (toolCall: ToolCall): string => {
-  const compactAction = toolCall.name === 'ghost_read_file'
-    ? 'Reading file'
-    : toolCall.name === 'ghost_search_workspace'
-      ? 'Searching workspace'
-      : toolCall.name === 'ghost_get_diagnostics'
-        ? 'Checking result'
-        : toolCall.name === 'ghost_git_context'
-          ? 'Checking Git context'
-          : toolCall.name === 'ghost_update_task_plan'
-            ? 'Updating task plan'
-            : toolCall.name === 'ghost_record_completion'
-              ? 'Recording completion'
-              : toolCall.name === 'ghost_write_file'
-                ? 'Writing file'
-                : toolCall.name === 'ghost_apply_edit'
-                  ? 'Applying edit'
-                  : toolCall.name === 'ghost_apply_transaction'
-                    ? 'Applying file transaction'
-                    : toolCall.name === 'ghost_run_terminal_command'
-                      ? 'Running command'
-                      : toolCall.name === 'ghost_list_directory'
-                        ? 'Listing directory'
-                        : `Running ${toolCall.name}`
+  const compactAction = toolTimeline.compactAction(toolCall.name)
   if (!uiPreferences.showToolProgress) {
     return toolCall.status === 'running' ? `${compactAction}…` : compactAction
   }
@@ -2923,12 +2857,12 @@ const scrollMessages = (force: boolean) => {
 
 const updateComposer = () => {
   const length = promptElement.value.length
-  composerCountElement.textContent = `${length} chars · ~${Math.ceil(length / 4)} tokens`
+  composerCountElement.textContent = `${length} chars · ~${composerStore.tokenEstimate(promptElement.value)} tokens`
   promptElement.rows = promptRows
   promptElement.style.height = 'auto'
   promptElement.style.height = `${Math.min(promptElement.scrollHeight, composerHeight)}px`
   promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
-  const busy = Boolean(activeRequest && !['completed', 'cancelled', 'failed'].includes(activeRequest.status))
+  const busy = composerStore.isBusy(activeRequest?.status)
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   const entries = promptHistory()
   searchPromptHistoryElement.disabled = busy || entries.length === 0
@@ -3804,10 +3738,10 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
         composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
       }
       if (typeof preferences.promptRows === 'number' && Number.isFinite(preferences.promptRows)) {
-        promptRows = Math.min(12, Math.max(1, Math.floor(preferences.promptRows)))
+        promptRows = settingsStore.clampPromptRows(preferences.promptRows)
       }
       if (typeof preferences.promptHistoryLimit === 'number' && Number.isFinite(preferences.promptHistoryLimit)) {
-        uiPreferences.promptHistoryLimit = Math.min(maxPromptHistoryLimit, Math.max(10, Math.floor(preferences.promptHistoryLimit)))
+        uiPreferences.promptHistoryLimit = settingsStore.clampPromptHistoryLimit(preferences.promptHistoryLimit, defaultPromptHistoryLimit)
       }
       if (typeof preferences.assistantName === 'string') {
         uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
@@ -4554,14 +4488,14 @@ composerHeightElement.addEventListener('input', () => {
   saveState()
 })
 promptRowsElement.addEventListener('input', () => {
-  promptRows = Math.min(12, Math.max(1, Math.floor(Number(promptRowsElement.value) || 3)))
+  promptRows = settingsStore.clampPromptRows(Number(promptRowsElement.value) || 3)
   promptRowsElement.value = String(promptRows)
   uiPreferences.promptRows = promptRows
   updateComposer()
   saveState()
 })
 promptHistoryLimitElement.addEventListener('change', () => {
-  uiPreferences.promptHistoryLimit = Math.min(maxPromptHistoryLimit, Math.max(10, Math.floor(Number(promptHistoryLimitElement.value) || defaultPromptHistoryLimit)))
+  uiPreferences.promptHistoryLimit = settingsStore.clampPromptHistoryLimit(Number(promptHistoryLimitElement.value), defaultPromptHistoryLimit)
   promptHistoryLimitElement.value = String(uiPreferences.promptHistoryLimit)
   historyIndex = -1
   trimPromptHistories()

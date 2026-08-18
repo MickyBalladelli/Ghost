@@ -121,7 +121,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## P2 — architecture and maintainability
 
-- [ ] Split `src/webview/ghostWebview.ts` into protocol client, conversation store, settings store, history, rendering, tool timeline, composer, and modal modules.
+- [x] Split `src/webview/ghostWebview.ts` into protocol client, conversation store, settings store, history, rendering, tool timeline, composer, and modal modules.
   - [x] Extract shared state and protocol types.
   - [x] Extract conversation creation and prompt-history runtime operations.
 - [ ] Split `src/ui/ghostView.ts` into request orchestration, persistence, approvals, provider state, import/export, and webview lifecycle services.
