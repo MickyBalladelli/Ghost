@@ -5,6 +5,7 @@ import * as vscode from 'vscode'
 
 import { isFileNotFound, readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { awaitCancellable, throwIfCancelled } from './cancellation'
+import { invalidateWorkspaceCache } from './workspaceCache'
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) {
@@ -70,6 +71,7 @@ export async function atomicWriteFile(
     throwIfCancelled(token)
     await vscode.workspace.fs.rename(temporary, uri, { overwrite: true })
     targetReplaced = true
+    invalidateWorkspaceCache(uri)
     throwIfCancelled(token)
 
     const savedContent = await awaitCancellable(vscode.workspace.fs.readFile(uri), token)
@@ -84,6 +86,7 @@ export async function atomicWriteFile(
         } else {
           await deleteIfPresent(uri)
         }
+        invalidateWorkspaceCache(uri)
       } catch (restoreError) {
         const originalMessage = error instanceof Error ? error.message : String(error)
         const restoreMessage = restoreError instanceof Error ? restoreError.message : String(restoreError)

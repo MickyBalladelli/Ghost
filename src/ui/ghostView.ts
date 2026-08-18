@@ -131,6 +131,13 @@ interface ProviderStatusCache extends ProviderStatus {
   checkedAt: number
 }
 
+interface WorkspaceContextSnapshot {
+  workspaceName: string
+  folders: string[]
+  activeFile?: { name: string; path: string; languageId: string; hasSelection: boolean }
+  openFiles: string[]
+}
+
 function toGhostModelMetadata(capability: ModelCapabilityRecord): GhostModelMetadata {
   const capabilities = [
     capability.supportsStreaming ? 'streaming' : '',
@@ -183,6 +190,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private controlsStateGeneration = 0
   private providerStatusCache?: ProviderStatusCache
   private providerStatusRequest?: { key: string; promise: Promise<ProviderStatus> }
+  private workspaceContextCache?: WorkspaceContextSnapshot
   private static readonly providerStatusCacheTtlMs = 30_000
 
   private readonly chatHandler: vscode.ChatRequestHandler
@@ -204,9 +212,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.providerApiKey = options.providerApiKey
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
+    const invalidateWorkspaceContext = (): void => {
+      this.workspaceContextCache = undefined
+      void this.sendControlsState()
+    }
     this.disposables.push(ghostConfig.onDidChange(() => {
       void this.sendControlsState()
     }), this.stagedEditChanges)
+    this.disposables.push(
+      vscode.window.onDidChangeActiveTextEditor(invalidateWorkspaceContext),
+      vscode.window.onDidChangeTextEditorSelection(invalidateWorkspaceContext),
+      vscode.window.tabGroups.onDidChangeTabs(invalidateWorkspaceContext),
+      vscode.workspace.onDidChangeWorkspaceFolders(invalidateWorkspaceContext)
+    )
     this.disposables.push(
       vscode.languages.registerCodeLensProvider({ scheme: 'file' }, {
         onDidChangeCodeLenses: this.stagedEditChanges.event,
@@ -1846,20 +1864,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private async sendControlsState(forceProviderRefresh = false): Promise<void> {
-    const generation = ++this.controlsStateGeneration
-    const settings = getGhostSettings()
-    const providerStatus = await this.getProviderStatus(settings, forceProviderRefresh)
-    if (this.disposed || generation !== this.controlsStateGeneration) {
-      return
+  private getWorkspaceContext(): WorkspaceContextSnapshot {
+    if (this.workspaceContextCache) {
+      return this.workspaceContextCache
     }
-
-    const connection: 'online' | 'offline' = providerStatus.connection
-    let models = providerStatus.models
-    if (models.length === 0) {
-      models = [settings.chatModel]
-    }
-    const modelMetadata = providerStatus.modelMetadata.map(toGhostModelMetadata)
 
     const editor = vscode.window.activeTextEditor
     const activeFile = editor
@@ -1875,11 +1883,36 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       if (input && typeof input === 'object' && 'uri' in input && input.uri instanceof vscode.Uri) {
         const folder = vscode.workspace.getWorkspaceFolder(input.uri)
         const rootLabel = folder?.name ?? folder?.uri.fsPath
-        return rootLabel ? `${rootLabel}: ${tab.label}` : tab.label
+        return rootLabel ? rootLabel + ': ' + tab.label : tab.label
       }
       return tab.label
     }))
-    const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
+    const snapshot: WorkspaceContextSnapshot = {
+      workspaceName: vscode.workspace.name ?? 'Untitled workspace',
+      folders: vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? [],
+      ...(activeFile ? { activeFile } : {}),
+      openFiles
+    }
+    this.workspaceContextCache = snapshot
+    return snapshot
+  }
+
+  private async sendControlsState(forceProviderRefresh = false): Promise<void> {
+    const generation = ++this.controlsStateGeneration
+    const settings = getGhostSettings()
+    const providerStatus = await this.getProviderStatus(settings, forceProviderRefresh)
+    if (this.disposed || generation !== this.controlsStateGeneration) {
+      return
+    }
+
+    const connection: 'online' | 'offline' = providerStatus.connection
+    let models = providerStatus.models
+    if (models.length === 0) {
+      models = [settings.chatModel]
+    }
+    const modelMetadata = providerStatus.modelMetadata.map(toGhostModelMetadata)
+
+    const workspaceContext = this.getWorkspaceContext()
     const allowedTools = GHOST_TOOL_NAMES.filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
     this.postMessage({
@@ -1936,12 +1969,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       models,
       modelMetadata,
       connection,
-      context: {
-        workspaceName: vscode.workspace.name ?? 'Untitled workspace',
-        folders,
-        ...(activeFile ? { activeFile } : {}),
-        openFiles
-      },
+      context: workspaceContext,
       tools: allowedTools
     })
   }

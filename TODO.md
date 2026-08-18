@@ -104,7 +104,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 ## P1 — speed and resource use
 
 - [x] Add a shared HTTP transport for Ollama, MLX, OpenAI-compatible, and future adapters with keep-alive, timeout, abort, retry, and connection diagnostics.
-- [ ] Cache workspace context, file reads, directory listings, model lists, and provider health. Invalidate caches on relevant VS Code events.
+- [x] Cache workspace context, file reads, directory listings, model lists, and provider health. Invalidate caches on relevant VS Code events.
 - [ ] Make context selection relevance-based: active file, diagnostics, changed files, search matches, and user-mentioned files first.
 - [ ] Add a tokenizer-aware context packer instead of character-only limits. Report how much context was omitted.
 - [ ] Cache inline completions by document version, position, prefix, suffix, language, model, and settings.

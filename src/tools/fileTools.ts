@@ -9,7 +9,7 @@ import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkfl
 import { atomicWriteFile } from './atomicFile'
 import { readWorkspaceFile, verifyWorkspaceFile } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
-import { awaitCancellable } from './cancellation'
+import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
 
 export interface ReadFileInput {
   path: string
@@ -190,7 +190,7 @@ async function isGitIgnored(uri: vscode.Uri, token?: vscode.CancellationToken): 
   }
   try {
     const ignoreFile = vscode.Uri.joinPath(getWorkspaceRoot(), '.gitignore')
-    const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await awaitCancellable(vscode.workspace.fs.readFile(ignoreFile), token))
+    const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await readCachedWorkspaceFile(ignoreFile, token))
     let ignored = false
     for (const rawPattern of ignoreContent.split(/\r\n|\n|\r/)) {
       const pattern = rawPattern.trim()
@@ -478,7 +478,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
       )
     }
 
-    const bytes = await vscode.workspace.fs.readFile(uri)
+    const bytes = await readCachedWorkspaceFile(uri, token)
     assertNotCancelled(token)
     let content: string
     try {
@@ -534,7 +534,7 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     assertNotCancelled(token)
     const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
     const uri = resolveWorkspacePath(edit.path)
-    const current = decodeText(await vscode.workspace.fs.readFile(uri))
+    const current = decodeText(await readCachedWorkspaceFile(uri))
     assertNotCancelled(token)
     if (edit.expectedContent !== undefined && current !== edit.expectedContent) {
       throw new Error('Edit expected different file content')
@@ -597,7 +597,7 @@ async function collectDirectoryEntries(
     return
   }
 
-  const children = await vscode.workspace.fs.readDirectory(directory)
+  const children = await readCachedWorkspaceDirectory(directory, token)
   children.sort(([leftName, leftType], [rightName, rightType]) => {
     const leftDirectory = leftType === vscode.FileType.Directory ? 0 : 1
     const rightDirectory = rightType === vscode.FileType.Directory ? 0 : 1
@@ -678,6 +678,7 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
 }
 
 export function registerFileTools(context: vscode.ExtensionContext): void {
+  registerWorkspaceCache(context)
   context.subscriptions.push(
     vscode.lm.registerTool('ghost_read_file', new ReadFileTool()),
     vscode.lm.registerTool('ghost_write_file', new WriteFileTool()),

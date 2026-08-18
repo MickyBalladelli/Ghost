@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
-import { awaitCancellable, throwIfCancelled } from './cancellation'
+import { throwIfCancelled } from './cancellation'
+import { readCachedWorkspaceFile } from './workspaceCache'
 
 export interface WorkspaceFileSnapshot {
   exists: boolean
@@ -15,7 +16,7 @@ export async function readWorkspaceFile(uri: vscode.Uri, token?: vscode.Cancella
   try {
     return {
       exists: true,
-      content: Buffer.from(await awaitCancellable(vscode.workspace.fs.readFile(uri), token)).toString('utf8')
+      content: Buffer.from(await readCachedWorkspaceFile(uri, token)).toString('utf8')
     }
   } catch (error) {
     if (isFileNotFound(error)) {
