@@ -6,7 +6,8 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostLogLevel, GhostProvider, GhostSettings } from '../config'
-import { MlxClient, MlxVisionImage } from '../services/mlxClient'
+import { MlxClient } from '../services/mlxClient'
+import { ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
 import { createProviderAdapter } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
@@ -460,7 +461,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ...options,
       modelProfile: options.modelProfile,
       modelRole,
-      images: safeAttachments.flatMap<MlxVisionImage>(attachment => {
+      images: safeAttachments.flatMap<ChatVisionImage>(attachment => {
         if (!attachment.mimeType?.toLowerCase().startsWith('image/')) return []
         if (attachment.path) return [{ path: attachment.path, mimeType: attachment.mimeType }]
         if (attachment.content) return [{ data: attachment.content, mimeType: attachment.mimeType }]

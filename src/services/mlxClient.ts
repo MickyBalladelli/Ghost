@@ -2,78 +2,49 @@ import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { TextDecoder } from 'node:util'
 import fetch, { type RequestInit, type Response } from 'node-fetch'
-import { GenerationSettings } from './generationSettings'
 import { buildMlxChatBody } from './providerRequestBuilders'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { createKeepAliveAgent } from './openAiTransport'
+import type {
+  ChatImageContent,
+  ChatImageDetail,
+  ChatMessage,
+  ChatMessageContent,
+  ChatRequestOptions,
+  ChatResponseFormat,
+  ChatRole,
+  ChatStreamEvent,
+  ChatTextContent,
+  ChatToolDefinition,
+  ChatVisionImage
+} from './chatTypes'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
-export type MlxRole = 'system' | 'user' | 'assistant'
-export type MlxImageDetail = 'auto' | 'low' | 'high'
-
-export interface MlxTextContent {
-  type: 'text'
-  text: string
-}
-
-export interface MlxImageContent {
-  type: 'image_url'
-  image_url: {
-    url: string
-    detail?: MlxImageDetail
-  }
-}
-
-export type MlxMessageContent = string | Array<MlxTextContent | MlxImageContent>
-
-export interface MlxMessage {
-  role: MlxRole
-  content: MlxMessageContent
-}
-
-export interface MlxToolDefinition {
-  type: 'function'
-  function: {
-    name: string
-    description?: string
-    parameters: Record<string, unknown>
-  }
-}
-
-export interface MlxResponseFormat {
-  type: 'text' | 'json_object' | 'json_schema'
-  json_schema?: {
-    name: string
-    description?: string
-    strict?: boolean
-    schema: Record<string, unknown>
-  }
-}
-
-export type MlxStreamEvent =
-  | { type: 'text'; text: string }
-  | { type: 'tool-call'; name?: string; arguments?: string; done?: boolean }
-
-export interface MlxVisionImage {
-  data?: string | Uint8Array
-  path?: string
-  url?: string
-  mimeType?: string
-  detail?: MlxImageDetail
-}
-
-export interface MlxChatOptions {
-  model: string
-  messages: MlxMessage[]
-  generation?: GenerationSettings
-  tools?: MlxToolDefinition[]
-  toolChoice?: 'auto' | 'none' | 'required'
-  responseFormat?: MlxResponseFormat
-  signal?: AbortSignal
-}
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxRole = ChatRole
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxImageDetail = ChatImageDetail
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxTextContent = ChatTextContent
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxImageContent = ChatImageContent
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxMessageContent = ChatMessageContent
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxMessage = ChatMessage
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxToolDefinition = ChatToolDefinition
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxResponseFormat = ChatResponseFormat
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxStreamEvent = ChatStreamEvent
+/** @deprecated Use the provider-neutral chat types from chatTypes.ts. */
+export type MlxVisionImage = ChatVisionImage
+/** @deprecated Use ChatRequestOptions from chatTypes.ts. */
+export type MlxChatOptions = ChatRequestOptions
 
 interface MlxModelsResponse {
   data?: Array<{ id?: string }>
@@ -124,8 +95,8 @@ export async function imageFileToDataUrl(filePath: string, mimeType = inferImage
   return toImageDataUrl(image, mimeType)
 }
 
-export async function createVisionMessage(text: string, images: MlxVisionImage[] = []): Promise<MlxMessage> {
-  const content: Array<MlxTextContent | MlxImageContent> = [{ type: 'text', text }]
+export async function createVisionMessage(text: string, images: ChatVisionImage[] = []): Promise<ChatMessage> {
+  const content: Array<ChatTextContent | ChatImageContent> = [{ type: 'text', text }]
 
   for (const image of images) {
     let url = image.url
@@ -275,7 +246,7 @@ export class MlxClient {
     return payload.data?.flatMap(model => model.id ? [model.id] : []) ?? []
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const body = JSON.stringify(buildMlxChatBody(options))
     const requestOptions: RequestInit = {
       method: 'POST',
@@ -310,6 +281,6 @@ export async function listModels(baseUrl = DEFAULT_MLX_URL, signal?: AbortSignal
   return new MlxClient(baseUrl).listModels(signal)
 }
 
-export async function* streamChatCompletion(options: MlxChatOptions, baseUrl = DEFAULT_MLX_URL): AsyncGenerator<string> {
+export async function* streamChatCompletion(options: ChatRequestOptions, baseUrl = DEFAULT_MLX_URL): AsyncGenerator<string> {
   yield* new MlxClient(baseUrl).streamChatCompletion(options)
 }

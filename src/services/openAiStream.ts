@@ -1,5 +1,5 @@
 import { TextDecoder } from 'node:util'
-import type { MlxStreamEvent } from './mlxClient'
+import type { ChatStreamEvent } from './chatTypes'
 
 export type OpenAiStreamMode = 'chat-completions' | 'responses'
 
@@ -96,11 +96,11 @@ function eventOutput(
   event: StreamEvent,
   mode: OpenAiStreamMode,
   toolState: { name: string; argumentsSeen: boolean }
-): MlxStreamEvent[] {
+): ChatStreamEvent[] {
   if (event.data === '[DONE]') return []
   const payload = jsonObject(event.data)
   if (!payload) return []
-  const outputs: MlxStreamEvent[] = []
+  const outputs: ChatStreamEvent[] = []
   const functionCall = functionDelta(payload, mode)
   if (functionCall) {
     if (functionCall.name) toolState.name += functionCall.name
@@ -114,7 +114,7 @@ function eventOutput(
   return outputs
 }
 
-export async function* streamOpenAiEvents(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<MlxStreamEvent> {
+export async function* streamOpenAiEvents(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<ChatStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
   const toolState = { name: '', argumentsSeen: false }

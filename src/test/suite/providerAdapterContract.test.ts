@@ -6,9 +6,9 @@ import {
   ProviderError,
   ProviderId
 } from '../../services/providerAdapter'
-import { MlxChatOptions, MlxStreamEvent } from '../../services/mlxClient'
+import { ChatRequestOptions, ChatStreamEvent } from '../../services/chatTypes'
 
-const options: MlxChatOptions = {
+const options: ChatRequestOptions = {
   model: 'contract-model',
   messages: [{ role: 'user', content: 'hello' }]
 }
@@ -25,8 +25,8 @@ async function collectText(stream: AsyncIterable<string>): Promise<string[]> {
   return chunks
 }
 
-async function collectEvents(stream: AsyncIterable<MlxStreamEvent>): Promise<MlxStreamEvent[]> {
-  const events: MlxStreamEvent[] = []
+async function collectEvents(stream: AsyncIterable<ChatStreamEvent>): Promise<ChatStreamEvent[]> {
+  const events: ChatStreamEvent[] = []
   for await (const event of stream) events.push(event)
   return events
 }
@@ -36,12 +36,12 @@ class EventProvider implements ProviderClient {
     return true
   }
 
-  async *streamChatCompletion(request: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(request: ChatRequestOptions): AsyncGenerator<string> {
     if (request.signal?.aborted) throw cancelledError()
     yield 'fallback text'
   }
 
-  async *streamChatEvents(request: MlxChatOptions): AsyncGenerator<MlxStreamEvent> {
+  async *streamChatEvents(request: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
     if (request.signal?.aborted) throw cancelledError()
     yield { type: 'text', text: 'native text' }
     if (request.tools?.length) {
@@ -55,7 +55,7 @@ class TextOnlyProvider implements ProviderClient {
     return true
   }
 
-  async *streamChatCompletion(request: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(request: ChatRequestOptions): AsyncGenerator<string> {
     if (request.signal?.aborted) throw cancelledError()
     yield 'text-only provider'
   }

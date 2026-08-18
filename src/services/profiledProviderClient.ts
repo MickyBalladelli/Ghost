@@ -2,7 +2,7 @@ import fetch, { type RequestInit, type Response } from 'node-fetch'
 
 import type { GhostSettings } from '../config'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
-import { MlxChatOptions, MlxMessage, MlxStreamEvent } from './mlxClient'
+import { ChatMessage, ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { OllamaClient } from './ollamaClient'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWireProtocol, resolveOpenAiProfileEndpoint } from './providerProfiles'
@@ -46,18 +46,18 @@ async function httpError(response: Response): Promise<Error> {
   return providerHttpError(response)
 }
 
-function textFromContent(content: MlxMessage['content']): string {
+function textFromContent(content: ChatMessage['content']): string {
   return typeof content === 'string'
     ? content
     : content.filter(part => part.type === 'text').map(part => part.text).join('')
 }
 
-function systemText(messages: MlxMessage[]): string | undefined {
+function systemText(messages: ChatMessage[]): string | undefined {
   const value = messages.filter(message => message.role === 'system').map(message => textFromContent(message.content)).join('\n\n').trim()
   return value || undefined
 }
 
-function nonSystemMessages(messages: MlxMessage[]): MlxMessage[] {
+function nonSystemMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter(message => message.role !== 'system')
 }
 
@@ -102,7 +102,7 @@ async function* streamSseJson<T>(body: NodeJS.ReadableStream, parse: (payload: T
   }
 }
 
-function generation(options: MlxChatOptions): { temperature?: number; topP?: number; maxTokens: number; seed?: number; stop?: string[]; contextWindow?: number; grammar?: string } {
+function generation(options: ChatRequestOptions): { temperature?: number; topP?: number; maxTokens: number; seed?: number; stop?: string[]; contextWindow?: number; grammar?: string } {
   return {
     temperature: options.generation?.temperature,
     topP: options.generation?.topP,
@@ -122,7 +122,7 @@ function joinCustomEndpoint(baseUrl: string, path: string, model?: string): stri
   return joinEndpoint(baseUrl, resolvedPath)
 }
 
-function renderCustomTemplate(template: string, options: MlxChatOptions): Record<string, unknown> {
+function renderCustomTemplate(template: string, options: ChatRequestOptions): Record<string, unknown> {
   const settings = generation(options)
   const values: Record<string, unknown> = {
     model: options.model,
@@ -245,7 +245,7 @@ class AnthropicClient implements ProviderClient {
     return payload.data?.flatMap(model => model.id ? [model.id] : []) ?? []
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, 'v1/messages')
     const settings = generation(options)
     const response = await requestWithProviderTransport(this.request, this.transport, endpoint, {
@@ -323,7 +323,7 @@ class GeminiClient implements ProviderClient {
     return payload.models?.flatMap(model => model.name ? [model.name.replace(/^models\//, '')] : []) ?? []
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, `v1beta/models/${encodeURIComponent(options.model)}:streamGenerateContent?alt=sse`)
     const response = await requestWithProviderTransport(this.request, this.transport, endpoint, {
       method: 'POST',
@@ -401,7 +401,7 @@ class CustomHttpClient implements ProviderClient {
     return customModelNames(await response.json())
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const endpoint = joinCustomEndpoint(this.baseUrl, this.chatPath, options.model)
     const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',
@@ -462,7 +462,7 @@ class AzureOpenAiClient implements ProviderClient {
     return []
   }
 
-  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
     const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',
@@ -476,7 +476,7 @@ class AzureOpenAiClient implements ProviderClient {
     yield* streamOpenAiTokens(response.body, 'chat-completions')
   }
 
-  async *streamChatEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent> {
+  async *streamChatEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
     const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
     const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',

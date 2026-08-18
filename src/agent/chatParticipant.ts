@@ -5,7 +5,8 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import { GhostConfig, GhostProvider, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
-import { createVisionMessage, MlxClient, MlxMessage, MlxResponseFormat, MlxStreamEvent, MlxVisionImage } from '../services/mlxClient'
+import { createVisionMessage, MlxClient } from '../services/mlxClient'
+import { ChatMessage, ChatResponseFormat, ChatStreamEvent, ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
@@ -96,7 +97,7 @@ interface RequestBudget {
 }
 
 interface ContextBudgetResult {
-  messages: MlxMessage[]
+  messages: ChatMessage[]
   inputTokens: number
   compacted: boolean
   omittedTokens: number
@@ -109,7 +110,7 @@ const tokenizeContext: ContextTokenizer = (text: string): number => {
   return tokens?.length ?? 0
 }
 
-const estimateMessageTokens = (message: MlxMessage, tokenizer: ContextTokenizer): number => {
+const estimateMessageTokens = (message: ChatMessage, tokenizer: ContextTokenizer): number => {
   if (typeof message.content === 'string') {
     return tokenizer(message.content)
   }
@@ -190,7 +191,7 @@ const compactInitialContext = (text: string, maxTokens: number, tokenizer: Conte
     .join('\n\n')
 }
 
-const compactHistoryMessage = (message: MlxMessage, maxTokens: number, tokenizer: ContextTokenizer): MlxMessage => {
+const compactHistoryMessage = (message: ChatMessage, maxTokens: number, tokenizer: ContextTokenizer): ChatMessage => {
   if (typeof message.content !== 'string') {
     return message
   }
@@ -218,7 +219,7 @@ class ContextBudgetManager {
     this.tokenizer = tokenizer
   }
 
-  prepare(messages: MlxMessage[]): ContextBudgetResult {
+  prepare(messages: ChatMessage[]): ContextBudgetResult {
     const originalTokens = messages.reduce((total, message) => total + estimateMessageTokens(message, this.tokenizer), 0)
     if (originalTokens <= this.inputTokenBudget) {
       return { messages, inputTokens: originalTokens, compacted: false, omittedTokens: 0 }
@@ -232,12 +233,12 @@ class ContextBudgetManager {
     const compactedInitial = initial && typeof initial.content === 'string'
       ? { ...initial, content: compactInitialContext(initial.content, initialBudget, this.tokenizer) }
       : initial
-    const selected: MlxMessage[] = [
+    const selected: ChatMessage[] = [
       ...(system ? [system] : []),
       ...(compactedInitial ? [compactedInitial] : [])
     ]
     let remaining = this.inputTokenBudget - selected.reduce((total, message) => total + estimateMessageTokens(message, this.tokenizer), 0)
-    const chosenHistory: MlxMessage[] = []
+    const chosenHistory: ChatMessage[] = []
     for (let index = history.length - 1; index >= 0; index -= 1) {
       if (remaining <= 0) break
       const original = history[index]
@@ -607,8 +608,8 @@ export interface GhostRequestOptions {
   showReasoning?: boolean
   customSystemInstructions?: string
   jsonMode?: boolean
-  responseFormat?: MlxResponseFormat
-  images?: MlxVisionImage[]
+  responseFormat?: ChatResponseFormat
+  images?: ChatVisionImage[]
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
   confirmBudgetContinue?: (reason: string) => Promise<boolean>
@@ -1084,7 +1085,7 @@ async function streamModelTurn(
   let nativeToolName = ''
   let nativeToolArguments = ''
 
-  const nativeToolResult = (event: MlxStreamEvent): LocalToolCall | undefined => {
+  const nativeToolResult = (event: ChatStreamEvent): LocalToolCall | undefined => {
     if (event.type !== 'tool-call') return undefined
     if (event.name) nativeToolName = event.name
     if (event.arguments) nativeToolArguments += event.arguments
@@ -1328,7 +1329,7 @@ export function createChatParticipantHandler(
     const userMessage = images.length > 0
       ? await createVisionMessage(contextPrompt, images)
       : { role: 'user' as const, content: contextPrompt }
-    const messages: MlxMessage[] = [
+    const messages: ChatMessage[] = [
       {
         role: 'system',
         content: systemPrompt

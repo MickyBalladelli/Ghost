@@ -1,9 +1,9 @@
-import type { MlxResponseFormat, MlxToolDefinition } from '../services/mlxClient'
+import type { ChatResponseFormat, ChatToolDefinition } from '../services/chatTypes'
 
 const stringProperty = { type: 'string' }
 const booleanProperty = { type: 'boolean' }
 
-export const GHOST_NATIVE_TOOL_DEFINITIONS: MlxToolDefinition[] = [
+export const GHOST_NATIVE_TOOL_DEFINITIONS: ChatToolDefinition[] = [
   {
     type: 'function',
     function: {
@@ -166,6 +166,6 @@ export const GHOST_NATIVE_TOOL_DEFINITIONS: MlxToolDefinition[] = [
   }
 ]
 
-export const JSON_OBJECT_RESPONSE_FORMAT: MlxResponseFormat = {
+export const JSON_OBJECT_RESPONSE_FORMAT: ChatResponseFormat = {
   type: 'json_object'
 }

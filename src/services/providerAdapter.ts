@@ -1,4 +1,4 @@
-import { MlxChatOptions, MlxStreamEvent } from './mlxClient'
+import { ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 import type { FimCompletionOptions } from './fim'
 
@@ -60,17 +60,17 @@ export class ProviderError extends Error {
 export interface ProviderClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
   listModels?(signal?: AbortSignal): Promise<string[]>
-  streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string>
-  streamChatEvents?(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
+  streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string>
+  streamChatEvents?(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
   fetchFimCompletion?(options: FimCompletionOptions): Promise<string>
 }
 
 export interface ProviderAdapter {
   readonly provider: ProviderId
   capabilities(model?: string): ModelCapabilityRecord
-  chat(options: MlxChatOptions): Promise<string>
-  stream(options: MlxChatOptions): AsyncGenerator<string>
-  streamEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
+  chat(options: ChatRequestOptions): Promise<string>
+  stream(options: ChatRequestOptions): AsyncGenerator<string>
+  streamEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
   fim(options: FimCompletionOptions): Promise<string>
   listModels(signal?: AbortSignal): Promise<string[]>
   health(timeoutMs?: number, signal?: AbortSignal): Promise<boolean>

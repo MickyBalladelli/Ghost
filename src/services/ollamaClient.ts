@@ -1,11 +1,7 @@
 import fetch, { type RequestInit, type Response } from 'node-fetch'
 import { TextDecoder } from 'node:util'
 
-import {
-  MlxChatOptions,
-  MlxMessage,
-  MlxStreamEvent,
-} from './mlxClient'
+import { ChatMessage, ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { GenerationSettings } from './generationSettings'
 import {
   buildOllamaChatBody,
@@ -28,7 +24,7 @@ export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 export type OllamaApiMode = 'auto' | 'ollama' | 'openai-compatible'
 export type OpenAiApiMode = 'auto' | 'chat-completions' | 'responses'
 
-export interface OllamaChatOptions extends MlxChatOptions {
+export interface OllamaChatOptions extends ChatRequestOptions {
   systemPrompt?: string
   stream?: boolean
   mode?: OllamaApiMode
@@ -96,7 +92,7 @@ function getOllamaBaseUrl(baseUrl: string): string {
   return isExplicitOpenAiUrl(normalized) ? removeEndpointSuffix(normalized, 'v1') : normalized
 }
 
-function addSystemPrompt(messages: MlxMessage[], systemPrompt?: string): MlxMessage[] {
+function addSystemPrompt(messages: ChatMessage[], systemPrompt?: string): ChatMessage[] {
   if (!systemPrompt) {
     return messages
   }
@@ -137,7 +133,7 @@ function extractOllamaText(payload: OllamaCompletionResponse): string {
   return typeof payload.message === 'string' ? payload.message : payload.message?.content ?? ''
 }
 
-function extractOllamaToolCall(payload: OllamaCompletionResponse): MlxStreamEvent | undefined {
+function extractOllamaToolCall(payload: OllamaCompletionResponse): ChatStreamEvent | undefined {
   if (!payload.message || typeof payload.message === 'string') return undefined
   const tool = payload.message.tool_calls?.[0]?.function
   if (!tool?.name) return undefined
@@ -149,7 +145,7 @@ function extractOllamaToolCall(payload: OllamaCompletionResponse): MlxStreamEven
   }
 }
 
-export async function* streamOllamaEvents(body: NodeJS.ReadableStream): AsyncGenerator<MlxStreamEvent> {
+export async function* streamOllamaEvents(body: NodeJS.ReadableStream): AsyncGenerator<ChatStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
 
@@ -334,7 +330,7 @@ export class OllamaClient {
     }
   }
 
-  async *streamChatEvents(options: OllamaChatOptions): AsyncGenerator<MlxStreamEvent> {
+  async *streamChatEvents(options: OllamaChatOptions): AsyncGenerator<ChatStreamEvent> {
     const messages = addSystemPrompt(options.messages, options.systemPrompt)
     const stream = options.stream ?? true
     const mode = options.mode ?? this.mode
@@ -468,7 +464,7 @@ export class OllamaClient {
   private getChatRequest(
     kind: 'ollama' | 'openai-chat' | 'openai-responses',
     options: OllamaChatOptions,
-    messages: MlxMessage[],
+    messages: ChatMessage[],
     stream: boolean
   ): RequestInit {
     if (kind === 'ollama') {

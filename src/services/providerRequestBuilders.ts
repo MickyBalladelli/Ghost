@@ -1,12 +1,12 @@
-import type { MlxChatOptions, MlxMessage, MlxMessageContent, MlxResponseFormat, MlxToolDefinition } from './mlxClient'
+import type { ChatMessage, ChatMessageContent, ChatRequestOptions, ChatResponseFormat, ChatToolDefinition } from './chatTypes'
 import { GenerationSettings, normalizeGenerationSettings } from './generationSettings'
 
 interface ChatWireOptions {
   model: string
   generation?: GenerationSettings
-  tools?: MlxToolDefinition[]
-  toolChoice?: MlxChatOptions['toolChoice']
-  responseFormat?: MlxResponseFormat
+  tools?: ChatToolDefinition[]
+  toolChoice?: ChatRequestOptions['toolChoice']
+  responseFormat?: ChatResponseFormat
 }
 
 interface FimWireOptions {
@@ -26,12 +26,12 @@ function dataUrlToBase64(url: string): string | undefined {
   return separator < 0 ? undefined : url.slice(separator + 1)
 }
 
-function textFromContent(content: MlxMessageContent): string {
+function textFromContent(content: ChatMessageContent): string {
   if (typeof content === 'string') return content
   return content.filter(part => part.type === 'text').map(part => part.text).join('')
 }
 
-function imagesFromContent(content: MlxMessageContent): string[] {
+function imagesFromContent(content: ChatMessageContent): string[] {
   if (typeof content === 'string') return []
   return content.flatMap(part => {
     if (part.type !== 'image_url') return []
@@ -40,7 +40,7 @@ function imagesFromContent(content: MlxMessageContent): string[] {
   })
 }
 
-export function toOllamaMessages(messages: MlxMessage[]): OllamaWireMessage[] {
+export function toOllamaMessages(messages: ChatMessage[]): OllamaWireMessage[] {
   return messages.map(message => {
     const images = imagesFromContent(message.content)
     return {
@@ -51,7 +51,7 @@ export function toOllamaMessages(messages: MlxMessage[]): OllamaWireMessage[] {
   })
 }
 
-export function buildMlxChatBody(options: MlxChatOptions): Record<string, unknown> {
+export function buildMlxChatBody(options: ChatRequestOptions): Record<string, unknown> {
   const generation = normalizeGenerationSettings(options.generation)
   return {
     model: options.model,
@@ -70,7 +70,7 @@ export function buildMlxChatBody(options: MlxChatOptions): Record<string, unknow
   }
 }
 
-export function buildOllamaChatBody(options: ChatWireOptions, messages: MlxMessage[], stream: boolean): Record<string, unknown> {
+export function buildOllamaChatBody(options: ChatWireOptions, messages: ChatMessage[], stream: boolean): Record<string, unknown> {
   const generation = normalizeGenerationSettings(options.generation)
   return {
     model: options.model,
@@ -94,7 +94,7 @@ export function buildOllamaChatBody(options: ChatWireOptions, messages: MlxMessa
   }
 }
 
-export function buildOpenAiChatBody(options: ChatWireOptions, messages: MlxMessage[], stream: boolean): Record<string, unknown> {
+export function buildOpenAiChatBody(options: ChatWireOptions, messages: ChatMessage[], stream: boolean): Record<string, unknown> {
   const generation = normalizeGenerationSettings(options.generation)
   return {
     model: options.model,
@@ -112,7 +112,7 @@ export function buildOpenAiChatBody(options: ChatWireOptions, messages: MlxMessa
   }
 }
 
-function toOpenAiResponsesInput(messages: MlxMessage[]): Array<{ role: string; content: Array<Record<string, unknown>> }> {
+function toOpenAiResponsesInput(messages: ChatMessage[]): Array<{ role: string; content: Array<Record<string, unknown>> }> {
   return messages.map(message => ({
     role: message.role,
     content: typeof message.content === 'string'
@@ -123,7 +123,7 @@ function toOpenAiResponsesInput(messages: MlxMessage[]): Array<{ role: string; c
   }))
 }
 
-export function buildOpenAiResponsesBody(options: ChatWireOptions, messages: MlxMessage[]): Record<string, unknown> {
+export function buildOpenAiResponsesBody(options: ChatWireOptions, messages: ChatMessage[]): Record<string, unknown> {
   const generation = normalizeGenerationSettings(options.generation)
   return {
     model: options.model,

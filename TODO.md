@@ -133,7 +133,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
   - [x] Extract webview attachment, pending-message, and disposal state.
 - [x] Share or generate protocol types between `src/ui/ghostProtocol.ts` and the webview. Remove duplicated local message declarations.
 - [x] Centralize file validation, read/write/edit execution, diff creation, and conflict handling instead of duplicating logic between `fileTools.ts` and `localToolExecutor.ts`.
-- [ ] Keep provider-neutral types separate from `MlxChatOptions`; avoid using one provider’s request shape as the shared contract.
+- [x] Keep provider-neutral types separate from `MlxChatOptions`; avoid using one provider’s request shape as the shared contract.
 - [ ] Introduce an event/state store with one owner for request state, conversation state, settings, approvals, and persistence.
 - [ ] Add protocol version negotiation and migrations for webview/extension changes.
 - [ ] Replace giant `innerHTML` templates with small safe render functions or DOM builders. Centralize escaping and markdown sanitization.

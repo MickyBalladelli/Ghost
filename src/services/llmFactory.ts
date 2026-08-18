@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
-import { DEFAULT_MLX_URL, MlxChatOptions, MlxClient, MlxStreamEvent } from './mlxClient'
+import { DEFAULT_MLX_URL, MlxClient } from './mlxClient'
+import { ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { createProviderAdapter, ProviderAdapter, ProviderClient, ProviderId } from './providerAdapter'
 import type { FimCompletionOptions } from './fim'
 
@@ -66,13 +67,13 @@ export class LlmFactory {
     }
   }
 
-  async *streamChatCompletion(options: MlxChatOptions & { provider?: GhostProvider }): AsyncGenerator<string> {
+  async *streamChatCompletion(options: ChatRequestOptions & { provider?: GhostProvider }): AsyncGenerator<string> {
     const resolved = await this.resolve(options.provider)
     const model = await this.selectAvailableModel(resolved.adapter, options.model, options.signal)
     yield* resolved.adapter.stream({ ...options, model })
   }
 
-  async *streamChatEvents(options: MlxChatOptions & { provider?: GhostProvider }): AsyncGenerator<MlxStreamEvent> {
+  async *streamChatEvents(options: ChatRequestOptions & { provider?: GhostProvider }): AsyncGenerator<ChatStreamEvent> {
     const resolved = await this.resolve(options.provider)
     const model = await this.selectAvailableModel(resolved.adapter, options.model, options.signal)
     yield* resolved.adapter.streamEvents({ ...options, model })
