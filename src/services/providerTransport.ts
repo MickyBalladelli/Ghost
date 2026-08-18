@@ -1,0 +1,106 @@
+import fetch, { type RequestInit, type Response } from 'node-fetch'
+
+import { requestWithRetry, type ProviderRequestOptions } from './providerRequest'
+
+type FetchLike = typeof fetch
+type RequestAgent = NonNullable<RequestInit['agent']>
+
+export interface ProviderTransportDiagnostics {
+  endpoint: string
+  startedAt: number
+  completedAt: number
+  durationMs: number
+  attempts: number
+  status?: number
+  ok?: boolean
+  error?: string
+}
+
+export interface ProviderTransportOptions extends ProviderRequestOptions {
+  agent?: RequestAgent
+}
+
+export type ProviderAgentFactory = (endpoint: string) => RequestAgent | undefined
+
+export class ProviderHttpTransport {
+  private lastDiagnostics?: ProviderTransportDiagnostics
+  private readonly agents = new Map<string, RequestAgent>()
+
+  constructor(
+    private readonly request: FetchLike = fetch,
+    private readonly agentFactory?: ProviderAgentFactory
+  ) {}
+
+  private agentFor(endpoint: string, init: RequestInit, options: ProviderTransportOptions): RequestAgent | undefined {
+    if (options.agent) {
+      return options.agent
+    }
+    if (init.agent) {
+      return init.agent
+    }
+    const existing = this.agents.get(endpoint)
+    if (existing) {
+      return existing
+    }
+    const created = this.agentFactory?.(endpoint)
+    if (created) {
+      this.agents.set(endpoint, created)
+    }
+    return created
+  }
+
+  async requestWithDiagnostics(
+    endpoint: string,
+    init: RequestInit = {},
+    options: ProviderTransportOptions = {}
+  ): Promise<Response> {
+    const startedAt = Date.now()
+    let attempts = 0
+    const requestOptions: ProviderRequestOptions = {
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+      maxAttempts: options.maxAttempts
+    }
+
+    try {
+      const response = await requestWithRetry(
+        signal => {
+          attempts += 1
+          const agent = this.agentFor(endpoint, init, options)
+          return this.request(endpoint, {
+            ...init,
+            ...(agent ? { agent } : {}),
+            signal
+          })
+        },
+        requestOptions
+      )
+      const completedAt = Date.now()
+      this.lastDiagnostics = {
+        endpoint,
+        startedAt,
+        completedAt,
+        durationMs: completedAt - startedAt,
+        attempts,
+        status: response.status,
+        ok: response.ok
+      }
+      return response
+    } catch (error) {
+      const completedAt = Date.now()
+      this.lastDiagnostics = {
+        endpoint,
+        startedAt,
+        completedAt,
+        durationMs: completedAt - startedAt,
+        attempts,
+        error: error instanceof Error ? error.message : String(error)
+      }
+      throw error
+    }
+  }
+
+  getLastDiagnostics(): ProviderTransportDiagnostics | undefined {
+    return this.lastDiagnostics
+  }
+}

@@ -11,6 +11,7 @@ All notable changes to this extension are documented here.
 - Improve accessibility with VS Code theme variables, forced-colors styling, reduced-motion handling, screen-reader status updates, and modal keyboard focus trapping.
 - Reuse visible message elements during refreshes and centralize generated markdown markup through safe DOM fragments.
 - Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
+- Add shared provider HTTP transport diagnostics with keep-alive agents, timeout, abort, and retry handling for local and profiled providers.
 
 ## 1.1.17 - 2026-08-18
 

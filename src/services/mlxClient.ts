@@ -5,7 +5,9 @@ import fetch, { type RequestInit, type Response } from 'node-fetch'
 import { GenerationSettings } from './generationSettings'
 import { buildMlxChatBody } from './providerRequestBuilders'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
-import { providerHttpError, requestWithRetry } from './providerRequest'
+import { providerHttpError } from './providerRequest'
+import { ProviderHttpTransport } from './providerTransport'
+import { createKeepAliveAgent } from './openAiTransport'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
@@ -233,12 +235,12 @@ export async function* streamSseTokens(body: NodeJS.ReadableStream): AsyncGenera
 
 export class MlxClient {
   private readonly apiUrl: string
-  private readonly request: FetchLike
+  private readonly transport: ProviderHttpTransport
   private readonly apiKeyProvider?: () => string | undefined
 
   constructor(baseUrl = DEFAULT_MLX_URL, request: FetchLike = fetch, apiKeyProvider?: () => string | undefined) {
     this.apiUrl = normalizeMlxApiUrl(baseUrl)
-    this.request = request
+    this.transport = new ProviderHttpTransport(request, createKeepAliveAgent)
     this.apiKeyProvider = apiKeyProvider
   }
 
@@ -250,14 +252,10 @@ export class MlxClient {
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
     try {
       const endpoint = joinEndpoint(this.apiUrl, 'models')
-      const response = await requestWithRetry(
-        signal => this.request(endpoint, {
+      const response = await this.transport.requestWithDiagnostics(endpoint, {
           method: 'GET',
-          headers: this.authorizationHeaders(),
-          signal
-        }),
-        { timeoutMs }
-      )
+          headers: this.authorizationHeaders()
+        }, { timeoutMs })
 
       return response.ok
     } catch {
@@ -267,14 +265,10 @@ export class MlxClient {
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
     const endpoint = joinEndpoint(this.apiUrl, 'models')
-    const response = await requestWithRetry(
-      requestSignal => this.request(endpoint, {
+    const response = await this.transport.requestWithDiagnostics(endpoint, {
         method: 'GET',
-        headers: this.authorizationHeaders(),
-        signal: requestSignal
-      }),
-      { signal, timeoutMs: 30000 }
-    )
+        headers: this.authorizationHeaders()
+      }, { signal, timeoutMs: 30000 })
     await throwForHttpError(response)
 
     const payload = await response.json() as MlxModelsResponse
@@ -294,7 +288,10 @@ export class MlxClient {
       signal: options.signal
     }
     const endpoint = joinEndpoint(this.apiUrl, 'chat/completions')
-    const response = await this.request(endpoint, requestOptions)
+    const response = await this.transport.requestWithDiagnostics(endpoint, requestOptions, {
+      signal: options.signal,
+      timeoutMs: 30000
+    })
     await throwForHttpError(response)
 
     if (!response.body) {

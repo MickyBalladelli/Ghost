@@ -131,6 +131,7 @@ function shouldBypassProxy(target: URL, noProxy: string): boolean {
 
 function tlsOptions(settings: OpenAiTransportSettings): Record<string, unknown> {
   return {
+    keepAlive: true,
     rejectUnauthorized: settings.tlsRejectUnauthorized,
     ...(readOptionalFile(settings.tlsCaFile) ? { ca: readOptionalFile(settings.tlsCaFile) } : {}),
     ...(readOptionalFile(settings.tlsCertFile) ? { cert: readOptionalFile(settings.tlsCertFile) } : {}),
@@ -160,7 +161,12 @@ export function createOpenAiRequestAgent(
   if (target.protocol === 'https:') {
     return new HttpsAgent(tls)
   }
-  return settings.tlsCaFile.trim() || settings.tlsCertFile.trim() || settings.tlsKeyFile.trim()
-    ? new HttpAgent()
-    : undefined
+  return new HttpAgent(tls)
+}
+
+export function createKeepAliveAgent(targetUrl: string): RequestAgent {
+  const target = new URL(targetUrl)
+  return target.protocol === 'https:'
+    ? new HttpsAgent({ keepAlive: true })
+    : new HttpAgent({ keepAlive: true })
 }

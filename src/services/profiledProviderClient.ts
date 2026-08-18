@@ -1,4 +1,4 @@
-import fetch, { type Response } from 'node-fetch'
+import fetch, { type RequestInit, type Response } from 'node-fetch'
 
 import type { GhostSettings } from '../config'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
@@ -10,8 +10,22 @@ import { ProviderClient } from './providerAdapter'
 import { streamOpenAiEvents, streamOpenAiTokens } from './openAiStream'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError, requestWithRetry } from './providerRequest'
+import { ProviderHttpTransport } from './providerTransport'
 
 type FetchLike = typeof fetch
+
+const requestWithProviderTransport = (
+  request: FetchLike,
+  settings: OpenAiTransportSettings,
+  endpoint: string,
+  init: RequestInit,
+  signal?: AbortSignal
+): Promise<Response> => (
+  new ProviderHttpTransport(
+    request,
+    target => createOpenAiRequestAgent(target, settings)
+  ).requestWithDiagnostics(endpoint, init, { signal, timeoutMs: 30000 })
+)
 
 interface ModelsResponse {
   data?: Array<{ id?: string }>
@@ -234,7 +248,7 @@ class AnthropicClient implements ProviderClient {
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, 'v1/messages')
     const settings = generation(options)
-    const response = await this.request(endpoint, {
+    const response = await requestWithProviderTransport(this.request, this.transport, endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
       signal: options.signal,
@@ -252,7 +266,7 @@ class AnthropicClient implements ProviderClient {
         max_tokens: settings.maxTokens,
         stream: true
       })
-    })
+    }, options.signal)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Anthropic returned an empty streaming response')
     yield* streamSseJson<AnthropicResponse>(response.body, payload => payload.content?.find(item => item.type === 'text')?.text)
@@ -311,7 +325,7 @@ class GeminiClient implements ProviderClient {
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, `v1beta/models/${encodeURIComponent(options.model)}:streamGenerateContent?alt=sse`)
-    const response = await this.request(endpoint, {
+    const response = await requestWithProviderTransport(this.request, this.transport, endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
       signal: options.signal,
@@ -330,7 +344,7 @@ class GeminiClient implements ProviderClient {
           ...(generation(options).seed === undefined ? {} : { seed: generation(options).seed })
         }
       })
-    })
+    }, options.signal)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Gemini returned an empty streaming response')
     yield* streamSseJson<GeminiResponse>(response.body, payload => payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join(''))
@@ -389,13 +403,13 @@ class CustomHttpClient implements ProviderClient {
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
     const endpoint = joinCustomEndpoint(this.baseUrl, this.chatPath, options.model)
-    const response = await this.request(endpoint, {
+    const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: this.responseFormat === 'openai-sse' ? 'text/event-stream' : 'application/json', 'content-type': 'application/json' },
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(renderCustomTemplate(this.requestTemplate, options))
-    })
+    }, options.signal)
     if (!response.ok) throw await httpError(response)
     if (this.responseFormat === 'json') {
       yield customResponseText(await response.json())
@@ -450,13 +464,13 @@ class AzureOpenAiClient implements ProviderClient {
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
     const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
-    const response = await this.request(endpoint, {
+    const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(buildOpenAiChatBody(options, options.messages, true))
-    })
+    }, options.signal)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
     yield* streamOpenAiTokens(response.body, 'chat-completions')
@@ -464,13 +478,13 @@ class AzureOpenAiClient implements ProviderClient {
 
   async *streamChatEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent> {
     const endpoint = joinEndpoint(this.baseUrl, `openai/deployments/${encodeURIComponent(options.model)}/chat/completions?api-version=${encodeURIComponent(this.apiVersion)}`)
-    const response = await this.request(endpoint, {
+    const response = await requestWithProviderTransport(this.request, openAiTransport(this.settings), endpoint, {
       method: 'POST',
       headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(buildOpenAiChatBody(options, options.messages, true))
-    })
+    }, options.signal)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
     yield* streamOpenAiEvents(response.body, 'chat-completions')

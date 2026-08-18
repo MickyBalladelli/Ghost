@@ -15,9 +15,10 @@ import {
   buildOpenAiResponsesBody
 } from './providerRequestBuilders'
 import { OpenAiStreamMode, streamOpenAiEvents } from './openAiStream'
-import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
+import { buildOpenAiAuthenticationHeaders, createKeepAliveAgent, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
-import { providerHttpError, requestWithRetry } from './providerRequest'
+import { providerHttpError } from './providerRequest'
+import { ProviderHttpTransport } from './providerTransport'
 import type { FimCompletionOptions } from './fim'
 
 export type { FimCompletionOptions } from './fim'
@@ -226,7 +227,7 @@ export function buildFimPrompt(prefix: string, suffix: string): string {
 
 export class OllamaClient {
   private readonly baseUrl: string
-  private readonly request: FetchLike
+  private readonly transport: ProviderHttpTransport
   private readonly mode: OllamaApiMode
   private readonly apiKeyProvider?: () => string | undefined
   private readonly openAiTransport?: OpenAiTransportSettings
@@ -240,9 +241,12 @@ export class OllamaClient {
   ) {
     this.baseUrl = normalizeBaseUrl(baseUrl)
     this.mode = mode
-    this.request = request
     this.apiKeyProvider = apiKeyProvider
     this.openAiTransport = openAiTransport
+    this.transport = new ProviderHttpTransport(
+      request,
+      endpoint => this.openAiTransport ? createOpenAiRequestAgent(endpoint, this.openAiTransport) : createKeepAliveAgent(endpoint)
+    )
   }
 
   private authorizationHeaders(apiKey = this.apiKeyProvider?.()): Record<string, string> {
@@ -271,14 +275,10 @@ export class OllamaClient {
 
     for (const endpoint of endpoints) {
       try {
-        const response = await requestWithRetry(
-          signal => this.request(endpoint, this.withTransport(endpoint, {
+        const response = await this.transport.requestWithDiagnostics(endpoint, this.withTransport(endpoint, {
             method: 'GET',
-            headers: this.authorizationHeaders(),
-            signal
-          })),
-          { timeoutMs }
-        )
+            headers: this.authorizationHeaders()
+          }), { timeoutMs })
 
         if (response.ok) {
           return true
@@ -296,8 +296,9 @@ export class OllamaClient {
 
     for (const endpoint of this.getModelEndpoints()) {
       try {
-        const response = await requestWithRetry(
-          requestSignal => this.request(endpoint, this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal: requestSignal })),
+        const response = await this.transport.requestWithDiagnostics(
+          endpoint,
+          this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders() }),
           { signal, timeoutMs: 30000 }
         )
 
@@ -341,9 +342,10 @@ export class OllamaClient {
     let lastError: Error | undefined
 
     for (const attempt of attempts) {
-      const response = await this.request(
+      const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
-        this.withTransport(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream), attempt.kind !== 'ollama')
+        this.withTransport(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream), attempt.kind !== 'ollama'),
+        { signal: options.signal, timeoutMs: 30000 }
       )
 
       if (!response.ok) {
@@ -395,9 +397,10 @@ export class OllamaClient {
     let lastError: Error | undefined
 
     for (const attempt of attempts) {
-      const response = await this.request(
+      const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
-        this.withTransport(attempt.endpoint, this.getCompletionRequest(attempt.kind, options, prompt), attempt.kind !== 'ollama')
+        this.withTransport(attempt.endpoint, this.getCompletionRequest(attempt.kind, options, prompt), attempt.kind !== 'ollama'),
+        { signal: options.signal, timeoutMs: 30000 }
       )
 
       if (!response.ok) {
