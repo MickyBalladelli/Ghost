@@ -11,6 +11,7 @@ All notable changes to this extension are documented here.
 - Add a final request summary card with changed files, commands, elapsed time, model, provider, tokens, and status.
 - Group repeated tool calls into compact expandable timelines.
 - Add visible recovery actions for active, stopped, and failed requests, including Open Diff.
+- Show the detailed stop message and recovery hint in stopped request cards.
 
 ## 1.1.16 - 2026-08-18
 

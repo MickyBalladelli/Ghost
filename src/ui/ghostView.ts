@@ -3263,6 +3263,16 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         font-size: 0.85em;
       }
 
+      .request-action-card-reason {
+        color: var(--vscode-foreground);
+        line-height: 1.35;
+      }
+
+      .request-action-card-heading small {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+      }
+
       .request-action-card-actions {
         display: flex;
         flex-wrap: wrap;

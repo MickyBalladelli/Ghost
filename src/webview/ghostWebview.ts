@@ -2140,6 +2140,41 @@ const stopReasonLabel = (reason: StopReason | undefined): string => (
   reason ? stopReasonLabels[reason] : 'Ghost request failed'
 )
 
+const stopReasonFallback = (reason: StopReason | undefined): string => {
+  if (reason === 'failed-tool') return 'A workspace tool failed.'
+  if (reason === 'invalid-model-response') return 'The model response could not be used.'
+  if (reason === 'cancelled') return 'The request was cancelled.'
+  if (reason === 'timeout') return 'The provider did not respond before the timeout.'
+  if (reason === 'approval-rejected') return 'A requested tool approval was denied.'
+  if (reason === 'context-limit') return 'The request reached the available context limit.'
+  if (reason === 'budget-limit') return 'The request reached its safety budget.'
+  if (reason === 'provider-failure') return 'The configured provider failed to complete the request.'
+  return 'Ghost stopped without additional details.'
+}
+
+const stopReasonDetail = (message: ChatMessage): string => {
+  const errorPart = [...message.parts].reverse().find((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
+  const detail = errorPart?.message?.trim()
+  if (!detail) {
+    return stopReasonFallback(message.stopReason)
+  }
+  const prefix = `${stopReasonLabel(message.stopReason)}:`
+  const withoutPrefix = detail.startsWith(prefix) ? detail.slice(prefix.length).trim() : detail
+  return withoutPrefix.slice(0, 800)
+}
+
+const stopReasonHint = (reason: StopReason | undefined): string => {
+  if (reason === 'failed-tool') return 'Review the tool result and arguments, then retry.'
+  if (reason === 'invalid-model-response') return 'Retry or regenerate to request a fresh model response.'
+  if (reason === 'cancelled') return 'Continue to resume from the saved request state.'
+  if (reason === 'timeout') return 'Retry with a smaller request or check the provider.'
+  if (reason === 'approval-rejected') return 'Continue after reviewing the denied tool request.'
+  if (reason === 'context-limit') return 'Retry with less context or a shorter request.'
+  if (reason === 'budget-limit') return 'Continue with a fresh budget window or retry a smaller request.'
+  if (reason === 'provider-failure') return 'Check the provider connection, then retry.'
+  return 'Retry the request or continue from the saved state.'
+}
+
 const requestIsActive = (message: ChatMessage): boolean => (
   message.status === 'streaming' || ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
 )
@@ -2164,13 +2199,12 @@ const renderRequestActionCard = (message: ChatMessage): string => {
   }
   const diffPath = messageDiffPath(message)
   const title = active ? 'Ghost is working' : `Ghost stopped: ${stopReasonLabel(message.stopReason)}`
-  const detail = active
-    ? 'Stop this request if it is taking too long.'
-    : 'Choose an action to recover or inspect the stopped request.'
+  const detail = active ? 'Stop this request if it is taking too long.' : stopReasonDetail(message)
+  const hint = active ? '' : stopReasonHint(message.stopReason)
   const actions = active
     ? `<button type="button" class="request-card-button secondary" data-action="cancel-request" data-message-id="${escapeAttribute(message.id)}">Cancel</button>`
     : `<button type="button" class="request-card-button" data-action="retry" data-message-id="${escapeAttribute(message.id)}">Retry</button><button type="button" class="request-card-button" data-action="continue" data-message-id="${escapeAttribute(message.id)}">Continue</button><button type="button" class="request-card-button secondary" data-action="regenerate" data-message-id="${escapeAttribute(message.id)}">Regenerate</button>${diffPath ? `<button type="button" class="request-card-button secondary" data-action="open-diff" data-message-id="${escapeAttribute(message.id)}">Open Diff</button>` : ''}`
-  return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><div class="request-action-card-actions">${actions}</div></section>`
+  return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</div><div class="request-action-card-actions">${actions}</div></section>`
 }
 
 const createMessageElement = (message: ChatMessage): HTMLElement => {
