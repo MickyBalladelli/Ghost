@@ -31,6 +31,8 @@
     "onCommand:ghost.reset",
     "onCommand:ghost.export",
     "onCommand:ghost.clear",
+    "onCommand:ghost.openLogs",
+    "onCommand:ghost.clearLogs",
     "onView:ghost.chat",
     "onChatParticipant:ghost.agent",
     "onLanguageModelTool:ghost_read_file",
@@ -91,6 +93,14 @@
       {
         "command": "ghost.clear",
         "title": "Ghost: Clear Interface"
+      },
+      {
+        "command": "ghost.openLogs",
+        "title": "Ghost: Open Logs"
+      },
+      {
+        "command": "ghost.clearLogs",
+        "title": "Ghost: Clear Logs"
       }
     ],
     "viewsContainers": {
@@ -534,7 +544,26 @@
         "ghost.enableDebugLogging": {
           "type": "boolean",
           "default": false,
-          "description": "Enable telemetry-free Ghost debug logging in the extension host."
+          "description": "Legacy setting. Use ghost.logLevel instead."
+        },
+        "ghost.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "enumDescriptions": [
+            "Do not write Ghost logs.",
+            "Write only failures.",
+            "Write failures and warnings.",
+            "Write normal lifecycle events too.",
+            "Write detailed local debugging events."
+          ],
+          "default": "off",
+          "description": "Local-only Ghost log level. Logs appear in the Ghost Logs output channel and never include detected secrets."
         },
         "ghost.toolAllowlist": {
           "type": "array",

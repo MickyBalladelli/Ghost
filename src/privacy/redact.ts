@@ -13,21 +13,38 @@ const SECRET_PATTERNS: RegExp[] = [
   /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/g
 ]
 
+const SECRET_KEY_PATTERN = /(?:api[-_]?key|access[-_]?token|client[-_]?secret|secret[-_]?key|session[-_]?token|refresh[-_]?token|id[-_]?token|password|passwd|credential|private[-_]?key|cookie)/i
+
 export function redactSensitiveText(value: string): string {
   return SECRET_PATTERNS.reduce((text, pattern) => text.replace(pattern, (_match, prefix?: string, suffix?: string) => `${prefix ?? ''}[REDACTED]${suffix ?? ''}`), value)
 }
 
-export function redactSensitiveValue<T>(value: T): T {
+function redactValue(value: unknown, seen: WeakSet<object>): unknown {
   if (typeof value === 'string') {
-    return redactSensitiveText(value) as T
+    return redactSensitiveText(value)
   }
   if (Array.isArray(value)) {
-    return value.map(item => redactSensitiveValue(item)) as T
+    if (seen.has(value)) {
+      return '[Circular]'
+    }
+    seen.add(value)
+    return value.map(item => redactValue(item, seen))
   }
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactSensitiveValue(item)])) as T
+    if (seen.has(value)) {
+      return '[Circular]'
+    }
+    seen.add(value)
+    return Object.fromEntries(Object.entries(value).map(([entryKey, item]) => [
+      entryKey,
+      SECRET_KEY_PATTERN.test(entryKey) ? '[REDACTED]' : redactValue(item, seen)
+    ]))
   }
   return value
+}
+
+export function redactSensitiveValue<T>(value: T): T {
+  return redactValue(value, new WeakSet<object>()) as T
 }
 
 export function isExternalEndpoint(endpoint: string): boolean {

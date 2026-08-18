@@ -1,5 +1,6 @@
 import type { GhostModelMetadata, GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
 import type { CustomResponseFormat, OpenAiProfileId } from '../services/providerProfiles'
+import type { GhostLogLevel } from '../config'
 import type { GhostModelAliases, GhostModelProfiles, GhostModelRole } from '../services/modelProfiles'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
@@ -119,6 +120,7 @@ export interface GhostSettingsUpdate {
   autoAcceptScope?: GhostAutoAcceptScope
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
+  logLevel?: GhostLogLevel
   ollamaUrl?: string
   mlxUrl?: string
   openaiUrl?: string
@@ -277,6 +279,7 @@ export type GhostExtensionMessage =
         terminalEnvironmentAllowlist: string[]
         terminalEnvironmentAsklist: string[]
         enableDebugLogging: boolean
+        logLevel: GhostLogLevel
         networkAccess: 'local' | 'external'
       }
       models: string[]
@@ -404,6 +407,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.autoAcceptScope === undefined || ['confirm', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.autoAcceptScope as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
+    (value.logLevel === undefined || ['off', 'error', 'warn', 'info', 'debug'].includes(value.logLevel as string)) &&
     (value.ollamaUrl === undefined || isBoundedString(value.ollamaUrl, 4096))
     && (value.mlxUrl === undefined || isBoundedString(value.mlxUrl, 4096))
     && (value.openaiUrl === undefined || isBoundedString(value.openaiUrl, 4096))

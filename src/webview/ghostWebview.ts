@@ -7,6 +7,7 @@ type CustomResponseFormat = 'openai-sse' | 'json'
 type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+type LogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'
 type ModelRole = 'chat' | 'agent' | 'vision' | 'autocomplete'
 interface ModelProfile {
   provider?: GhostProvider
@@ -91,6 +92,7 @@ interface ControlSettings {
   terminalEnvironmentAllowlist: string[]
   terminalEnvironmentAsklist: string[]
   enableDebugLogging: boolean
+  logLevel: LogLevel
   networkAccess: 'local' | 'external'
   chatModel: string
   autocompleteModel: string
@@ -735,6 +737,7 @@ let controls: ControlSettings = {
   toolDenylist: [],
   terminalEnvironmentAsklist: [],
   enableDebugLogging: false,
+  logLevel: 'off',
   networkAccess: 'local',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
@@ -1010,7 +1013,9 @@ app.innerHTML = `
           <label class="settings-checkbox" for="show-thinking"><input id="show-thinking" type="checkbox"> Show thinking details</label>
           <label class="settings-checkbox" for="show-tool-progress" title="When enabled, show tool arguments, results, timings, and detailed previews. When disabled, show only a short action such as ‘I'm reading file…’."><input id="show-tool-progress" type="checkbox"> Show verbose tool details</label>
           <label class="settings-checkbox" for="show-diagnostics"><input id="show-diagnostics" type="checkbox"> Show telemetry-free diagnostics</label>
-          <label class="settings-checkbox" for="debug-logging"><input id="debug-logging" type="checkbox"> Enable local debug logging</label>
+          <label for="log-level">Local log level</label>
+          <select id="log-level"><option value="off">Off</option><option value="error">Errors</option><option value="warn">Warnings</option><option value="info">Info</option><option value="debug">Debug</option></select>
+          <p class="settings-help">Logs stay local in the “Ghost Logs” output channel. Use “Ghost: Open Logs” or “Ghost: Clear Logs” from the Command Palette.</p>
           <label class="settings-checkbox" for="auto-context"><input id="auto-context" type="checkbox"> Collect context automatically</label>
           <label class="settings-checkbox" for="workspace-settings"><input id="workspace-settings" type="checkbox"> Use workspace-specific settings</label>
           <div class="settings-section-heading" data-settings-section-heading="advanced">Advanced</div>
@@ -1231,7 +1236,7 @@ const compactLayoutElement = document.getElementById('compact-layout') as HTMLIn
 const showThinkingElement = document.getElementById('show-thinking') as HTMLInputElement
 const showToolProgressElement = document.getElementById('show-tool-progress') as HTMLInputElement
 const showDiagnosticsElement = document.getElementById('show-diagnostics') as HTMLInputElement
-const debugLoggingElement = document.getElementById('debug-logging') as HTMLInputElement
+const logLevelElement = document.getElementById('log-level') as HTMLSelectElement
 const autoContextElement = document.getElementById('auto-context') as HTMLInputElement
 const workspaceSettingsElement = document.getElementById('workspace-settings') as HTMLInputElement
 const workspaceRootElement = document.getElementById('workspace-root') as HTMLSelectElement
@@ -1372,7 +1377,8 @@ const createPersistedState = () => compactPersistedState({
     workspaceRoot: uiPreferences.workspaceRoot,
     firstRunSetupComplete: uiPreferences.firstRunSetupComplete,
     workspaceOnly: uiPreferences.workspaceOnly,
-    enableDebugLogging: controls.enableDebugLogging
+    enableDebugLogging: controls.enableDebugLogging,
+    logLevel: controls.logLevel
   }
 })
 
@@ -1520,7 +1526,8 @@ const sendSettingsUpdate = () => {
         autoAcceptScope: controls.fileEditApproval,
         enableConversationPersistence: controls.enableConversationPersistence,
         workspaceOnly: uiPreferences.workspaceOnly,
-        enableDebugLogging: controls.enableDebugLogging
+        enableDebugLogging: controls.enableDebugLogging,
+        logLevel: controls.logLevel
       }
     })
   }, 200)
@@ -1924,7 +1931,7 @@ const renderControls = () => {
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
       : 'Ollama endpoint.'
   renderPermissionControls()
-  debugLoggingElement.checked = controls.enableDebugLogging
+  logLevelElement.value = controls.logLevel
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
   persistenceStatusElement.textContent = controls.enableConversationPersistence ? 'Autosave on · history saved' : 'Autosave off · memory only'
@@ -4156,6 +4163,11 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.enableDebugLogging === 'boolean') {
         controls.enableDebugLogging = preferences.enableDebugLogging
       }
+      if (preferences.logLevel === 'off' || preferences.logLevel === 'error' || preferences.logLevel === 'warn' || preferences.logLevel === 'info' || preferences.logLevel === 'debug') {
+        controls.logLevel = preferences.logLevel
+      } else if (controls.enableDebugLogging) {
+        controls.logLevel = 'debug'
+      }
       if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
         composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
       }
@@ -4969,8 +4981,9 @@ showDiagnosticsElement.addEventListener('change', () => {
   updateStatus()
   saveState()
 })
-debugLoggingElement.addEventListener('change', () => {
-  controls.enableDebugLogging = debugLoggingElement.checked
+logLevelElement.addEventListener('change', () => {
+  controls.logLevel = logLevelElement.value as LogLevel
+  controls.enableDebugLogging = controls.logLevel === 'debug'
   sendSettingsUpdate()
   saveState()
 })

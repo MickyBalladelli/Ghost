@@ -12,6 +12,7 @@ import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
 import { GhostStatusBar } from './ui/statusBar'
 import { registerLanguageModelTools } from './tools/registerTools'
+import { clearGhostLogs, disposeGhostLogs, showGhostLogs } from './logging/ghostLogger'
 
 export async function activate(context: vscode.ExtensionContext) {
   const providerSecrets = new ProviderSecrets(context.secrets)
@@ -133,6 +134,13 @@ export async function activate(context: vscode.ExtensionContext) {
     await openGhostView()
     ghostView.clear()
   })
+  const openLogsCommand = vscode.commands.registerCommand('ghost.openLogs', () => {
+    showGhostLogs()
+  })
+  const clearLogsCommand = vscode.commands.registerCommand('ghost.clearLogs', () => {
+    clearGhostLogs()
+    void vscode.window.showInformationMessage('Ghost logs cleared.')
+  })
   const chatParticipant = createChatParticipant({ statusBar, providerApiKey })
   registerLanguageModelTools(context)
 
@@ -153,6 +161,8 @@ export async function activate(context: vscode.ExtensionContext) {
     resetViewCommand,
     exportViewCommand,
     clearViewCommand,
+    openLogsCommand,
+    clearLogsCommand,
     configurationListener,
     statusBar,
     inlineStatusBar,
@@ -160,4 +170,6 @@ export async function activate(context: vscode.ExtensionContext) {
   )
 }
 
-export function deactivate() {}
+export function deactivate() {
+  disposeGhostLogs()
+}

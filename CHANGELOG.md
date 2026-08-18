@@ -25,6 +25,7 @@ All notable changes to this extension are documented here.
 - Dispose webview timers, animation frames, observers, queued stream work, and active requests during unload.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 - Record local request timing counters for context, provider wait, first token, tools, approvals, and verification when debug logging is enabled.
+- Add off-by-default local log levels, secret redaction before writing, and Command Palette actions to open or clear Ghost Logs.
 
 ## 1.1.17 - 2026-08-18
 

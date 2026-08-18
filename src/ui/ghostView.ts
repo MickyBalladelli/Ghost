@@ -5,7 +5,7 @@ import { createChatParticipantHandler, GhostRequestOptions, GhostToolApproval } 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
-import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider, GhostSettings } from '../config'
+import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostLogLevel, GhostProvider, GhostSettings } from '../config'
 import { MlxClient, MlxVisionImage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { createProviderAdapter, ModelCapabilityRecord } from '../services/providerAdapter'
@@ -42,6 +42,7 @@ import { parseTaskPlanMarker } from '../agent/taskPlan'
 import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
 import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
+import { effectiveGhostLogLevel, writeGhostLog } from '../logging/ghostLogger'
 
 interface GhostRequestState {
   cancellation: vscode.CancellationTokenSource
@@ -276,11 +277,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
+  private log(level: GhostLogLevel, message: string, details?: unknown): void {
+    const settings = getGhostSettings()
+    writeGhostLog(level, effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging), message, details)
+  }
+
   private debugLog(message: string, details?: unknown): void {
-    if (!getGhostSettings().enableDebugLogging) {
-      return
-    }
-    console.debug(JSON.stringify({ scope: 'Ghost', message, details: details === undefined ? undefined : redactSensitiveText(JSON.stringify(details)) }))
+    this.log('debug', message, details)
   }
 
   constructor(
@@ -678,7 +681,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         request.stopMessage = message
       }
       if (!cancellation.token.isCancellationRequested || !request.timedOut) {
-        this.debugLog('request failed', message)
+        this.log('error', 'request failed', message)
         this.postStreamEvent(requestId, request, { type: 'error', phase: 'error', message, stopReason: request.stopReason })
       }
       this.postStreamEvent(requestId, request, {
@@ -1999,7 +2002,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       try {
         models = await client.listModels()
       } catch (error) {
-        this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
+        this.log('warn', 'provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
       }
     }
     const normalizedModels = [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
@@ -2022,7 +2025,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const promise: Promise<ProviderStatus> = this.readProviderStatus(settings).catch(error => {
-      this.debugLog('provider health check failed', error instanceof Error ? error.message : String(error))
+      this.log('warn', 'provider health check failed', error instanceof Error ? error.message : String(error))
       return { connection: 'offline' as const, models: [], modelMetadata: [] }
     })
     this.providerStatusRequest = { key, promise }
@@ -2137,6 +2140,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         terminalEnvironmentAllowlist: settings.terminalEnvironmentAllowlist,
         terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
+        logLevel: effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging),
         networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
@@ -2324,6 +2328,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (typeof update.enableDebugLogging === 'boolean') {
       await ghostConfig.update('enableDebugLogging', update.enableDebugLogging, target)
     }
+    if (update.logLevel) {
+      await ghostConfig.update('logLevel', update.logLevel, target)
+      await ghostConfig.update('enableDebugLogging', update.logLevel === 'debug', target)
+    }
     await this.sendControlsState()
   }
 
@@ -2424,7 +2432,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           await this.persistState(message.state)
         } catch (error) {
           const detail = error instanceof Error ? error.message : 'Unknown storage error'
-          this.debugLog('conversation persistence failed', detail)
+          this.log('error', 'conversation persistence failed', detail)
           await vscode.window.showWarningMessage(`Ghost could not save conversation history: ${detail}`)
         }
         return

@@ -9,6 +9,7 @@ export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostFileEditApproval = 'confirm' | 'auto'
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
+export type GhostLogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'
 
 export const GHOST_TOOL_NAMES = [
   'ghost_read_file',
@@ -91,6 +92,7 @@ export interface GhostSettings {
   autoAcceptScope: GhostAutoAcceptScope
   enableConversationPersistence: boolean
   enableDebugLogging: boolean
+  logLevel: GhostLogLevel
   toolAllowlist?: string[]
   toolAsklist?: string[]
   toolDenylist?: string[]
@@ -149,6 +151,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   autoAcceptScope: 'confirm',
   enableConversationPersistence: false,
   enableDebugLogging: false,
+  logLevel: 'off',
   toolAllowlist: [...GHOST_TOOL_NAMES],
   toolAsklist: [],
   toolDenylist: [],
@@ -222,6 +225,7 @@ export class GhostConfig {
       autoAcceptScope,
       enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOST_SETTINGS.enableConversationPersistence),
       enableDebugLogging: configuration.get('enableDebugLogging', DEFAULT_GHOST_SETTINGS.enableDebugLogging),
+      logLevel: configuration.get('logLevel', DEFAULT_GHOST_SETTINGS.logLevel),
       toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOST_SETTINGS.toolAllowlist),
       toolAsklist: configuration.get('toolAsklist', DEFAULT_GHOST_SETTINGS.toolAsklist),
       toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOST_SETTINGS.toolDenylist),
