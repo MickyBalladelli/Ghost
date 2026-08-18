@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -281,21 +281,64 @@
             "properties": {
               "provider": {
                 "type": "string",
-                "enum": ["ollama", "mlx-vlm", "openai-compatible"]
+                "enum": [
+                  "ollama",
+                  "mlx-vlm",
+                  "openai-compatible"
+                ]
               },
-              "model": { "type": "string" },
-              "chatModel": { "type": "string" },
-              "agentModel": { "type": "string" },
-              "visionModel": { "type": "string" },
-              "autocompleteModel": { "type": "string" },
-              "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
-              "topP": { "type": "number", "minimum": 0, "maximum": 1 },
-              "topK": { "type": "number", "minimum": 0 },
-              "minP": { "type": "number", "minimum": 0, "maximum": 1 },
-              "presencePenalty": { "type": "number", "minimum": -2, "maximum": 2 },
-              "repeatPenalty": { "type": "number", "minimum": 0, "maximum": 3 },
-              "maxContextTokens": { "type": "integer", "minimum": 1 },
-              "maxTokens": { "type": "integer", "minimum": 1 }
+              "model": {
+                "type": "string"
+              },
+              "chatModel": {
+                "type": "string"
+              },
+              "agentModel": {
+                "type": "string"
+              },
+              "visionModel": {
+                "type": "string"
+              },
+              "autocompleteModel": {
+                "type": "string"
+              },
+              "temperature": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "topP": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "topK": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minP": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "presencePenalty": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 2
+              },
+              "repeatPenalty": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "maxContextTokens": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxTokens": {
+                "type": "integer",
+                "minimum": 1
+              }
             }
           },
           "description": "Named model profiles. Each profile can select different chat, agent, vision, and autocomplete models plus generation settings."
