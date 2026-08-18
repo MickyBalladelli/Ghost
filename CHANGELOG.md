@@ -9,6 +9,7 @@ All notable changes to this extension are documented here.
 - Treats tools missing from an older allowlist as Ask instead of Deny.
 - Added shared endpoint normalization for trailing slashes, `/v1` paths, native Ollama routes, IPv6 hosts, and reverse-proxy prefixes.
 - Added shared provider request timeouts, bounded retries, Retry-After parsing, rate-limit metadata, and normalized HTTP errors.
+- Read progress now shows requested or actual file line and byte ranges instead of hiding chunk details behind the filename.
 
 ## 1.0.98 - 2026-08-18
 

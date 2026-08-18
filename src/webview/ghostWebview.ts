@@ -2029,6 +2029,39 @@ const renderRequestEventLog = (message: ChatMessage): string => {
   return `<details class="progress-details"><summary>Request log (${events.length})</summary>${rows}</details>`
 }
 
+const readScopeText = (args: Record<string, unknown>, result?: string): string => {
+  const resultLines = result?.match(/Read mode:\s*[^,\n]+,\s*lines\s+(\d+)-(\d+)\s+of\s+(\d+)/i)
+  if (resultLines) {
+    return `lines ${resultLines[1]}-${resultLines[2]} of ${resultLines[3]}`
+  }
+  const resultBytes = result?.match(/Read mode:\s*bytes\s+(\d+)-(\d+)\s+of\s+(\d+)/i)
+  if (resultBytes) {
+    return `bytes ${resultBytes[1]}-${resultBytes[2]} of ${resultBytes[3]}`
+  }
+
+  const mode = typeof args.mode === 'string' ? args.mode : ''
+  if (mode === 'bytes' || typeof args.startByte === 'number' || typeof args.endByte === 'number') {
+    const start = typeof args.startByte === 'number' ? args.startByte : 0
+    const end = typeof args.endByte === 'number' ? args.endByte : undefined
+    return end === undefined ? `bytes from ${start}` : `bytes ${start}-${end}`
+  }
+  if (mode === 'tail') {
+    return `last ${typeof args.lineCount === 'number' ? args.lineCount : 400} lines`
+  }
+  if (mode === 'symbol' && typeof args.symbol === 'string' && args.symbol.trim()) {
+    return `symbol ${args.symbol.trim()}`
+  }
+  if (mode === 'matches' && typeof args.match === 'string' && args.match.trim()) {
+    return `matching lines for ${args.match.trim()}`
+  }
+  if (mode === 'lines' || typeof args.startLine === 'number' || typeof args.endLine === 'number') {
+    const start = typeof args.startLine === 'number' ? args.startLine : 1
+    const end = typeof args.endLine === 'number' ? args.endLine : undefined
+    return end === undefined ? `lines from ${start}` : `lines ${start}-${end}`
+  }
+  return ''
+}
+
 const toolActionText = (toolCall: ToolCall): string => {
   let args: Record<string, unknown> = {}
   if (toolCall.arguments) {
@@ -2046,8 +2079,10 @@ const toolActionText = (toolCall: ToolCall): string => {
   const command = typeof args.command === 'string' ? args.command.trim() : ''
   const target = path || command
   const displayedTarget = target.length > 180 ? `${target.slice(0, 177)}…` : target
+  const readScope = toolCall.name === 'ghost_read_file' ? readScopeText(args, toolCall.result) : ''
+  const readScopeSuffix = readScope ? ` · ${readScope}` : ''
   const base = toolCall.name === 'ghost_read_file'
-    ? `I'm reading file${displayedTarget ? ` ${displayedTarget}` : ''}`
+    ? `I'm reading file${displayedTarget ? ` ${displayedTarget}` : ''}${readScopeSuffix}`
     : toolCall.name === 'ghost_write_file'
       ? `I'm writing file${displayedTarget ? ` ${displayedTarget}` : ''}`
       : toolCall.name === 'ghost_apply_edit'
