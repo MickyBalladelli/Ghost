@@ -9,6 +9,7 @@ export interface FimCompletionOptions {
   suffix: string
   generation?: GenerationSettings
   signal?: AbortSignal
+  timeoutMs?: number
   mode?: FimProviderMode
   apiKey?: string
   openAiTransport?: OpenAiTransportSettings

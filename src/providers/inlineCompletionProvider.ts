@@ -13,6 +13,10 @@ export type FimCompletionFetcher = (
 ) => Promise<string>
 
 const DEFAULT_DEBOUNCE_MS = 300
+const MIN_PREFIX_LENGTH = 3
+const MAX_SUFFIX_CHARACTERS = 4000
+const MIN_ADAPTIVE_DEBOUNCE_MS = 100
+const MAX_ADAPTIVE_DEBOUNCE_MS = 900
 const INLINE_CACHE_TTL_MS = 30_000
 const INLINE_CACHE_MAX_ENTRIES = 64
 
@@ -79,8 +83,12 @@ function getDocumentPrefixAndSuffix(document: vscode.TextDocument, position: vsc
 
   return {
     prefix: document.getText(new vscode.Range(start, position)),
-    suffix: document.getText(new vscode.Range(position, end))
+    suffix: document.getText(new vscode.Range(position, end)).slice(0, MAX_SUFFIX_CHARACTERS)
   }
+}
+
+function getLinePrefix(document: vscode.TextDocument, position: vscode.Position): string {
+  return document.lineAt(position.line).text.slice(0, position.character)
 }
 
 function getInlineCompletionCacheKey(
@@ -104,6 +112,7 @@ function getInlineCompletionCacheKey(
     prefix,
     suffix,
     endpoint,
+    timeoutMs: settings.inlineCompletionTimeoutMs,
     provider: modelSettings.provider,
     model: modelSettings.model,
     profile: modelSettings.profileName,
@@ -147,6 +156,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
   private readonly completionCache = new Map<string, InlineCompletionCacheEntry>()
   private readonly configurationListener: vscode.Disposable
   private requestSequence = 0
+  private latencyEstimateMs?: number
   private activeCancellation?: { requestId: number; cancellation: ReturnType<typeof createCancellationSignal> }
 
   constructor(
@@ -185,8 +195,9 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     const requestId = ++this.requestSequence
     this.activeCancellation?.cancellation.cancel()
     const { prefix, suffix } = getDocumentPrefixAndSuffix(document, position)
+    const linePrefix = getLinePrefix(document, position)
 
-    if (!prefix && !suffix) {
+    if (linePrefix.trim().length < MIN_PREFIX_LENGTH && !suffix.trim()) {
       return []
     }
 
@@ -202,7 +213,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       return [new vscode.InlineCompletionItem(cached, new vscode.Range(position, position))]
     }
 
-    const debounceCompleted = await waitForDebounce(this.debounceMs, token)
+    const debounceCompleted = await waitForDebounce(this.getAdaptiveDebounceMs(linePrefix, suffix), token)
 
     if (!debounceCompleted || requestId !== this.requestSequence || token.isCancellationRequested) {
       cancellation.dispose()
@@ -212,8 +223,12 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       return []
     }
 
+    const startedAt = Date.now()
     try {
       const useOpenAiCompatible = modelSettings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
+      const inlineTimeoutMs = Number.isFinite(settings.inlineCompletionTimeoutMs)
+        ? Math.max(1000, Math.min(120000, Math.floor(settings.inlineCompletionTimeoutMs)))
+        : 30000
       const completion = await this.fetchCompletion(
         useOpenAiCompatible ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl,
         {
@@ -234,6 +249,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
             maxTokens: modelSettings.maxTokens
           },
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
+          timeoutMs: inlineTimeoutMs,
           ...(useOpenAiCompatible && this.apiKeyProvider?.() ? { apiKey: this.apiKeyProvider() } : {}),
           ...(useOpenAiCompatible ? { openAiTransport: createOpenAiTransportSettings(settings) } : {}),
           signal: cancellation.signal
@@ -249,11 +265,24 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     } catch {
       return []
     } finally {
+      this.latencyEstimateMs = this.latencyEstimateMs === undefined
+        ? Date.now() - startedAt
+        : Math.round(this.latencyEstimateMs * 0.7 + (Date.now() - startedAt) * 0.3)
       cancellation.dispose()
       if (this.activeCancellation?.requestId === requestId) {
         this.activeCancellation = undefined
       }
     }
+  }
+
+  private getAdaptiveDebounceMs(linePrefix: string, suffix: string): number {
+    const shortLineAdjustment = linePrefix.trim().length < 12 ? 80 : 0
+    const contextAdjustment = Math.min(160, Math.floor(suffix.length / 500) * 20)
+    const latencyAdjustment = Math.min(360, Math.floor((this.latencyEstimateMs ?? 0) / 1000) * 40)
+    return Math.max(
+      MIN_ADAPTIVE_DEBOUNCE_MS,
+      Math.min(MAX_ADAPTIVE_DEBOUNCE_MS, this.debounceMs + shortLineAdjustment + contextAdjustment + latencyAdjustment)
+    )
   }
 
   private getCachedCompletion(key: string): string | undefined {

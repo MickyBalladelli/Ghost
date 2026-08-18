@@ -400,7 +400,7 @@ export class OllamaClient {
       const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
         this.withTransport(attempt.endpoint, this.getCompletionRequest(attempt.kind, options, prompt), attempt.kind !== 'ollama'),
-        { signal: options.signal, timeoutMs: 30000 }
+        { signal: options.signal, timeoutMs: options.timeoutMs ?? 30000 }
       )
 
       if (!response.ok) {

@@ -252,6 +252,13 @@
           "default": "qwen2.5-coder:1.5b",
           "description": "Model used for inline code completions."
         },
+        "ghost.inlineCompletionTimeoutMs": {
+          "type": "integer",
+          "default": 30000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "description": "Maximum milliseconds to wait for one inline completion."
+        },
         "ghost.requestTimeLimitMinutes": {
           "type": "integer",
           "default": 120,

@@ -17,6 +17,7 @@ All notable changes to this extension are documented here.
 - Use tokenizer-aware context packing and report the approximate number of omitted tokens when context is compacted.
 - Cache inline completions with document, cursor, prompt, model, provider, and generation settings in a bounded LRU cache.
 - Abort obsolete inline provider calls and same-conversation agent requests when newer prompts or settings replace them.
+- Tune inline completions with adaptive debounce, minimum prefix checks, bounded suffix context, and a separate timeout setting.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18
