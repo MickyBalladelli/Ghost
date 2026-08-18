@@ -8,6 +8,7 @@ export function run(): Promise<void> {
 
   mocha.addFile(path.resolve(testsRoot, 'ollamaClient.test.js'))
   mocha.addFile(path.resolve(testsRoot, 'providerResilience.test.js'))
+  mocha.addFile(path.resolve(testsRoot, 'providerAdapterContract.test.js'))
   mocha.addFile(path.resolve(testsRoot, 'inlineCompletionProvider.test.js'))
   mocha.addFile(path.resolve(testsRoot, 'context.test.js'))
   mocha.addFile(path.resolve(testsRoot, 'protocol.test.js'))
