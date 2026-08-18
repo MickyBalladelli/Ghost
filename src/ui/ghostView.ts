@@ -2918,7 +2918,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .settings-grid textarea,
       .preset-section input,
       .preset-section textarea,
-      #history-search {
+      #history-search,
+      #prompt-history-search {
         padding: 5px 7px;
         width: 100%;
       }
@@ -3131,6 +3132,30 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .history-message-result:hover {
         background: var(--vscode-list-hoverBackground);
         color: var(--vscode-foreground);
+      }
+
+      .prompt-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-top: 12px;
+        max-height: 300px;
+        overflow: auto;
+      }
+
+      .prompt-history-entry {
+        background: transparent;
+        border: 0;
+        color: var(--vscode-foreground);
+        overflow: hidden;
+        padding: 7px 8px;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .prompt-history-entry:hover {
+        background: var(--vscode-list-hoverBackground);
       }
 
       .search-hit {

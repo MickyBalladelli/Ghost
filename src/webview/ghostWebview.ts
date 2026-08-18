@@ -106,6 +106,7 @@ interface UiPreferences {
   customSystemInstructions: string
   composerHeight: number
   promptRows: number
+  promptHistoryLimit: number
   workspaceOnly: boolean
 }
 
@@ -407,6 +408,8 @@ if (!app) {
 
 const createId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 const persistenceSchemaVersion = 2
+const defaultPromptHistoryLimit = 100
+const maxPromptHistoryLimit = 500
 
 const redactSensitiveText = (value: string): string => value
   .replace(/(authorization\s*[:=]\s*(?:bearer|basic)\s+)[^\s,;]+/gi, '$1[REDACTED]')
@@ -448,18 +451,18 @@ const createConversation = (): Conversation => {
   }
 }
 
-const normalizePromptHistory = (value: unknown): string[] => (
+const normalizePromptHistory = (value: unknown, limit = defaultPromptHistoryLimit): string[] => (
   Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 100)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, Math.min(maxPromptHistoryLimit, Math.max(1, Math.floor(limit))))
     : []
 )
 
-const addPromptToHistory = (history: readonly string[], prompt: string): string[] => {
+const addPromptToHistory = (history: readonly string[], prompt: string, limit = defaultPromptHistoryLimit): string[] => {
   const normalized = prompt.trim()
   if (!normalized) {
-    return normalizePromptHistory(history)
+    return normalizePromptHistory(history, limit)
   }
-  return [normalized, ...history.filter(item => item !== normalized)].slice(0, 100)
+  return [normalized, ...history.filter(item => item !== normalized)].slice(0, Math.min(maxPromptHistoryLimit, Math.max(1, Math.floor(limit))))
 }
 
 const textPart = (text: string): MessagePart => ({ kind: 'text', text })
@@ -710,6 +713,7 @@ let uiPreferences: UiPreferences = {
   customSystemInstructions: '',
   composerHeight,
   promptRows,
+  promptHistoryLimit: defaultPromptHistoryLimit,
   workspaceOnly: false
 }
 let persistenceReady = false
@@ -797,9 +801,9 @@ app.innerHTML = `
             <div class="mention-menu" id="mention-menu" role="listbox" hidden></div>
           </div>
           <div class="composer-footer">
-            <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line</span>
+            <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line · ↑/↓ prompt history</span>
             <span class="composer-count" id="composer-count">0 chars · ~0 tokens</span>
-            <span class="prompt-history-actions" aria-label="Prompt history"><button type="button" class="secondary prompt-history-button" id="previous-prompt" aria-label="Previous prompt" title="Previous prompt">↑</button><button type="button" class="secondary prompt-history-button" id="next-prompt" aria-label="Next prompt" title="Next prompt">↓</button></span>
+            <span class="prompt-history-actions" aria-label="Prompt history"><button type="button" class="secondary prompt-history-button" id="search-prompt-history" aria-label="Search prompt history" title="Search prompt history">⌕</button><button type="button" class="secondary prompt-history-button" id="previous-prompt" aria-label="Previous prompt" title="Previous prompt (Arrow Up when composer is empty)">↑</button><button type="button" class="secondary prompt-history-button" id="next-prompt" aria-label="Next prompt" title="Next prompt (Arrow Down after browsing history)">↓</button></span>
             <button type="button" class="stop-button" id="stop" hidden>Stop</button>
             <button type="submit" id="send">Send</button>
           </div>
@@ -841,6 +845,8 @@ app.innerHTML = `
           <input id="composer-height" type="range" min="80" max="320" step="10" value="180">
           <label for="prompt-rows">Prompt rows</label>
           <input id="prompt-rows" type="number" min="1" max="12" step="1" value="3">
+          <label for="prompt-history-limit">Prompt history entries</label>
+          <input id="prompt-history-limit" type="number" min="10" max="500" step="10" value="100">
           <label for="provider-endpoint">Provider endpoint</label>
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
@@ -979,6 +985,17 @@ app.innerHTML = `
         <div class="modal-footer"><button type="button" class="secondary" id="new-history-chat">New conversation</button><button type="button" class="secondary" data-close-modal="history-modal">Close</button></div>
       </section>
     </div>
+    <div class="modal-backdrop" id="prompt-history-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="prompt-history-title">
+        <div class="modal-header"><h2 id="prompt-history-title">Prompt history</h2><button type="button" class="icon-button" data-close-modal="prompt-history-modal" aria-label="Close prompt history">×</button></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Search prompts from this conversation. Choose one to put it back in the composer.</p>
+          <input id="prompt-history-search" type="search" placeholder="Search prompts" aria-label="Search prompts">
+          <div class="prompt-history-list" id="prompt-history-list"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="prompt-history-modal">Close</button></div>
+      </section>
+    </div>
     <div class="modal-backdrop" id="edit-tool-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-tool-title">
         <div class="modal-header"><h2 id="edit-tool-title">Edit tool arguments</h2><button type="button" class="icon-button" data-close-modal="edit-tool-modal" aria-label="Close edit tool arguments">×</button></div>
@@ -1001,6 +1018,7 @@ const promptElement = document.getElementById('prompt') as HTMLTextAreaElement
 const composerElement = document.getElementById('composer') as HTMLFormElement
 const sendElement = document.getElementById('send') as HTMLButtonElement
 const stopElement = document.getElementById('stop') as HTMLButtonElement
+const searchPromptHistoryElement = document.getElementById('search-prompt-history') as HTMLButtonElement
 const previousPromptElement = document.getElementById('previous-prompt') as HTMLButtonElement
 const nextPromptElement = document.getElementById('next-prompt') as HTMLButtonElement
 const statusTextElement = document.getElementById('status-text') as HTMLElement
@@ -1029,6 +1047,7 @@ const responseLengthElement = document.getElementById('response-length') as HTML
 const modeElement = document.getElementById('mode') as HTMLSelectElement
 const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
 const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
+const promptHistoryLimitElement = document.getElementById('prompt-history-limit') as HTMLInputElement
 const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
 const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
@@ -1080,6 +1099,7 @@ const settingsModalElement = document.getElementById('settings-modal') as HTMLEl
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
+const promptHistoryModalElement = document.getElementById('prompt-history-modal') as HTMLElement
 const editToolModalElement = document.getElementById('edit-tool-modal') as HTMLElement
 const editToolFormElement = document.getElementById('edit-tool-form') as HTMLFormElement
 const editToolArgumentsElement = document.getElementById('edit-tool-arguments') as HTMLTextAreaElement
@@ -1089,6 +1109,8 @@ const historySearchElement = document.getElementById('history-search') as HTMLIn
 const historyBookmarksOnlyElement = document.getElementById('history-bookmarks-only') as HTMLInputElement
 const historySearchSummaryElement = document.getElementById('history-search-summary') as HTMLElement
 const historyListElement = document.getElementById('history-list') as HTMLElement
+const promptHistorySearchElement = document.getElementById('prompt-history-search') as HTMLInputElement
+const promptHistoryListElement = document.getElementById('prompt-history-list') as HTMLElement
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
 const presetNameElement = document.getElementById('preset-name') as HTMLInputElement
 const presetPromptElement = document.getElementById('preset-prompt') as HTMLTextAreaElement
@@ -1176,6 +1198,7 @@ const createPersistedState = () => ({
     enableConversationPersistence: controls.enableConversationPersistence,
     composerHeight,
     promptRows,
+    promptHistoryLimit: uiPreferences.promptHistoryLimit,
     assistantName: uiPreferences.assistantName,
     assistantAvatar: uiPreferences.assistantAvatar,
     accentColor: uiPreferences.accentColor,
@@ -1228,6 +1251,32 @@ const maxTokensForLength = (length: ResponseLength): number | undefined => {
 }
 
 const promptHistory = (): string[] => getActiveConversation().promptHistory
+
+const trimPromptHistories = (): void => {
+  for (const conversation of state.conversations) {
+    conversation.promptHistory = normalizePromptHistory(conversation.promptHistory, uiPreferences.promptHistoryLimit)
+  }
+  state.promptHistory = promptHistory()
+}
+
+const renderPromptHistorySearch = (): void => {
+  const query = promptHistorySearchElement.value.trim().toLowerCase()
+  promptHistoryListElement.textContent = ''
+  const entries = promptHistory().filter(prompt => !query || prompt.toLowerCase().includes(query))
+  if (entries.length === 0) {
+    promptHistoryListElement.textContent = query ? 'No matching prompts.' : 'No prompts saved yet.'
+    return
+  }
+  entries.forEach(prompt => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'prompt-history-entry'
+    button.dataset.promptHistoryIndex = String(promptHistory().indexOf(prompt))
+    button.textContent = prompt.replace(/\s+/g, ' ').trim()
+    button.title = 'Use this prompt'
+    promptHistoryListElement.append(button)
+  })
+}
 
 const restorePromptHistoryEntry = (index: number): void => {
   const entries = promptHistory()
@@ -1567,6 +1616,7 @@ const renderControls = () => {
   autoAcceptIndicatorElement.title = autoAcceptPaused ? 'Future file edits will ask for approval in this request.' : 'File edit approval scope'
   composerHeightElement.value = String(composerHeight)
   promptRowsElement.value = String(promptRows)
+  promptHistoryLimitElement.value = String(uiPreferences.promptHistoryLimit)
   promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
   openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
@@ -2786,6 +2836,7 @@ const updateComposer = () => {
   const busy = Boolean(activeRequest && !['completed', 'cancelled', 'failed'].includes(activeRequest.status))
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   const entries = promptHistory()
+  searchPromptHistoryElement.disabled = busy || entries.length === 0
   previousPromptElement.disabled = busy || entries.length === 0 || historyIndex >= entries.length - 1
   nextPromptElement.disabled = busy || historyIndex < 0
   stopElement.hidden = !busy
@@ -3005,7 +3056,7 @@ const submitPrompt = (rawPrompt: string) => {
   requests.set(requestId, activeRequest)
   startProgressTimer()
   notice = undefined
-  conversation.promptHistory = addPromptToHistory(conversation.promptHistory, prompt)
+  conversation.promptHistory = addPromptToHistory(conversation.promptHistory, prompt, uiPreferences.promptHistoryLimit)
   state.promptHistory = conversation.promptHistory
   promptElement.value = ''
   const submittedAttachments = attachments
@@ -3631,6 +3682,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.promptRows === 'number' && Number.isFinite(preferences.promptRows)) {
         promptRows = Math.min(12, Math.max(1, Math.floor(preferences.promptRows)))
       }
+      if (typeof preferences.promptHistoryLimit === 'number' && Number.isFinite(preferences.promptHistoryLimit)) {
+        uiPreferences.promptHistoryLimit = Math.min(maxPromptHistoryLimit, Math.max(10, Math.floor(preferences.promptHistoryLimit)))
+      }
       if (typeof preferences.assistantName === 'string') {
         uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
       }
@@ -3663,6 +3717,7 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       }
       uiPreferences.composerHeight = composerHeight
       uiPreferences.promptRows = promptRows
+      trimPromptHistories()
     } else if (!controls.enableConversationPersistence) {
       state = {
         schemaVersion: persistenceSchemaVersion,
@@ -4304,6 +4359,13 @@ promptRowsElement.addEventListener('input', () => {
   updateComposer()
   saveState()
 })
+promptHistoryLimitElement.addEventListener('change', () => {
+  uiPreferences.promptHistoryLimit = Math.min(maxPromptHistoryLimit, Math.max(10, Math.floor(Number(promptHistoryLimitElement.value) || defaultPromptHistoryLimit)))
+  promptHistoryLimitElement.value = String(uiPreferences.promptHistoryLimit)
+  historyIndex = -1
+  trimPromptHistories()
+  saveState()
+})
 showReasoningElement.addEventListener('change', () => {
   showReasoning = showReasoningElement.checked
   state.showReasoning = showReasoning
@@ -4568,6 +4630,21 @@ promptElement.addEventListener('keydown', event => {
 
 previousPromptElement.addEventListener('click', () => browsePromptHistory('previous'))
 nextPromptElement.addEventListener('click', () => browsePromptHistory('next'))
+searchPromptHistoryElement.addEventListener('click', () => {
+  promptHistorySearchElement.value = ''
+  renderPromptHistorySearch()
+  setModalVisibility(promptHistoryModalElement, true)
+})
+promptHistorySearchElement.addEventListener('input', renderPromptHistorySearch)
+promptHistoryListElement.addEventListener('click', event => {
+  const entry = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-prompt-history-index]')
+  const index = entry?.dataset.promptHistoryIndex
+  if (index === undefined) {
+    return
+  }
+  restorePromptHistoryEntry(Number(index))
+  setModalVisibility(promptHistoryModalElement, false)
+})
 
 document.getElementById('new-chat')?.addEventListener('click', startNewConversation)
 document.getElementById('import')?.addEventListener('click', () => post('import'))
