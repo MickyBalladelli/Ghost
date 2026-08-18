@@ -3250,12 +3250,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         grid-column: 1 / -1;
       }
 
-      .setup-model-chip {
-        background: var(--vscode-badge-background);
-        border-radius: 3px;
-        color: var(--vscode-badge-foreground);
-        font-size: 0.75em;
-        padding: 3px 6px;
+      .setup-model-name {
+        color: var(--vscode-foreground);
+        font-size: 0.85em;
+        overflow-wrap: anywhere;
+        padding: 2px 0;
       }
 
       .setup-capabilities {
@@ -4030,19 +4029,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-descriptionForeground);
         gap: 8px;
         font-size: 0.78em;
+        flex-wrap: wrap;
         margin-top: 6px;
+        min-width: 0;
       }
 
       .composer-hint {
-        flex: 1;
+        flex: 1 1 180px;
+        min-width: 0;
       }
 
       .composer-count {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
       }
 
       .persistence-status {
         color: var(--vscode-descriptionForeground);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
       }
 
@@ -4052,6 +4060,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .prompt-history-actions {
         display: flex;
+        flex: 0 0 auto;
         gap: 2px;
       }
 
@@ -4066,6 +4075,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         background: transparent;
         border-color: var(--vscode-errorForeground);
         color: var(--vscode-errorForeground);
+        flex: 0 0 auto;
+      }
+
+      #send {
+        flex: 0 0 auto;
       }
 
       .status-footer {

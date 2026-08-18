@@ -187,6 +187,10 @@ export class GhostConfig {
     return vscode.ConfigurationTarget.Global
   }
 
+  private isRegistered(configuration: vscode.WorkspaceConfiguration, setting: string): boolean {
+    return configuration.inspect(setting) !== undefined
+  }
+
   async migrateSettings(): Promise<void> {
     const configuration = vscode.workspace.getConfiguration(GHOST_CONFIGURATION_SECTION)
     const version = this.configuredSchemaVersion(configuration)
@@ -204,11 +208,16 @@ export class GhostConfig {
     }
 
     for (const [setting, value] of Object.entries(migration.values)) {
+      if (!this.isRegistered(configuration, setting)) {
+        continue
+      }
       if (!sameSettingValue(setting, value, configuration)) {
         await configuration.update(setting, value, this.configurationTarget(configuration, setting))
       }
     }
-    await configuration.update('settingsSchemaVersion', migration.version, this.configurationTarget(configuration, 'settingsSchemaVersion'))
+    if (this.isRegistered(configuration, 'settingsSchemaVersion')) {
+      await configuration.update('settingsSchemaVersion', migration.version, this.configurationTarget(configuration, 'settingsSchemaVersion'))
+    }
   }
 
   getSettings(): GhostSettings {

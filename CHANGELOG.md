@@ -2,6 +2,26 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.27 - 2026-08-18
+
+- Keep Stop and Send inside the prompt composer on narrow panels.
+
+## 1.1.26 - 2026-08-18
+
+- Show discovered model names as readable, non-interactive text in first-run setup.
+
+## 1.1.25 - 2026-08-18
+
+- Keep extension-host output CommonJS while compiling webview files as browser JavaScript.
+
+## 1.1.23 - 2026-08-18
+
+- Compile webview scripts as browser JavaScript instead of CommonJS so the Ghost panel can start after VSIX installation.
+
+## 1.1.21 - 2026-08-18
+
+- Keep activation working when VS Code has not refreshed newly registered settings during a VSIX update.
+
 ## 1.1.19 - 2026-08-18
 
 - Add a provider/model quick switcher with connection diagnostics, refresh, and copy controls.

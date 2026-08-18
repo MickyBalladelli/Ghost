@@ -21,6 +21,8 @@ Trash/**
 archives/**
 src/**
 tsconfig.json
+tsconfig.webview.json
+.webview-build/**
 *.map
 *.ts
 node_modules/**

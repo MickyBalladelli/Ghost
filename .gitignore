@@ -1,5 +1,6 @@
 node_modules/
 out/
+.webview-build/
 .vscode-test/
 coverage/
 .cache/

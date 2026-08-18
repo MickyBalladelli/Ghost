@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.1.20",
+  "version": "1.1.28",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -1360,7 +1360,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && tsc -p ./tsconfig.webview.json && node ./scripts/copyWebviewBuild.js",
     "watch": "tsc -watch -p ./",
     "package": "npm run vscode:prepublish && node ./scripts/archiveVsix.js && vsce package",
     "docs:config": "node ./scripts/generateConfigurationReference.js",

@@ -1099,13 +1099,13 @@ const renderFirstRunSetup = (): void => {
   setupModelListElement.textContent = ''
   for (const model of availableModels.slice(0, 12)) {
     const chip = document.createElement('span')
-    chip.className = 'setup-model-chip'
+    chip.className = 'setup-model-name'
     chip.textContent = model
     setupModelListElement.append(chip)
   }
   if (availableModels.length > 12) {
     const more = document.createElement('span')
-    more.className = 'setup-model-chip'
+    more.className = 'setup-model-name'
     more.textContent = `+${availableModels.length - 12} more`
     setupModelListElement.append(more)
   }
