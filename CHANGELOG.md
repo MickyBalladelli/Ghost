@@ -12,6 +12,7 @@ All notable changes to this extension are documented here.
 - Group repeated tool calls into compact expandable timelines.
 - Add visible recovery actions for active, stopped, and failed requests, including Open Diff.
 - Show the detailed stop message and recovery hint in stopped request cards.
+- Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
 
 ## 1.1.16 - 2026-08-18
 

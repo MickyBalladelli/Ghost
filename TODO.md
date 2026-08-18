@@ -83,7 +83,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Group repeated tool calls and show a compact expandable timeline instead of many duplicate blocks.
 - [x] Add Cancel, Retry, Continue, Regenerate, and Open Diff actions to the stopped/failed card.
 - [x] Show the actual reason when Ghost stops: approval denied, tool failure, model stopped, context full, budget reached, or verification failed.
-- [ ] Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
+- [x] Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
 - [ ] Add “approve all pending files” plus separate scopes for this request, session, workspace, and one file.
 - [ ] Make “Edit Arguments” open an editable form populated with the original arguments, validate it, and send it back through the same approval flow.
 - [ ] Add a visible auto-accept indicator and an easy emergency stop that disables auto-accept for the current request.

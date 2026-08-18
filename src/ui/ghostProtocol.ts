@@ -27,6 +27,7 @@ export interface GhostToolArguments {
 
 export interface GhostToolDiffPreview {
   path: string
+  files?: string[]
   before: string
   after: string
   truncated?: boolean

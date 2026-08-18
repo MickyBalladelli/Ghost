@@ -821,8 +821,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         const limit = 20000
         const before = prepared.map(file => `--- ${file.path}\n${file.before.content}`).join('\n\n')
         const after = prepared.map(file => `+++ ${file.path}\n${file.after}`).join('\n\n')
+        const files = prepared.map(file => file.path)
         return {
-          path: `${prepared.length} files`,
+          path: files.length === 1 ? files[0] : `${files.length} files`,
+          files,
           before: before.slice(0, limit),
           after: after.slice(0, limit),
           truncated: before.length > limit || after.length > limit
@@ -861,6 +863,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       const limit = 20000
       const preview = {
         path: uri.fsPath,
+        files: [uri.fsPath],
         before: before.slice(0, limit),
         after: after.slice(0, limit),
         truncated: before.length > limit || after.length > limit,
@@ -3377,6 +3380,54 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         max-height: 180px;
         overflow: auto;
         white-space: pre-wrap;
+      }
+
+      .tool-diff-details summary {
+        font-weight: 600;
+      }
+
+      .tool-diff-files {
+        margin: 5px 0;
+        padding-left: 18px;
+      }
+
+      .tool-hunk-toolbar {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin: 6px 0;
+      }
+
+      .tool-hunk-toolbar span {
+        margin-right: auto;
+      }
+
+      .tool-hunk-list {
+        display: grid;
+        gap: 4px;
+      }
+
+      .tool-hunk {
+        align-items: center;
+        border: 1px solid var(--vscode-widget-border, var(--ghost-border));
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: space-between;
+        padding: 4px 6px;
+      }
+
+      .tool-hunk:focus-within,
+      .tool-hunk:focus {
+        border-color: var(--vscode-focusBorder);
+        outline: 1px solid var(--vscode-focusBorder);
+      }
+
+      .tool-hunk label {
+        align-items: center;
+        display: flex;
+        gap: 5px;
       }
 
       .tool-approval-actions,

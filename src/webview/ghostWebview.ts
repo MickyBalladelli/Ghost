@@ -183,7 +183,7 @@ interface ToolCall {
   arguments?: string
   requiresApproval?: boolean
   approval?: 'pending' | 'approved' | 'rejected'
-  diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
+  diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number
@@ -311,7 +311,7 @@ type GhostExtensionMessage =
       toolCallId?: string
       arguments?: Record<string, unknown>
       requiresApproval?: boolean
-      diffPreview?: { path: string; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
+      diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
       message?: string
       resultStatus?: 'completed' | 'rejected' | 'failed'
       plan?: TaskPlan
@@ -2425,6 +2425,22 @@ const toolActionText = (toolCall: ToolCall): string => {
   return base
 }
 
+const lineCount = (text: string): number => (text ? text.split(/\r?\n/).length : 0)
+
+const diffStatsText = (diffPreview: NonNullable<ToolCall['diffPreview']>): string => {
+  const hunks = diffPreview.hunks ?? []
+  if (hunks.length > 0) {
+    const removed = hunks.reduce((total, hunk) => total + Math.max(1, hunk.endLine - hunk.startLine + 1), 0)
+    const added = hunks.reduce((total, hunk) => total + lineCount(hunk.replacement), 0)
+    return `${hunks.length} hunk${hunks.length === 1 ? '' : 's'} · +${added} / -${removed} lines`
+  }
+  return `${lineCount(diffPreview.before)} → ${lineCount(diffPreview.after)} lines`
+}
+
+const diffFileNames = (diffPreview: NonNullable<ToolCall['diffPreview']>): string[] => (
+  [...new Set((diffPreview.files?.length ? diffPreview.files : [diffPreview.path]).filter(Boolean))]
+)
+
 const renderMessagePartSummary = (message: ChatMessage): string => {
   const parts = message.parts.filter(part => part.kind !== 'text')
   if (parts.length === 0) {
@@ -2448,8 +2464,17 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const argumentsBlock = uiPreferences.showToolProgress && part.toolCall.arguments
       ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`
       : ''
+    const diff = part.toolCall.diffPreview
+    const files = diff ? diffFileNames(diff) : []
+    const diffStats = diff ? diffStatsText(diff) : ''
+    const diffFiles = files.length > 1
+      ? `<ul class="tool-diff-files" aria-label="Files in this change">${files.map(file => `<li>${escapeHtml(file)}</li>`).join('')}</ul>`
+      : ''
+    const hunkNavigation = diff?.hunks?.length
+      ? `<div class="tool-hunk-toolbar" role="toolbar" aria-label="Hunk navigation"><span>${diff.hunks.length} hunk${diff.hunks.length === 1 ? '' : 's'}</span><button type="button" class="secondary" data-tool-action="previous-hunk" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Focus previous hunk">Previous</button><button type="button" class="secondary" data-tool-action="next-hunk" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Focus next hunk">Next</button></div>`
+      : ''
     const diffBlock = part.toolCall.diffPreview
-      ? `<details class="tool-details"><summary>Diff preview · ${escapeHtml(part.toolCall.diffPreview.path)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary>${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<label><input type="checkbox" data-tool-hunk="${index}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" checked> Lines ${hunk.startLine}-${hunk.endLine}<button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open line</button></label>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
+      ? `<details class="tool-details tool-diff-details"><summary>Diff preview · ${escapeHtml(files[0] ?? part.toolCall.diffPreview.path)} · ${escapeHtml(diffStats)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary>${diffFiles}${hunkNavigation}${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list" role="list" aria-label="Changed hunks">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<div class="tool-hunk" data-tool-hunk-card data-tool-hunk-index="${index}" role="listitem" tabindex="-1"><label><input type="checkbox" data-tool-hunk="${index}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" checked aria-label="Include hunk ${index + 1} of ${part.toolCall.diffPreview?.hunks?.length ?? 0}, lines ${hunk.startLine} to ${hunk.endLine}"><span>Hunk ${index + 1} · Lines ${hunk.startLine}-${hunk.endLine}</span></label><button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Open hunk ${index + 1} at line ${hunk.startLine}">Open line</button></div>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
       : ''
     const resultBlock = uiPreferences.showToolProgress && part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
@@ -2489,7 +2514,8 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
         ? '✕'
         : '•'
-    return `<div class="message-progress tool-progress ${toolStatusClass}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+    const approvalCardClass = part.toolCall.requiresApproval && part.toolCall.status === 'requested' ? ' tool-approval-card' : ''
+    return `<div class="message-progress tool-progress ${toolStatusClass}${approvalCardClass}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }
   const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
   const toolGroups: Array<Extract<MessagePart, { kind: 'tool' }>[]> = []
@@ -3035,6 +3061,30 @@ const submitToolRetry = (found: { message: ChatMessage; toolCall: ToolCall }): v
   })
 }
 
+const moveApprovalHunk = (card: HTMLElement, direction: 1 | -1): void => {
+  const hunks = Array.from(card.querySelectorAll<HTMLElement>('[data-tool-hunk-card]'))
+  if (hunks.length === 0) {
+    return
+  }
+  const activeHunk = document.activeElement?.closest<HTMLElement>('[data-tool-hunk-card]')
+  const activeIndex = activeHunk && card.contains(activeHunk) ? Number(activeHunk.dataset.toolHunkIndex) : direction > 0 ? -1 : 0
+  const nextIndex = (activeIndex + direction + hunks.length) % hunks.length
+  const nextHunk = hunks[nextIndex]
+  nextHunk.scrollIntoView({ block: 'nearest' })
+  const focusTarget = nextHunk.querySelector<HTMLInputElement>('input') ?? nextHunk.querySelector<HTMLButtonElement>('button')
+  focusTarget?.focus()
+}
+
+const focusNextApprovalCard = (toolCallId: string): void => {
+  window.requestAnimationFrame(() => {
+    const cards = Array.from(messagesElement.querySelectorAll<HTMLElement>('.tool-approval-card'))
+    const currentIndex = cards.findIndex(card => card.dataset.toolCallId === toolCallId)
+    const nextCard = cards[currentIndex + 1] ?? cards[currentIndex] ?? cards[0]
+    const focusTarget = nextCard?.querySelector<HTMLInputElement>('input') ?? nextCard?.querySelector<HTMLButtonElement>('button')
+    focusTarget?.focus()
+  })
+}
+
 const handleToolAction = (action: string, toolCallId: string, line?: number): void => {
   const found = findToolCall(toolCallId)
   if (!found) {
@@ -3048,6 +3098,13 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     submitToolRetry(found)
     return
   }
+  if (action === 'previous-hunk' || action === 'next-hunk') {
+    const card = document.querySelector<HTMLElement>(`.tool-approval-card[data-tool-call-id="${CSS.escape(toolCallId)}"]`)
+    if (card) {
+      moveApprovalHunk(card, action === 'next-hunk' ? 1 : -1)
+    }
+    return
+  }
   const requestId = found.message.requestId ?? activeRequest?.requestId
   if (!requestId) {
     return
@@ -3058,10 +3115,11 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     return
   }
   if ((action === 'open-file' || action === 'open-hunk') && found.toolCall.diffPreview) {
+    const path = found.toolCall.diffPreview.files?.[0] ?? found.toolCall.diffPreview.path
     post('open-file', {
       requestId,
       conversationId,
-      path: found.toolCall.diffPreview.path,
+      path,
       ...(line !== undefined ? { line } : {})
     })
     return
@@ -3118,7 +3176,11 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     found.toolCall.status = 'rejected'
     post('reject-tool', { requestId, conversationId, toolCallId })
   }
+  const shouldFocusNextApproval = action === 'approve' || action === 'approve-session' || action === 'approve-selected' || action === 'reject'
   renderMessages(false)
+  if (shouldFocusNextApproval) {
+    focusNextApprovalCard(toolCallId)
+  }
 }
 
 const handleMessageAction = (action: string, messageId: string) => {
@@ -4117,6 +4179,29 @@ document.querySelectorAll<HTMLElement>('.modal-backdrop').forEach(backdrop => {
   })
 })
 document.addEventListener('keydown', event => {
+  const approvalCard = (event.target as HTMLElement).closest<HTMLElement>('.tool-approval-card')
+  if (approvalCard && !event.altKey && !event.metaKey && !event.ctrlKey) {
+    if (event.key === 'j' || event.key === 'ArrowDown') {
+      moveApprovalHunk(approvalCard, 1)
+      event.preventDefault()
+      return
+    }
+    if (event.key === 'k' || event.key === 'ArrowUp') {
+      moveApprovalHunk(approvalCard, -1)
+      event.preventDefault()
+      return
+    }
+    if (event.key.toLowerCase() === 'a') {
+      approvalCard.querySelector<HTMLButtonElement>('[data-tool-action="approve"]')?.click()
+      event.preventDefault()
+      return
+    }
+    if (event.key.toLowerCase() === 'r') {
+      approvalCard.querySelector<HTMLButtonElement>('[data-tool-action="reject"]')?.click()
+      event.preventDefault()
+      return
+    }
+  }
   if (event.key !== 'Escape') {
     return
   }

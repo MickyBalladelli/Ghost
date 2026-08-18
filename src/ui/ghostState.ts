@@ -45,7 +45,7 @@ export interface GhostToolCall {
   arguments?: string
   requiresApproval?: boolean
   approval?: 'pending' | 'approved' | 'rejected'
-  diffPreview?: { path: string; before: string; after: string; truncated?: boolean }
+  diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number
