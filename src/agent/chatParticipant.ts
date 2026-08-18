@@ -549,6 +549,10 @@ export interface GhostRequestOptions {
   minP?: number
   presencePenalty?: number
   repeatPenalty?: number
+  seed?: number
+  stopSequences?: string[]
+  contextWindow?: number
+  grammar?: string
   maxContextTokens?: number
   maxTokens?: number
   mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
@@ -1104,6 +1108,10 @@ export function createChatParticipantHandler(
       minP: requestOptions.minP,
       presencePenalty: requestOptions.presencePenalty,
       repeatPenalty: requestOptions.repeatPenalty,
+      seed: requestOptions.seed,
+      stopSequences: requestOptions.stopSequences,
+      contextWindow: requestOptions.contextWindow,
+      grammar: requestOptions.grammar,
       maxContextTokens: requestOptions.maxContextTokens,
       maxTokens: requestOptions.maxTokens
     })
@@ -1203,6 +1211,10 @@ export function createChatParticipantHandler(
               minP: Math.min(1, Math.max(0, modelSettings.minP)),
               presencePenalty: Math.min(2, Math.max(-2, modelSettings.presencePenalty)),
               repeatPenalty: Math.min(3, Math.max(0, modelSettings.repeatPenalty)),
+              ...(modelSettings.seed === undefined ? {} : { seed: modelSettings.seed }),
+              ...(modelSettings.stopSequences.length ? { stop: modelSettings.stopSequences } : {}),
+              ...(modelSettings.contextWindow === undefined ? {} : { contextWindow: modelSettings.contextWindow }),
+              ...(modelSettings.grammar ? { grammar: modelSettings.grammar } : {}),
               maxTokens: outputTokens
             },
             ...(nativeToolCalling ? { tools: GHOST_NATIVE_TOOL_DEFINITIONS, toolChoice: 'auto' as const } : {}),

@@ -88,11 +88,15 @@ async function* streamSseJson<T>(body: NodeJS.ReadableStream, parse: (payload: T
   }
 }
 
-function generation(options: MlxChatOptions): { temperature?: number; topP?: number; maxTokens: number } {
+function generation(options: MlxChatOptions): { temperature?: number; topP?: number; maxTokens: number; seed?: number; stop?: string[]; contextWindow?: number; grammar?: string } {
   return {
     temperature: options.generation?.temperature,
     topP: options.generation?.topP,
-    maxTokens: options.generation?.maxTokens ?? 8192
+    maxTokens: options.generation?.maxTokens ?? 8192,
+    seed: options.generation?.seed,
+    stop: options.generation?.stop,
+    contextWindow: options.generation?.contextWindow,
+    grammar: options.generation?.grammar
   }
 }
 
@@ -112,7 +116,11 @@ function renderCustomTemplate(template: string, options: MlxChatOptions): Record
     stream: true,
     temperature: settings.temperature ?? null,
     topP: settings.topP ?? null,
-    maxTokens: settings.maxTokens
+    maxTokens: settings.maxTokens,
+    seed: settings.seed ?? null,
+    stop: settings.stop ?? null,
+    contextWindow: settings.contextWindow ?? null,
+    grammar: settings.grammar ?? null
   }
   const parsed = JSON.parse(template) as unknown
   const render = (value: unknown): unknown => {
@@ -240,6 +248,7 @@ class AnthropicClient implements ProviderClient {
         })),
         ...(settings.temperature === undefined ? {} : { temperature: settings.temperature }),
         ...(settings.topP === undefined ? {} : { top_p: settings.topP }),
+        ...(settings.stop?.length ? { stop_sequences: settings.stop } : {}),
         max_tokens: settings.maxTokens,
         stream: true
       })
@@ -316,7 +325,9 @@ class GeminiClient implements ProviderClient {
         generationConfig: {
           temperature: generation(options).temperature,
           topP: generation(options).topP,
-          maxOutputTokens: generation(options).maxTokens
+          maxOutputTokens: generation(options).maxTokens,
+          ...(generation(options).stop?.length ? { stopSequences: generation(options).stop } : {}),
+          ...(generation(options).seed === undefined ? {} : { seed: generation(options).seed })
         }
       })
     })

@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.16 - 2026-08-18
+
+- Add provider-aware grammar, seed, stop sequence, context window, and output-token settings.
+- Expose the new generation values to model profiles and custom HTTP request templates.
+
 ## 1.1.15 - 2026-08-18
 
 - Make three characters light up together during the thinking-label sweep.

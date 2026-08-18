@@ -59,6 +59,9 @@ export function buildMlxChatBody(options: MlxChatOptions): Record<string, unknow
     temperature: generation.temperature,
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+    ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+    ...(generation.stop?.length ? { stop: generation.stop } : {}),
+    ...(generation.grammar ? { grammar: generation.grammar } : {}),
     max_tokens: generation.maxTokens,
     ...(options.tools?.length ? { tools: options.tools } : {}),
     ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
@@ -82,6 +85,10 @@ export function buildOllamaChatBody(options: ChatWireOptions, messages: MlxMessa
       ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
       ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
       ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
+      ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+      ...(generation.stop?.length ? { stop: generation.stop } : {}),
+      ...(generation.contextWindow === undefined ? {} : { num_ctx: generation.contextWindow }),
+      ...(generation.grammar ? { grammar: generation.grammar } : {}),
       ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
     }
   }
@@ -99,6 +106,8 @@ export function buildOpenAiChatBody(options: ChatWireOptions, messages: MlxMessa
     ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+    ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+    ...(generation.stop?.length ? { stop: generation.stop } : {}),
     ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
   }
 }
@@ -125,6 +134,8 @@ export function buildOpenAiResponsesBody(options: ChatWireOptions, messages: Mlx
     ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+    ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+    ...(generation.stop?.length ? { stop: generation.stop } : {}),
     ...(generation.maxTokens === undefined ? {} : { max_output_tokens: generation.maxTokens })
   }
 }

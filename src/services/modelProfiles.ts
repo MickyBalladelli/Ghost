@@ -15,6 +15,10 @@ export interface GhostModelProfile {
   minP?: number
   presencePenalty?: number
   repeatPenalty?: number
+  seed?: number
+  stopSequences?: string[]
+  contextWindow?: number
+  grammar?: string
   maxContextTokens?: number
   maxTokens?: number
 }
@@ -31,6 +35,10 @@ export interface ModelSettingsOverrides {
   minP?: number
   presencePenalty?: number
   repeatPenalty?: number
+  seed?: number
+  stopSequences?: string[]
+  contextWindow?: number
+  grammar?: string
   maxContextTokens?: number
   maxTokens?: number
 }
@@ -46,6 +54,10 @@ export interface ResolvedModelSettings {
   minP: number
   presencePenalty: number
   repeatPenalty: number
+  seed?: number
+  stopSequences: string[]
+  contextWindow?: number
+  grammar?: string
   maxContextTokens: number
   maxTokens?: number
 }
@@ -96,6 +108,13 @@ function normalizeProfile(value: unknown): GhostModelProfile | undefined {
     const number = finiteNumber(value[key])
     if (number !== undefined) profile[key] = number
   }
+  const seed = finiteNumber(value.seed)
+  if (seed !== undefined) profile.seed = Math.floor(seed)
+  if (Array.isArray(value.stopSequences)) profile.stopSequences = value.stopSequences.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  const contextWindow = finiteNumber(value.contextWindow)
+  if (contextWindow !== undefined) profile.contextWindow = Math.floor(contextWindow)
+  const grammar = nonEmptyString(value.grammar)
+  if (grammar) profile.grammar = grammar
   return profile
 }
 
@@ -162,6 +181,10 @@ export function resolveModelSettings(
     minP: value('minP', settings.minP),
     presencePenalty: value('presencePenalty', settings.presencePenalty),
     repeatPenalty: value('repeatPenalty', settings.repeatPenalty),
+    seed: profile?.seed ?? overrides.seed ?? settings.seed,
+    stopSequences: profile?.stopSequences ?? overrides.stopSequences ?? settings.stopSequences,
+    contextWindow: profile?.contextWindow ?? overrides.contextWindow ?? settings.contextWindow,
+    grammar: profile?.grammar ?? overrides.grammar ?? settings.grammar,
     maxContextTokens: Math.max(1, Math.floor(value('maxContextTokens', overrides.maxContextTokens ?? settings.maxContextTokens))),
     maxTokens: profile?.maxTokens ?? overrides.maxTokens
   }

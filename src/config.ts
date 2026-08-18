@@ -80,6 +80,10 @@ export interface GhostSettings {
   minP: number
   presencePenalty: number
   repeatPenalty: number
+  seed?: number
+  stopSequences: string[]
+  contextWindow?: number
+  grammar: string
   responseLength: GhostResponseLength
   mode: GhostMode
   fileEditApproval: GhostFileEditApproval
@@ -133,6 +137,10 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   minP: 0.05,
   presencePenalty: 0.0,
   repeatPenalty: 1.05,
+  seed: undefined,
+  stopSequences: [],
+  contextWindow: undefined,
+  grammar: '',
   responseLength: 'balanced',
   mode: 'agent',
   fileEditApproval: 'confirm',
@@ -201,6 +209,10 @@ export class GhostConfig {
       minP: configuration.get('minP', DEFAULT_GHOST_SETTINGS.minP),
       presencePenalty: configuration.get('presencePenalty', DEFAULT_GHOST_SETTINGS.presencePenalty),
       repeatPenalty: configuration.get('repeatPenalty', DEFAULT_GHOST_SETTINGS.repeatPenalty),
+      seed: configuration.get('seed', DEFAULT_GHOST_SETTINGS.seed),
+      stopSequences: configuration.get('stopSequences', DEFAULT_GHOST_SETTINGS.stopSequences),
+      contextWindow: configuration.get('contextWindow', DEFAULT_GHOST_SETTINGS.contextWindow),
+      grammar: configuration.get('grammar', DEFAULT_GHOST_SETTINGS.grammar),
       responseLength: configuration.get('responseLength', DEFAULT_GHOST_SETTINGS.responseLength),
       mode: configuration.get('mode', DEFAULT_GHOST_SETTINGS.mode),
       fileEditApproval: legacyFileEditApproval,

@@ -259,6 +259,27 @@
           "maximum": 1440,
           "description": "Maximum minutes a local Ghost request may run before its safety budget stops it."
         },
+        "ghost.seed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional deterministic generation seed when the provider supports it."
+        },
+        "ghost.stopSequences": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Sequences that stop generation when the provider supports them."
+        },
+        "ghost.contextWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional provider context window. Ollama sends this as num_ctx."
+        },
+        "ghost.grammar": {
+          "type": "string",
+          "default": "",
+          "description": "Optional provider grammar constraint, when supported."
+        },
         "ghost.jsonMode": {
           "type": "boolean",
           "default": false,
@@ -335,6 +356,21 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 3
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stopSequences": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "contextWindow": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "grammar": {
+                "type": "string"
               },
               "maxContextTokens": {
                 "type": "integer",
