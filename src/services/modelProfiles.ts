@@ -26,6 +26,36 @@ export interface GhostModelProfile {
 export type GhostModelAliases = Record<string, string>
 export type GhostModelProfiles = Record<string, GhostModelProfile>
 
+export const BUILT_IN_MODEL_PROFILES: GhostModelProfiles = {
+  coding: {
+    temperature: 0.2,
+    topP: 0.9,
+    topK: 20,
+    minP: 0.05,
+    repeatPenalty: 1.1,
+    maxContextTokens: 16384,
+    maxTokens: 2048
+  },
+  balanced: {
+    temperature: 0.3,
+    topP: 0.9,
+    topK: 20,
+    minP: 0.05,
+    repeatPenalty: 1.05,
+    maxContextTokens: 8192,
+    maxTokens: 1024
+  },
+  creative: {
+    temperature: 0.8,
+    topP: 0.95,
+    topK: 40,
+    minP: 0.02,
+    repeatPenalty: 1.02,
+    maxContextTokens: 8192,
+    maxTokens: 2048
+  }
+}
+
 export interface ModelSettingsOverrides {
   provider?: GhostProvider
   model?: string
@@ -161,7 +191,7 @@ export function resolveModelSettings(
   profileName = settings.modelProfile,
   overrides: ModelSettingsOverrides = {}
 ): ResolvedModelSettings {
-  const profiles = normalizeProfiles(settings.modelProfiles)
+  const profiles = { ...BUILT_IN_MODEL_PROFILES, ...normalizeProfiles(settings.modelProfiles) }
   const selectedName = nonEmptyString(profileName)
   const profile = selectedName ? profiles[selectedName] : undefined
   const baseModel = role === 'autocomplete' ? settings.autocompleteModel : settings.chatModel

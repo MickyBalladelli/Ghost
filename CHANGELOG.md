@@ -6,6 +6,7 @@ All notable changes to this extension are documented here.
 
 - Add a provider/model quick switcher with connection diagnostics, refresh, and copy controls.
 - Add searchable settings sections for Generation, Provider, Agent Safety, Appearance, Persistence, and Advanced options.
+- Add built-in Coding, Balanced, and Creative model profiles with effective-value display and restore defaults.
 
 ## 1.1.17 - 2026-08-18
 

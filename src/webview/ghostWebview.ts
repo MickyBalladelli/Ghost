@@ -24,6 +24,23 @@ interface ModelProfile {
   maxContextTokens?: number
   maxTokens?: number
 }
+
+const builtInModelProfiles: Record<string, ModelProfile> = {
+  coding: { temperature: 0.2, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.1, maxContextTokens: 16384, maxTokens: 2048 },
+  balanced: { temperature: 0.3, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.05, maxContextTokens: 8192, maxTokens: 1024 },
+  creative: { temperature: 0.8, topP: 0.95, topK: 40, minP: 0.02, repeatPenalty: 1.02, maxContextTokens: 8192, maxTokens: 2048 }
+}
+
+const defaultGenerationSettings = {
+  temperature: 0.3,
+  topP: 0.9,
+  topK: 20,
+  minP: 0.05,
+  presencePenalty: 0,
+  repeatPenalty: 1.05,
+  maxContextTokens: 8192,
+  responseLength: 'balanced' as ResponseLength
+}
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
 type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
 type StopReason = 'failed-tool' | 'invalid-model-response' | 'cancelled' | 'timeout' | 'approval-rejected' | 'context-limit' | 'budget-limit' | 'provider-failure'
@@ -785,6 +802,7 @@ app.innerHTML = `
       <select id="model" aria-label="Chat model"></select>
       <label class="control-label" for="model-profile">Profile</label>
       <select id="model-profile" aria-label="Model profile"></select>
+      <span class="model-profile-effective" id="model-profile-effective" aria-live="polite"></span>
       <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
       <span class="auto-accept-indicator" id="auto-accept-indicator" aria-live="polite"></span>
@@ -851,6 +869,7 @@ app.innerHTML = `
           <select id="response-length"><option value="short">Short</option><option value="balanced">Balanced</option><option value="long">Long</option><option value="unlimited">Unlimited</option></select>
           <label for="mode">Workflow mode</label>
           <select id="mode"><option value="ask">Ask</option><option value="edit">Edit</option><option value="agent">Agent — implement changes</option><option value="explain">Explain</option><option value="inline">Inline / Completion</option></select>
+          <button type="button" class="secondary settings-inline-action" id="restore-generation-defaults">Restore generation defaults</button>
           <div class="settings-section-heading" data-settings-section-heading="agent safety">Agent safety</div>
           <label for="file-edit-approval">File edit approval</label>
           <select id="file-edit-approval"><option value="confirm">Confirm each edit</option><option value="one-edit">Auto-accept one edit</option><option value="current-file">Auto-accept current file</option><option value="request">Auto-accept this request</option><option value="session">Auto-accept this session</option><option value="workspace">Auto-accept this workspace</option><option value="always">Always auto-accept file edits</option></select>
@@ -1064,6 +1083,7 @@ const persistenceStatusElement = document.getElementById('persistence-status') a
 const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
 const modelProfileElement = document.getElementById('model-profile') as HTMLSelectElement
+const modelProfileEffectiveElement = document.getElementById('model-profile-effective') as HTMLElement
 const modelCapabilitiesElement = document.getElementById('model-capabilities') as HTMLElement
 const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
@@ -1082,6 +1102,7 @@ const repeatPenaltyElement = document.getElementById('repeat-penalty') as HTMLIn
 const maxContextElement = document.getElementById('max-context') as HTMLInputElement
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
+const restoreGenerationDefaultsElement = document.getElementById('restore-generation-defaults') as HTMLButtonElement
 const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
 const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
 const promptHistoryLimitElement = document.getElementById('prompt-history-limit') as HTMLInputElement
@@ -1681,13 +1702,19 @@ const renderControls = () => {
   defaultProfileOption.value = ''
   defaultProfileOption.textContent = 'Default'
   modelProfileElement.append(defaultProfileOption)
-  for (const profileName of Object.keys(controls.modelProfiles).sort()) {
+  const profileNames = [...new Set([...Object.keys(builtInModelProfiles), ...Object.keys(controls.modelProfiles)])].sort()
+  for (const profileName of profileNames) {
     const option = document.createElement('option')
     option.value = profileName
-    option.textContent = profileName
+    option.textContent = builtInModelProfiles[profileName] ? `${profileName[0].toUpperCase()}${profileName.slice(1)} · built-in` : profileName
     modelProfileElement.append(option)
   }
   modelProfileElement.value = controls.modelProfile
+  const activeProfile = builtInModelProfiles[controls.modelProfile] ?? controls.modelProfiles[controls.modelProfile]
+  const effective = activeProfile ?? defaultGenerationSettings
+  const profileLabel = controls.modelProfile ? `${controls.modelProfile} · ` : 'Default · '
+  modelProfileEffectiveElement.textContent = `${profileLabel}temp ${effective.temperature ?? controls.temperature} · top P ${effective.topP ?? controls.topP} · context ${effective.maxContextTokens ?? controls.maxContextTokens} · output ${effective.maxTokens ?? maxTokensForLength(controls.responseLength) ?? 'unlimited'}`
+  modelProfileEffectiveElement.title = 'Effective generation values. A selected profile overrides matching settings.'
   renderModelCapabilities(availableModelMetadata.find(metadata => metadata.id === controls.chatModel))
   temperatureElement.value = String(controls.temperature)
   temperatureValueElement.value = controls.temperature.toFixed(1)
@@ -4442,6 +4469,21 @@ modelElement.addEventListener('change', () => {
 })
 modelProfileElement.addEventListener('change', () => {
   controls.modelProfile = modelProfileElement.value
+  renderControls()
+  sendSettingsUpdate()
+  saveState()
+})
+restoreGenerationDefaultsElement.addEventListener('click', () => {
+  controls.modelProfile = ''
+  controls.temperature = defaultGenerationSettings.temperature
+  controls.topP = defaultGenerationSettings.topP
+  controls.topK = defaultGenerationSettings.topK
+  controls.minP = defaultGenerationSettings.minP
+  controls.presencePenalty = defaultGenerationSettings.presencePenalty
+  controls.repeatPenalty = defaultGenerationSettings.repeatPenalty
+  controls.maxContextTokens = defaultGenerationSettings.maxContextTokens
+  controls.responseLength = defaultGenerationSettings.responseLength
+  renderControls()
   sendSettingsUpdate()
   saveState()
 })

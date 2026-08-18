@@ -2667,6 +2667,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         width: 20px;
       }
 
+      .model-profile-effective {
+        color: var(--vscode-descriptionForeground);
+        flex: 1 1 220px;
+        font-size: 0.72em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .history-button .ui-icon {
         height: 18px;
         width: 18px;
@@ -2959,6 +2968,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         grid-column: 1 / -1;
         margin-top: 10px;
         padding-bottom: 4px;
+      }
+
+      .settings-inline-action {
+        grid-column: 1 / -1;
+        justify-self: start;
       }
 
       .settings-grid label {
