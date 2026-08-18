@@ -1,20 +1,17 @@
 import * as vscode from 'vscode'
 
 import { createChatParticipant, createChatParticipantHandler } from './agent/chatParticipant'
-import { ghostConfig, GhostProvider } from './config'
+import { ghostConfig } from './config'
+import type { GhostProvider } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
-import { MlxClient } from './services/mlxClient'
-import { OllamaClient } from './services/ollamaClient'
-import { createProfiledProviderClient } from './services/profiledProviderClient'
-import { getOpenAiProfile, resolveOpenAiProfileEndpoint } from './services/providerProfiles'
 import { ProviderSecrets } from './services/providerSecrets'
-import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
 import { GhostStatusBar } from './ui/statusBar'
 import { registerLanguageModelTools } from './tools/registerTools'
-import { clearGhostLogs, disposeGhostLogs, showGhostLogs } from './logging/ghostLogger'
+import { clearGhostLogs, disposeGhostLogs, effectiveGhostLogLevel, showGhostLogs, writeGhostLog } from './logging/ghostLogger'
 
 export async function activate(context: vscode.ExtensionContext) {
+  const activationStartedAt = Date.now()
   const providerSecrets = new ProviderSecrets(context.secrets)
   await providerSecrets.initialize()
   const providerApiKey = (provider: GhostProvider): string | undefined => providerSecrets.get(provider)
@@ -55,6 +52,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   })
   const checkOllamaCommand = vscode.commands.registerCommand('ghost.checkOllamaStatus', async () => {
+    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }] = await Promise.all([
+      import('./services/mlxClient'),
+      import('./services/ollamaClient'),
+      import('./services/profiledProviderClient'),
+      import('./services/providerProfiles')
+    ])
     const settings = ghostConfig.getSettings()
     statusBar.setProvider(settings.provider)
     const providerLabel = settings.provider === 'mlx-vlm'
@@ -87,7 +90,8 @@ export async function activate(context: vscode.ExtensionContext) {
       await vscode.window.showErrorMessage(`${providerLabel} is offline at ${endpoint}.`)
     }
   })
-  const checkModelsCommand = vscode.commands.registerCommand('ghost.checkModels', () => {
+  const checkModelsCommand = vscode.commands.registerCommand('ghost.checkModels', async () => {
+    const { checkRequiredOllamaModels } = await import('./ui/modelDiagnostics')
     return checkRequiredOllamaModels(ghostConfig, () => providerApiKey('ollama'))
   })
   const setProviderApiKeyCommand = vscode.commands.registerCommand('ghost.setProviderApiKey', async () => {
@@ -145,6 +149,12 @@ export async function activate(context: vscode.ExtensionContext) {
   registerLanguageModelTools(context)
 
   updateInlineStatusBar()
+  writeGhostLog(
+    'info',
+    effectiveGhostLogLevel(ghostConfig.get('logLevel'), ghostConfig.get('enableDebugLogging')),
+    'extension activated',
+    { activationMs: Date.now() - activationStartedAt }
+  )
   context.subscriptions.push(
     helloWorldCommand,
     inlineProviderRegistration,

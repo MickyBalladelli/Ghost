@@ -117,7 +117,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Dispose render targets, event listeners, timers, child processes, and provider streams on request completion and extension deactivation.
 - [x] Add internal timing counters for context preparation, provider wait, first token, tool execution, approval wait, and verification. Keep telemetry local and opt-in if ever added.
 - [x] Reduce debug logging by default and redact before writing logs. Add log levels and a clear log location/cleanup action.
-- [ ] Profile startup and lazy-load nonessential commands, diagnostics, model discovery, and webview assets.
+- [x] Profile startup and lazy-load nonessential commands, diagnostics, model discovery, and webview assets.
 
 ## P2 — architecture and maintainability
 
