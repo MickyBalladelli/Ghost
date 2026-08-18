@@ -20,6 +20,7 @@ All notable changes to this extension are documented here.
 - Add searchable per-conversation prompt history with configurable retention and keyboard guidance.
 - Autosave composer drafts and show whether local conversation persistence is enabled.
 - Add /test, /review, and /refactor slash commands with workflow-specific prompts.
+- Add pasted-image attachments, visible attachment limits, and removable attachment chips.
 
 ## 1.1.16 - 2026-08-18
 

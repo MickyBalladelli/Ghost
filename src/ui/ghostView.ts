@@ -2694,6 +2694,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         padding: 2px 5px;
       }
 
+      .attachment-limit {
+        color: var(--vscode-descriptionForeground);
+        flex: 1 1 180px;
+        font-size: 0.7em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .context-chip,
       .attachment-chip {
         background: var(--vscode-input-background, transparent);

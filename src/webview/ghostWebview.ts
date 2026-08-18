@@ -119,6 +119,9 @@ interface ContextData {
 }
 
 const MAX_FAILED_TOOL_RETRIES = 2
+const maxAttachments = 8
+const maxImageAttachmentBytes = 700 * 1024
+const maxTextAttachmentBytes = 1024 * 1024
 
 const toolDescriptions: Record<string, string> = {
   ghost_read_file: 'Read a text file from the workspace.',
@@ -794,6 +797,7 @@ app.innerHTML = `
             <button type="button" class="context-button" id="context-preview" aria-haspopup="dialog" title="View prompt context and available tools">Context</button>
             <button type="button" class="context-button" id="attach">Attach</button>
             <input id="file-input" type="file" multiple hidden>
+            <span class="attachment-limit" id="attachment-limit" aria-live="polite"></span>
           </div>
           <div class="attachment-list" id="attachment-list" aria-label="Attachments"></div>
           <div class="prompt-wrap">
@@ -1035,6 +1039,7 @@ const connectionIndicatorElement = document.getElementById('connection-indicator
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
 const autoAcceptIndicatorElement = document.getElementById('auto-accept-indicator') as HTMLElement
 const attachmentListElement = document.getElementById('attachment-list') as HTMLElement
+const attachmentLimitElement = document.getElementById('attachment-limit') as HTMLElement
 const fileInputElement = document.getElementById('file-input') as HTMLInputElement
 const mentionMenuElement = document.getElementById('mention-menu') as HTMLElement
 const temperatureElement = document.getElementById('temperature') as HTMLInputElement
@@ -1697,6 +1702,8 @@ const renderControls = () => {
       : 'Checking…'
 
   attachmentListElement.textContent = ''
+  attachmentLimitElement.textContent = `${attachments.length}/${maxAttachments} attachments · max 1 MB text · 700 KB images`
+  attachmentLimitElement.title = 'You can attach up to 8 files. Text files are limited to 1 MB and images to 700 KB.'
   for (const attachment of attachments) {
     const chip = document.createElement('span')
     chip.className = 'attachment-chip'
@@ -1958,6 +1965,10 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
 })
 
 const addAttachment = (attachment: Attachment) => {
+  if (attachments.length >= maxAttachments && !attachments.some(existing => existing.name === attachment.name && existing.path === attachment.path)) {
+    setNotice('error', `You can attach up to ${maxAttachments} files.`)
+    return
+  }
   if (!attachments.some(existing => existing.name === attachment.name && existing.path === attachment.path)) {
     attachments = [...attachments, attachment]
     post('attach', { ...lifecycleEnvelope('attach'), attachments: [attachment] })
@@ -1967,7 +1978,7 @@ const addAttachment = (attachment: Attachment) => {
 
 const readDroppedFile = async (file: File) => {
   const isImage = file.type.toLowerCase().startsWith('image/')
-  const maximumSize = isImage ? 700 * 1024 : 1024 * 1024
+  const maximumSize = isImage ? maxImageAttachmentBytes : maxTextAttachmentBytes
   if (file.size > maximumSize) {
     setNotice('error', `${file.name} is larger than ${isImage ? '700 KB' : '1 MB'}.`)
     return
@@ -4621,6 +4632,15 @@ fileInputElement.addEventListener('change', () => {
   }
   fileInputElement.value = ''
 })
+attachmentListElement.addEventListener('click', event => {
+  const remove = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-attachment-name]')
+  const name = remove?.dataset.attachmentName
+  if (!name) {
+    return
+  }
+  attachments = attachments.filter(attachment => attachment.name !== name)
+  renderControls()
+})
 composerElement.addEventListener('dragover', event => {
   event.preventDefault()
   composerElement.classList.add('dragging')
@@ -4632,6 +4652,14 @@ composerElement.addEventListener('drop', event => {
   for (const file of Array.from(event.dataTransfer?.files ?? [])) {
     void readDroppedFile(file)
   }
+})
+promptElement.addEventListener('paste', event => {
+  const image = Array.from(event.clipboardData?.files ?? []).find(file => file.type.toLowerCase().startsWith('image/'))
+  if (!image) {
+    return
+  }
+  event.preventDefault()
+  void readDroppedFile(image)
 })
 
 promptElement.addEventListener('keyup', updateMentionMenu)
