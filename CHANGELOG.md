@@ -32,6 +32,8 @@ All notable changes to this extension are documented here.
 - Split webview protocol, settings, history, rendering, tool timeline, composer, and modal helpers into separate runtime modules.
 - Extract persisted-state shapes and bounded storage compaction into a dedicated UI persistence module.
 - Extract tool approval policy, file-edit classification, and auto-accept scope rules into a dedicated module.
+- Extract provider cache-key and model-capability state helpers into a dedicated module.
+- Split Ghost view request registry, import/export helpers, and webview lifecycle state into dedicated modules.
 
 ## 1.1.17 - 2026-08-18
 

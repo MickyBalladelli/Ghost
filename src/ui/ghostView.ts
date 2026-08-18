@@ -8,7 +8,7 @@ import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostLogLevel, GhostProvider, GhostSettings } from '../config'
 import { MlxClient, MlxVisionImage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
-import { createProviderAdapter, ModelCapabilityRecord } from '../services/providerAdapter'
+import { createProviderAdapter } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
@@ -24,7 +24,6 @@ import {
   GhostAttachment,
   GhostContinuation,
   GhostExtensionMessage,
-  GhostModelMetadata,
   GhostPersistedState,
   GhostRequestEvent,
   GhostSettingsUpdate,
@@ -46,6 +45,11 @@ import {
   requiresToolApproval,
   shouldAutoAcceptFileEdit
 } from './ghostApprovalPolicy'
+import { providerStatusKey, toGhostModelMetadata } from './ghostProviderState'
+import type { ProviderStatus, ProviderStatusCache } from './ghostProviderState'
+import { GhostRequestOrchestrator } from './ghostRequestOrchestrator'
+import { createGhostExportData, parseGhostImportState } from './ghostImportExport'
+import { GhostWebviewLifecycle } from './ghostWebviewLifecycle'
 import { parseTaskPlanMarker } from '../agent/taskPlan'
 import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
@@ -131,17 +135,6 @@ interface StagedEdit {
   after: string
 }
 
-interface ProviderStatus {
-  connection: 'online' | 'offline'
-  models: string[]
-  modelMetadata: ModelCapabilityRecord[]
-}
-
-interface ProviderStatusCache extends ProviderStatus {
-  key: string
-  checkedAt: number
-}
-
 interface WorkspaceContextSnapshot {
   workspaceName: string
   folders: string[]
@@ -149,40 +142,13 @@ interface WorkspaceContextSnapshot {
   openFiles: string[]
 }
 
-function toGhostModelMetadata(capability: ModelCapabilityRecord): GhostModelMetadata {
-  const capabilities = [
-    capability.supportsStreaming ? 'streaming' : '',
-    capability.supportsVision ? 'vision' : '',
-    capability.supportsTools ? 'native tools' : '',
-    capability.supportsJsonMode ? 'JSON mode' : '',
-    capability.supportsFIM ? 'FIM' : ''
-  ].filter(Boolean)
-  return {
-    id: capability.model,
-    label: capability.model,
-    provider: capability.provider,
-    contextWindow: capability.contextWindow,
-    outputLimit: capability.outputLimit,
-    nativeApi: capability.nativeApi,
-    supportsTools: capability.supportsTools,
-    supportsJsonMode: capability.supportsJsonMode,
-    supportsVision: capability.supportsVision,
-    supportsFIM: capability.supportsFIM,
-    supportsStreaming: capability.supportsStreaming,
-    supportsSampling: capability.supportsSampling,
-    capabilities
-  }
-}
-
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
   private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
 
-  private view: vscode.WebviewView | undefined
+  private readonly webviewLifecycle = new GhostWebviewLifecycle()
+  private readonly requestOrchestrator = new GhostRequestOrchestrator<GhostRequestState>()
   private readonly disposables: vscode.Disposable[] = []
-  private readonly requests = new Map<string, GhostRequestState>()
-  private readonly activeRequestByConversation = new Map<string, string>()
-  private readonly completedRequests = new Set<string>()
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
   private readonly stagedEdits = new Map<string, StagedEdit>()
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
@@ -196,9 +162,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
-  private pendingMessages: GhostExtensionMessage[] = []
   private status: GhostViewStatus = 'ready'
-  private disposed = false
   private controlsStateGeneration = 0
   private providerStatusCache?: ProviderStatusCache
   private providerStatusRequest?: { key: string; promise: Promise<ProviderStatus> }
@@ -208,6 +172,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private static readonly providerStatusCacheTtlMs = 30_000
 
   private readonly chatHandler: vscode.ChatRequestHandler
+
+  private get view(): vscode.WebviewView | undefined { return this.webviewLifecycle.view }
+  private set view(value: vscode.WebviewView | undefined) { this.webviewLifecycle.view = value }
+  private get pendingMessages(): GhostExtensionMessage[] { return this.webviewLifecycle.pendingMessages }
+  private set pendingMessages(value: GhostExtensionMessage[]) { this.webviewLifecycle.pendingMessages = value }
+  private get disposed(): boolean { return this.webviewLifecycle.disposed }
+  private get requests(): Map<string, GhostRequestState> { return this.requestOrchestrator.requests }
+  private get activeRequestByConversation(): Map<string, string> { return this.requestOrchestrator.activeRequestByConversation }
+  private get completedRequests(): Set<string> { return this.requestOrchestrator.completedRequests }
 
   private log(level: GhostLogLevel, message: string, details?: unknown): void {
     const settings = getGhostSettings()
@@ -271,7 +244,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
-    this.view = webviewView
+    this.webviewLifecycle.attach(webviewView)
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'out'), this.extensionUri]
@@ -282,14 +255,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       webviewView.webview.onDidReceiveMessage(message => this.handleMessage(message)),
       webviewView.onDidDispose(() => {
         this.cancelRequests()
-        if (this.view === webviewView) {
-          this.view = undefined
-        }
+        this.webviewLifecycle.detach(webviewView)
       })
     )
 
-    const pendingMessages = this.pendingMessages
-    this.pendingMessages = []
+    const pendingMessages = this.webviewLifecycle.takePendingMessages()
     for (const message of pendingMessages) {
       this.postMessage(message)
     }
@@ -626,17 +596,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       clearTimeout(timeout)
       this.debugLog('request timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
-      this.requests.delete(requestId)
-      if (this.activeRequestByConversation.get(conversationId) === requestId) {
-        this.activeRequestByConversation.delete(conversationId)
-      }
-      this.completedRequests.add(requestId)
-      if (this.completedRequests.size > 100) {
-        const oldest = this.completedRequests.values().next().value
-        if (oldest) {
-          this.completedRequests.delete(oldest)
-        }
-      }
+      this.requestOrchestrator.markCompleted(requestId, conversationId)
       cancellation.dispose()
     }
   }
@@ -838,11 +798,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     } finally {
       this.debugLog('tool retry timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
-      this.requests.delete(requestId)
-      if (this.activeRequestByConversation.get(conversationId) === requestId) {
-        this.activeRequestByConversation.delete(conversationId)
-      }
-      this.completedRequests.add(requestId)
+      this.requestOrchestrator.markCompleted(requestId, conversationId)
       cancellation.dispose()
     }
   }
@@ -1826,19 +1782,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     try {
       const parsed = JSON.parse(new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(files[0]))) as unknown
-      const candidate = isStoredRecord(parsed) && isStoredRecord(parsed.state) ? parsed.state : parsed
-      if (!isStoredRecord(candidate) || !Array.isArray(candidate.conversations)) {
-        throw new Error('The file does not contain Ghost conversations.')
-      }
-      const state: GhostPersistedState = {
-        schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
-        conversations: candidate.conversations,
-        activeConversationId: typeof candidate.activeConversationId === 'string' ? candidate.activeConversationId : undefined,
-        promptHistory: Array.isArray(candidate.promptHistory) ? candidate.promptHistory.filter(item => typeof item === 'string') : [],
-        presets: Array.isArray(candidate.presets) ? candidate.presets : [],
-        showReasoning: candidate.showReasoning === true,
-        preferences: isStoredRecord(candidate.preferences) ? candidate.preferences : {}
-      }
+      const state = parseGhostImportState(parsed)
       await this.persistState(state)
       this.postMessage({
         source: 'ghost-extension',
@@ -1850,31 +1794,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     } catch (error) {
       await vscode.window.showErrorMessage(error instanceof Error ? error.message : 'Ghost could not import that file.')
     }
-  }
-
-  private providerStatusKey(settings: GhostSettings): string {
-    return JSON.stringify({
-      provider: settings.provider,
-      ollamaUrl: settings.ollamaUrl,
-      mlxUrl: settings.mlxUrl,
-      openaiUrl: settings.openaiUrl,
-      openaiProfile: settings.openaiProfile,
-      openaiApiVersion: settings.openaiApiVersion,
-      openaiCustomModelsPath: settings.openaiCustomModelsPath,
-      openaiApiKeyHeader: settings.openaiApiKeyHeader,
-      openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
-      openaiOrganizationHeader: settings.openaiOrganizationHeader,
-      openaiOrganization: settings.openaiOrganization,
-      openaiProjectHeader: settings.openaiProjectHeader,
-      openaiProject: settings.openaiProject,
-      openaiProxy: settings.openaiProxy,
-      openaiNoProxy: settings.openaiNoProxy,
-      openaiTlsRejectUnauthorized: settings.openaiTlsRejectUnauthorized,
-      openaiTlsCaFile: settings.openaiTlsCaFile,
-      openaiTlsCertFile: settings.openaiTlsCertFile,
-      openaiTlsKeyFile: settings.openaiTlsKeyFile,
-      apiKeyConfigured: Boolean(this.providerApiKey?.(settings.provider))
-    })
   }
 
   private async readProviderStatus(settings: GhostSettings): Promise<ProviderStatus> {
@@ -1907,7 +1826,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async getProviderStatus(settings: GhostSettings, forceRefresh = false): Promise<ProviderStatus> {
-    const key = this.providerStatusKey(settings)
+    const key = providerStatusKey(settings, Boolean(this.providerApiKey?.(settings.provider)))
     const cached = this.providerStatusCache
     if (!forceRefresh && cached?.key === key && Date.now() - cached.checkedAt < GhostViewProvider.providerStatusCacheTtlMs) {
       return cached
@@ -2261,25 +2180,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const exportState = state ?? await this.readPersistedState()
-    const exportData = {
-      version: GHOST_PERSISTENCE_SCHEMA_VERSION,
-      exportedAt: new Date().toISOString(),
-      provider: settings.provider,
-      chatModel: settings.chatModel,
-      state: exportState
-    }
+    const exportData = createGhostExportData(settings, exportState)
     await atomicWriteFile(target, Buffer.from(JSON.stringify(exportData, null, 2), 'utf8'))
     await vscode.window.showInformationMessage(`Ghost interface exported to ${target.fsPath}.`)
   }
 
   dispose(): void {
-    this.disposed = true
+    this.webviewLifecycle.dispose()
     this.cancelRequests()
     for (const request of this.requests.values()) {
       request.cancellation.dispose()
     }
-    this.requests.clear()
-    this.activeRequestByConversation.clear()
+    this.requestOrchestrator.clear()
     this.pendingApprovals.clear()
     for (const staged of this.stagedEdits.values()) {
       void this.restoreStagedEdit(staged)
@@ -2291,8 +2203,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.sessionApprovedFileEdits = false
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
-    this.view = undefined
-    this.pendingMessages = []
   }
 
   private async handleMessage(value: unknown): Promise<void> {

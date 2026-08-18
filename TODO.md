@@ -124,9 +124,13 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Split `src/webview/ghostWebview.ts` into protocol client, conversation store, settings store, history, rendering, tool timeline, composer, and modal modules.
   - [x] Extract shared state and protocol types.
   - [x] Extract conversation creation and prompt-history runtime operations.
-- [ ] Split `src/ui/ghostView.ts` into request orchestration, persistence, approvals, provider state, import/export, and webview lifecycle services.
+- [x] Split `src/ui/ghostView.ts` into request orchestration, persistence, approvals, provider state, import/export, and webview lifecycle services.
   - [x] Extract persisted-state shapes, redaction-safe compaction, and storage bounds.
   - [x] Extract tool approval policy, file-edit classification, and auto-accept scope rules.
+  - [x] Extract provider cache-key and model-capability state helpers.
+  - [x] Extract request registry and completion lifecycle.
+  - [x] Extract import/export state parsing and export envelope creation.
+  - [x] Extract webview attachment, pending-message, and disposal state.
 - [ ] Share or generate protocol types between `src/ui/ghostProtocol.ts` and the webview. Remove duplicated local message declarations.
 - [ ] Centralize file validation, read/write/edit execution, diff creation, and conflict handling instead of duplicating logic between `fileTools.ts` and `localToolExecutor.ts`.
 - [ ] Keep provider-neutral types separate from `MlxChatOptions`; avoid using one provider’s request shape as the shared contract.
