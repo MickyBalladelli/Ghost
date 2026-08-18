@@ -1,5 +1,6 @@
 import type { Response } from 'node-fetch'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { GhostError } from '../ghostErrors'
 
 const { requestTimeoutMs: DEFAULT_TIMEOUT_MS, defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS, maxRetryDelayMs: MAX_RETRY_DELAY_MS, retryBaseDelayMs: RETRY_BASE_DELAY_MS } = GHOST_POLICY.provider
 
@@ -9,21 +10,21 @@ export interface ProviderRequestOptions {
   maxAttempts?: number
 }
 
-export class ProviderHttpError extends Error {
+export class ProviderHttpError extends GhostError {
   readonly status: number
   readonly retryAfterMs?: number
 
   constructor(message: string, status: number, retryAfterMs?: number) {
-    super(message)
+    super(message, { code: 'provider.http', retryable: status === 408 || status === 409 || status === 425 || status === 429 || status >= 500, details: { status, retryAfterMs } })
     this.name = 'ProviderHttpError'
     this.status = status
     this.retryAfterMs = retryAfterMs
   }
 }
 
-export class ProviderTimeoutError extends Error {
+export class ProviderTimeoutError extends GhostError {
   constructor(timeoutMs: number) {
-    super(`Provider request timed out after ${timeoutMs}ms`)
+    super(`Provider request timed out after ${timeoutMs}ms`, { code: 'provider.timeout', retryable: true, details: { timeoutMs } })
     this.name = 'ProviderTimeoutError'
   }
 }
@@ -82,7 +83,7 @@ function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
     const abort = () => {
       clearTimeout(timer)
       cleanup()
-      reject(new Error('Provider request cancelled during retry backoff'))
+      reject(new GhostError('Provider request cancelled during retry backoff', { code: 'provider.cancelled', retryable: false }))
     }
     if (signal?.aborted) {
       abort()
@@ -102,7 +103,7 @@ export async function requestWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     if (options.signal?.aborted) {
-      throw new Error('Provider request cancelled')
+      throw new GhostError('Provider request cancelled', { code: 'provider.cancelled', retryable: false })
     }
     const controller = new AbortController()
     let timedOut = false
@@ -131,7 +132,7 @@ export async function requestWithRetry(
     }
   }
 
-  throw lastError ?? new Error('Provider request failed')
+  throw lastError ?? new GhostError('Provider request failed', { code: 'provider.unknown', retryable: false })
 }
 
 export async function providerHttpError(response: Response): Promise<ProviderHttpError> {

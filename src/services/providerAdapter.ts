@@ -1,6 +1,7 @@
 import { ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 import type { FimCompletionOptions } from './fim'
+import { GhostError } from '../ghostErrors'
 
 export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions'
@@ -36,7 +37,7 @@ export interface ProviderErrorOptions {
   cause?: unknown
 }
 
-export class ProviderError extends Error {
+export class ProviderError extends GhostError {
   readonly provider: ProviderId
   readonly code: ProviderErrorCode
   readonly retryable: boolean
@@ -44,7 +45,7 @@ export class ProviderError extends Error {
   readonly retryAfterMs?: number
 
   constructor(message: string, options: ProviderErrorOptions) {
-    super(message)
+    super(message, { code: `provider.${options.code}`, retryable: options.retryable, cause: options.cause, details: { provider: options.provider, status: options.status, retryAfterMs: options.retryAfterMs } })
     this.name = 'ProviderError'
     this.provider = options.provider
     this.code = options.code

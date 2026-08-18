@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 
 export function throwIfCancelled(token?: vscode.CancellationToken): void {
   if (token?.isCancellationRequested) {
-    throw new Error('Request cancelled')
+    throw new GhostError('Request cancelled', { code: 'tool.cancelled', retryable: true })
   }
 }
 
@@ -15,7 +15,7 @@ export async function awaitCancellable<T>(operation: PromiseLike<T>, token?: vsc
       if (settled) return
       settled = true
       subscription.dispose()
-      reject(new Error('Request cancelled'))
+      reject(new GhostError('Request cancelled', { code: 'tool.cancelled', retryable: true }))
     })
     operation.then(value => {
       if (settled) return
@@ -30,3 +30,4 @@ export async function awaitCancellable<T>(operation: PromiseLike<T>, token?: vsc
     })
   })
 }
+import { GhostError } from '../ghostErrors'

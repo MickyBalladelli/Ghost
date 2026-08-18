@@ -2,11 +2,12 @@ import type { GhostSettings } from '../config'
 import { GHOST_PERSISTENCE_SCHEMA_VERSION } from './ghostProtocol'
 import type { GhostPersistedState } from './ghostProtocol'
 import { isStoredRecord } from './ghostPersistence'
+import { GhostError } from '../ghostErrors'
 
 export const parseGhostImportState = (parsed: unknown): GhostPersistedState => {
   const candidate = isStoredRecord(parsed) && isStoredRecord(parsed.state) ? parsed.state : parsed
   if (!isStoredRecord(candidate) || !Array.isArray(candidate.conversations)) {
-    throw new Error('The file does not contain Ghost conversations.')
+    throw new GhostError('The file does not contain Ghost conversations.', { code: 'persistence.invalid-data' })
   }
   return {
     schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,

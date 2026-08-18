@@ -66,8 +66,8 @@ export const createToolResult = (text: string, overrides: ToolResultOverrides = 
 }
 
 export const createToolErrorResult = (error: unknown, overrides: ToolResultOverrides = {}): ToolResult => {
-  const message = error instanceof Error ? error.message : String(error)
-  return createToolResult(`Tool error: ${message}`, {
+  const ghostError = toGhostError(error, 'tool.execution-failed', { retryable: true })
+  return createToolResult(`Tool error: ${ghostError.message}`, {
     ...overrides,
     status: 'failed',
     retryable: overrides.retryable ?? true
@@ -84,3 +84,4 @@ export const replaceToolResultText = (result: ToolResult, text: string, override
     truncated: overrides.truncated ?? result.truncated,
     retryable: overrides.retryable ?? result.retryable
   })
+import { toGhostError } from '../ghostErrors'

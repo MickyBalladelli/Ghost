@@ -4,6 +4,7 @@ import { atomicWriteFile } from './atomicFile'
 import { applyGhostEdit, GhostFileEdit } from './editWorkflow'
 import { readWorkspaceFile, sameWorkspaceFile, assertNoUnsavedEditorChanges, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { resolveWorkspacePath } from './workspacePath'
+import { GhostError } from '../ghostErrors'
 
 export interface FileMutationOptions {
   expectedContent?: string
@@ -47,7 +48,7 @@ export function assertExpectedWorkspaceSnapshot(
   expected: WorkspaceFileSnapshot | undefined
 ): void {
   if (expected && !sameWorkspaceFile(current, expected)) {
-    throw new Error('File changed externally. Refresh and rebase the edit before retrying.')
+    throw new GhostError('File changed externally. Refresh and rebase the edit before retrying.', { code: 'tool.conflict', retryable: true })
   }
 }
 
@@ -69,7 +70,7 @@ export function createWorkspaceEditChange(
   selectedHunkIndexes?: Set<number>
 ): WorkspaceFileChange {
   if (edit.expectedContent !== undefined && before.content !== edit.expectedContent) {
-    throw new Error('Edit expected different file content')
+    throw new GhostError('Edit expected different file content', { code: 'tool.conflict', retryable: true })
   }
   return createWorkspaceFileChange(
     before,

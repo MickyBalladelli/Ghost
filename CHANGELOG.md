@@ -42,6 +42,7 @@ All notable changes to this extension are documented here.
 - Replace the giant webview shell HTML template with a safe DOM builder and sanitize generated Markdown fragments before insertion.
 - Add shared typed tool results with status, exit codes, changed files, output bytes, truncation, warnings, and retryability metadata.
 - Group tool, agent, provider, persistence, protocol, and context limits in one shared policy module.
+- Add shared Ghost error codes and error classes across provider, tool, persistence, approval, and UI boundaries.
 
 ## 1.1.17 - 2026-08-18
 

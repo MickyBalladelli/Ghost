@@ -67,6 +67,7 @@ import { parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
 import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
 import { effectiveGhostLogLevel, writeGhostLog } from '../logging/ghostLogger'
+import { GhostError, toGhostError } from '../ghostErrors'
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
@@ -514,7 +515,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         ...(request.stopReason ? { stopReason: request.stopReason, message: request.stopMessage } : {})
       })
     } catch (error) {
-      const message = redactSensitiveText(error instanceof Error ? error.message : 'Ghost request failed')
+      const ghostError = toGhostError(error, 'ui.request-failed', { retryable: true })
+      const message = redactSensitiveText(ghostError.message || 'Ghost request failed')
       if (!request.stopReason) {
         request.stopReason = request.timedOut
           ? 'timeout'
@@ -867,21 +869,21 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     try {
       const document = await vscode.workspace.openTextDocument(staged.uri)
       if (document.getText() !== staged.after) {
-        throw new Error('The source file changed while Ghost was waiting for edit approval.')
+        throw new GhostError('The source file changed while Ghost was waiting for edit approval.', { code: 'approval.conflict', retryable: true })
       }
       const current = await readWorkspaceFile(staged.uri)
       if (!sameWorkspaceFile(current, { exists: true, content: staged.before })) {
-        throw new Error('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.')
+        throw new GhostError('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.', { code: 'approval.conflict', retryable: true })
       }
       const edit = new vscode.WorkspaceEdit()
       edit.replace(staged.uri, new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length)), staged.before)
       if (!await vscode.workspace.applyEdit(edit)) {
-        throw new Error('Ghost could not restore the source file.')
+        throw new GhostError('Ghost could not restore the source file.', { code: 'approval.failed', retryable: true })
       }
       await document.save()
       const restored = await readWorkspaceFile(staged.uri)
       if (!sameWorkspaceFile(restored, { exists: true, content: staged.before })) {
-        throw new Error('Ghost could not verify the restored source file.')
+        throw new GhostError('Ghost could not verify the restored source file.', { code: 'approval.failed', retryable: true })
       }
     } finally {
       this.stagedEdits.delete(staged.toolCallId)
@@ -1347,26 +1349,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         expectedContent: staged.before
       })
     } catch (error) {
-      pending.resolve({ decision: 'reject', reason: error instanceof Error ? error.message : 'Ghost could not accept the edit.' })
+      const ghostError = toGhostError(error, 'approval.failed', { retryable: true })
+      pending.resolve({ decision: 'reject', reason: ghostError.message || 'Ghost could not accept the edit.' })
     }
   }
 
   private async saveStagedEdit(staged: StagedEdit): Promise<void> {
     const document = await vscode.workspace.openTextDocument(staged.uri)
     if (document.getText() !== staged.after) {
-      throw new Error('The source file changed while Ghost was waiting for edit approval.')
+      throw new GhostError('The source file changed while Ghost was waiting for edit approval.', { code: 'approval.conflict', retryable: true })
     }
 
     const beforeSave = await readWorkspaceFile(staged.uri)
     if (!sameWorkspaceFile(beforeSave, { exists: true, content: staged.before })) {
-      throw new Error('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.')
+      throw new GhostError('File changed externally while Ghost was waiting for edit approval. Refresh and rebase the edit before retrying.', { code: 'approval.conflict', retryable: true })
     }
 
     await document.save()
     const savedContent = await readWorkspaceFile(staged.uri)
     if (!sameWorkspaceFile(savedContent, { exists: true, content: staged.after })) {
       if (!sameWorkspaceFile(savedContent, beforeSave)) {
-        throw new Error('File changed externally while Ghost was being saved. Refresh and rebase the edit before retrying.')
+        throw new GhostError('File changed externally while Ghost was being saved. Refresh and rebase the edit before retrying.', { code: 'approval.conflict', retryable: true })
       }
       await atomicWriteFile(staged.uri, Buffer.from(staged.after, 'utf8'), beforeSave)
     }

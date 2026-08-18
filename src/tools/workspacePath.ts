@@ -2,6 +2,7 @@ import * as path from 'node:path'
 import * as fs from 'node:fs'
 
 import * as vscode from 'vscode'
+import { GhostError } from '../ghostErrors'
 
 function isInsideWorkspace(candidate: string, workspaceRoot: string): boolean {
   const relative = path.relative(workspaceRoot, candidate)
@@ -14,7 +15,7 @@ function canonicalWorkspacePath(candidate: string): string {
   while (!fs.existsSync(current)) {
     try {
       if (fs.lstatSync(current).isSymbolicLink()) {
-        throw new Error('Path contains a symlink whose target does not exist')
+        throw new GhostError('Path contains a symlink whose target does not exist', { code: 'tool.path-invalid' })
       }
     } catch (error) {
       if (error instanceof Error && error.message.includes('symlink')) {
@@ -61,7 +62,7 @@ export function resolveWorkspacePath(input: string): vscode.Uri {
   })
 
   if (!workspaceFolder) {
-    throw new Error('Path must be inside the current workspace')
+    throw new GhostError('Path must be inside the current workspace', { code: 'tool.path-invalid' })
   }
 
   return vscode.Uri.file(canonicalCandidate)
@@ -71,12 +72,12 @@ export function getWorkspaceRoot(): vscode.Uri {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri
 
   if (!root) {
-    throw new Error('Open a workspace before using Ghost tools')
+    throw new GhostError('Open a workspace before using Ghost tools', { code: 'tool.path-invalid' })
   }
 
   const canonicalRoot = canonicalWorkspaceRoot(root.fsPath)
   if (!canonicalRoot) {
-    throw new Error('The current workspace root does not exist or is not a directory')
+    throw new GhostError('The current workspace root does not exist or is not a directory', { code: 'tool.path-invalid' })
   }
 
   return vscode.Uri.file(canonicalRoot)
