@@ -216,6 +216,10 @@ export class MlxClient {
     this.apiKeyProvider = apiKeyProvider
   }
 
+  dispose(): void {
+    this.transport.dispose()
+  }
+
   private authorizationHeaders(): Record<string, string> {
     const apiKey = this.apiKeyProvider?.()
     return apiKey ? { authorization: `Bearer ${apiKey}` } : {}

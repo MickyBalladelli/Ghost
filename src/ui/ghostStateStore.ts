@@ -179,6 +179,16 @@ export class GhostStateStore {
     this.emit({ type: 'approval' })
   }
 
+  dispose(): void {
+    this.requestOrchestrator.dispose()
+    this.clearTransientState()
+    this.listeners.clear()
+    this.providerStatusRequest = undefined
+    this.providerStatusCache = undefined
+    this.workspaceContextCache = undefined
+    this.conversationState = undefined
+  }
+
   private emit(event: GhostStateEvent): void {
     for (const listener of this.listeners) {
       listener(event)

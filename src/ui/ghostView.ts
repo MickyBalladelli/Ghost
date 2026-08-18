@@ -2173,6 +2173,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       void this.restoreStagedEdit(staged)
     }
     this.stateStore.clearTransientState()
+    this.stateStore.dispose()
     vscode.Disposable.from(...this.disposables).dispose()
     this.disposables.length = 0
   }

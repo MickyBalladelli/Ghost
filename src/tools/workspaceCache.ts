@@ -56,6 +56,11 @@ export function invalidateWorkspaceCache(uri?: vscode.Uri): void {
   directoryCache.clear()
 }
 
+export function disposeWorkspaceCache(): void {
+  fileCache.clear()
+  directoryCache.clear()
+}
+
 export function registerWorkspaceCache(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => invalidateWorkspaceCache(event.document.uri)),
@@ -65,6 +70,7 @@ export function registerWorkspaceCache(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidRenameFiles(event => event.files.forEach(file => {
       invalidateWorkspaceCache(file.oldUri)
       invalidateWorkspaceCache(file.newUri)
-    }))
+    })),
+    new vscode.Disposable(disposeWorkspaceCache)
   )
 }

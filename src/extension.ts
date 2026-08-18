@@ -158,6 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
   )
   context.subscriptions.push(
     helloWorldCommand,
+    providerSecrets,
     inlineProviderRegistration,
     inlineProvider,
     toggleInlineCommand,

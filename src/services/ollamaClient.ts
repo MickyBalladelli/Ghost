@@ -246,6 +246,10 @@ export class OllamaClient {
     )
   }
 
+  dispose(): void {
+    this.transport.dispose()
+  }
+
   private authorizationHeaders(apiKey = this.apiKeyProvider?.()): Record<string, string> {
     return buildOpenAiAuthenticationHeaders(apiKey, this.openAiTransport ?? {
       apiKeyHeader: 'Authorization',

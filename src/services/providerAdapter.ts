@@ -64,6 +64,7 @@ export interface ProviderClient {
   streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string>
   streamChatEvents?(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
   fetchFimCompletion?(options: FimCompletionOptions): Promise<string>
+  dispose?(): void
 }
 
 export interface ProviderAdapter {

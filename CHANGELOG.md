@@ -45,6 +45,7 @@ All notable changes to this extension are documented here.
 - Add shared Ghost error codes and error classes across provider, tool, persistence, approval, and UI boundaries.
 - Add Ghost settings schema versioning with activation-time migrations for legacy approval and debug settings.
 - Add injectable runtime dependencies for clocks, process runners, filesystems, storage, webview messaging, and local tool execution.
+- Add disposal ownership for Ghost state, request orchestration, provider transports, provider clients, secrets, workspace caches, and view lifecycle.
 
 ## 1.1.17 - 2026-08-18
 

@@ -92,6 +92,18 @@ export class LlmFactory {
     this.mlxDetectionComplete = false
   }
 
+  dispose(): void {
+    const clients = new Set<ProviderClient>([
+      this.clients.ollamaClient,
+      ...(this.clients.mlxClient ? [this.clients.mlxClient] : []),
+      ...(this.clients.openaiCompatibleClient ? [this.clients.openaiCompatibleClient] : [])
+    ])
+    for (const client of clients) {
+      client.dispose?.()
+    }
+    this.adapters.clear()
+  }
+
   private getMlxClient(): LlmClient {
     if (this.clients.mlxClient) {
       return this.clients.mlxClient

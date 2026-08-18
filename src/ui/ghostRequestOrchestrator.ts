@@ -22,4 +22,8 @@ export class GhostRequestOrchestrator<T> {
     this.activeRequestByConversation.clear()
     this.completedRequests.clear()
   }
+
+  dispose(): void {
+    this.clear()
+  }
 }

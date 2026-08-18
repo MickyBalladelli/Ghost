@@ -142,7 +142,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Define error classes and error codes shared by providers, tools, persistence, approvals, and UI.
 - [x] Add settings schema versioning and migrations before adding more configuration.
 - [x] Add dependency injection for providers, filesystem, clock, process runner, storage, and webview messaging so core behavior can be tested without VS Code.
-- [ ] Add `dispose` methods and ownership rules for every long-lived resource.
+- [x] Add `dispose` methods and ownership rules for every long-lived resource.
 
 ## P2 — testing and quality
 

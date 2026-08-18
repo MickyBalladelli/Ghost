@@ -32,6 +32,16 @@ export class ProviderHttpTransport {
     private readonly agentFactory?: ProviderAgentFactory
   ) {}
 
+  dispose(): void {
+    for (const agent of this.agents.values()) {
+      if (typeof agent === 'object' && agent !== null && 'destroy' in agent && typeof agent.destroy === 'function') {
+        agent.destroy()
+      }
+    }
+    this.agents.clear()
+    this.lastDiagnostics = undefined
+  }
+
   private agentFor(endpoint: string, init: RequestInit, options: ProviderTransportOptions): RequestAgent | undefined {
     if (options.agent) {
       return options.agent

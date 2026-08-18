@@ -8,7 +8,7 @@ const SECRET_KEYS: Record<GhostProvider, string> = {
   'openai-compatible': 'ghost.providerKey.openai-compatible'
 }
 
-export class ProviderSecrets {
+export class ProviderSecrets implements vscode.Disposable {
   private readonly values = new Map<GhostProvider, string>()
 
   constructor(private readonly storage: vscode.SecretStorage) {}
@@ -39,5 +39,9 @@ export class ProviderSecrets {
   async clear(provider: GhostProvider): Promise<void> {
     await this.storage.delete(SECRET_KEYS[provider])
     this.values.delete(provider)
+  }
+
+  dispose(): void {
+    this.values.clear()
   }
 }
