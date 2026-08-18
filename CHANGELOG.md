@@ -13,6 +13,7 @@ All notable changes to this extension are documented here.
 - Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
 - Add shared provider HTTP transport diagnostics with keep-alive agents, timeout, abort, and retry handling for local and profiled providers.
 - Cache workspace context, file reads, directory listings, model discovery, and provider health with event-based invalidation.
+- Prioritize active files, diagnostics, unsaved changed files, attachments, user-mentioned files, and workspace search matches in model context.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18

@@ -123,7 +123,10 @@ const compactText = (text: string, maxTokens: number, marker = '[Context compact
 const contextSectionPriority = (section: string): number => {
   if (/^User request:/i.test(section)) return 100
   if (/^Active file:/i.test(section)) return 95
+  if (/^Diagnostics:/i.test(section)) return 93
+  if (/^Changed files:/i.test(section)) return 90
   if (/diff|error|failed|verification|changed externally/i.test(section)) return 90
+  if (/^User-mentioned files:/i.test(section)) return 88
   if (/^Additional prompt context:/i.test(section)) return 85
   if (/^Attached file:/i.test(section)) return 75
   if (/@workspace|^Workspace:/i.test(section)) return 50
@@ -726,6 +729,103 @@ async function readTextFile(uri: vscode.Uri, range?: vscode.Range): Promise<stri
   }
 }
 
+function getDiagnosticsContext(maxContextTokens: number): string {
+  const activeUri = vscode.window.activeTextEditor?.document.uri.toString()
+  const diagnostics = vscode.languages.getDiagnostics()
+    .flatMap(([uri, entries]) => entries
+      .filter(diagnostic => diagnostic.severity === vscode.DiagnosticSeverity.Error || diagnostic.severity === vscode.DiagnosticSeverity.Warning)
+      .map(diagnostic => ({
+        uri,
+        diagnostic,
+        active: uri.toString() === activeUri
+      })))
+    .sort((left, right) => Number(right.active) - Number(left.active) || left.uri.fsPath.localeCompare(right.uri.fsPath))
+    .slice(0, 40)
+
+  if (diagnostics.length === 0) {
+    return ''
+  }
+
+  const lines = diagnostics.map(({ uri, diagnostic }) => {
+    const severity = diagnostic.severity === vscode.DiagnosticSeverity.Error ? 'error' : 'warning'
+    const line = diagnostic.range.start.line + 1
+    return severity + ' ' + uri.fsPath + ':' + line + ': ' + diagnostic.message
+  })
+  return redactSensitiveText(truncateContext('Diagnostics:\n' + lines.join('\n'), maxContextTokens))
+}
+
+function getChangedFilesContext(maxContextTokens: number): string {
+  const activeUri = vscode.window.activeTextEditor?.document.uri.toString()
+  const documents = vscode.workspace.textDocuments
+    .filter(document => document.isDirty && document.uri.toString() !== activeUri)
+    .slice(0, 8)
+  if (documents.length === 0) {
+    return ''
+  }
+
+  const perFileTokens = Math.max(256, Math.floor(maxContextTokens / documents.length))
+  const sections = documents.map(document => (
+    'File: ' + document.uri.fsPath + '\n\n' + truncateContext(document.getText(), perFileTokens)
+  ))
+  return redactSensitiveText('Changed files:\n\n' + sections.join('\n\n'))
+}
+
+function getPromptPathMentions(prompt: string): string[] {
+  const mentions = new Set<string>()
+  const pattern = /(?:^|[\s("' ])([A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)+|[A-Za-z0-9_.-]+\.[A-Za-z0-9_-]+)(?=$|[\s"'),;:])/g
+  for (const match of prompt.matchAll(pattern)) {
+    const value = match[1].replace(/\\/g, '/')
+    if (!value.startsWith('.') && !value.startsWith('http')) {
+      mentions.add(value)
+    }
+  }
+  return [...mentions].slice(0, 8)
+}
+
+async function getMentionedFileContext(
+  prompt: string,
+  maxContextTokens: number,
+  token: vscode.CancellationToken,
+  excludedPaths: Set<string> = new Set()
+): Promise<string> {
+  const mentions = getPromptPathMentions(prompt)
+  if (mentions.length === 0) {
+    return ''
+  }
+
+  const files = new Map<string, vscode.Uri>()
+  for (const mention of mentions) {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      if (token.isCancellationRequested) {
+        return ''
+      }
+      const pattern = new vscode.RelativePattern(folder, escapeGlobToken(mention))
+      const matches = await vscode.workspace.findFiles(pattern, '**/{node_modules,.git,out,dist}/**', 3, token)
+      for (const match of matches) {
+        if (!excludedPaths.has(match.fsPath)) {
+          files.set(match.toString(), match)
+        }
+      }
+    }
+  }
+
+  const selected = [...files.values()].slice(0, 8)
+  if (selected.length === 0) {
+    return ''
+  }
+  const perFileTokens = Math.max(256, Math.floor(maxContextTokens / selected.length))
+  const sections: string[] = []
+  for (const file of selected) {
+    const text = await readTextFile(file)
+    if (text !== undefined) {
+      sections.push('File: ' + file.fsPath + '\n\n' + truncateContext(text, perFileTokens))
+    }
+  }
+  return sections.length > 0
+    ? redactSensitiveText('User-mentioned files:\n\n' + sections.join('\n\n'))
+    : ''
+}
+
 async function findWorkspaceFiles(query: string, token: vscode.CancellationToken): Promise<vscode.Uri[]> {
   const folders = vscode.workspace.workspaceFolders ?? []
   const tokens = getWorkspaceQuery(query)
@@ -840,8 +940,33 @@ async function buildContextPrompt(
     )
   }
 
+  onProgress?.('Context: preparing diagnostics and changed files')
+  const diagnostics = getDiagnosticsContext(settings.maxContextTokens)
+  if (diagnostics) {
+    sections.push(diagnostics)
+  }
+  const changedFiles = getChangedFilesContext(settings.maxContextTokens)
+  if (changedFiles) {
+    sections.push(changedFiles)
+  }
+
+  onProgress?.('Context: preparing attachments')
+  const references = await getReferenceContext(request, settings.maxContextTokens, token)
+  if (references) {
+    sections.push(references)
+  }
+
   if (context.workspace !== false) {
     onProgress?.('Context: preparing workspace context')
+    const mentionedFiles = await getMentionedFileContext(
+      request.prompt,
+      settings.maxContextTokens,
+      token,
+      editor ? new Set([editor.filePath]) : new Set()
+    )
+    if (mentionedFiles) {
+      sections.push(mentionedFiles)
+    }
     sections.push(getWorkspaceContext(context.openFiles !== false, context.folders !== false, options.workspaceRoot))
   }
 
@@ -853,13 +978,6 @@ async function buildContextPrompt(
 
   if (workspaceSearch) {
     sections.push(workspaceSearch)
-  }
-
-  onProgress?.('Context: preparing attachments')
-  const references = await getReferenceContext(request, settings.maxContextTokens, token)
-
-  if (references) {
-    sections.push(references)
   }
 
   if (options.mode) {
