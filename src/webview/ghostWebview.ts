@@ -3581,6 +3581,10 @@ const handleConversationAction = (action: string, conversationId: string) => {
 }
 
 const processExtensionMessage = (message: GhostExtensionMessage) => {
+  if (message.type === 'protocol-negotiated') {
+    protocolClient.setNegotiatedVersion(message.negotiatedVersion)
+    return
+  }
   if (message.type === 'persisted-state') {
     if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
       const conversations = message.state.conversations.map(value => recoverInterruptedConversation(normalizeConversation(value as Partial<Conversation>)))
@@ -4165,8 +4169,11 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
     return false
   }
   const message = value as Record<string, unknown>
-  if (message.source !== 'ghost-extension' || message.version !== 1 || typeof message.type !== 'string') {
+  if (message.source !== 'ghost-extension' || !protocolClient.isSupportedVersion(message.version) || typeof message.type !== 'string') {
     return false
+  }
+  if (message.type === 'protocol-negotiated') {
+    return protocolClient.isSupportedVersion(message.negotiatedVersion) && Array.isArray(message.supportedVersions) && message.supportedVersions.length > 0
   }
   if (message.type === 'state') {
     return (message.status === 'ready' || message.status === 'offline') && typeof message.detail === 'string'

@@ -3,7 +3,9 @@ import type { CustomResponseFormat, OpenAiProfileId } from '../services/provider
 import type { GhostLogLevel } from '../config'
 import type { GhostModelAliases, GhostModelProfiles, GhostModelRole } from '../services/modelProfiles'
 
-export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
+export const GHOST_WEBVIEW_PROTOCOL_VERSION = 2 as const
+export const GHOST_SUPPORTED_PROTOCOL_VERSIONS = [1, GHOST_WEBVIEW_PROTOCOL_VERSION] as const
+export type GhostProtocolVersion = typeof GHOST_SUPPORTED_PROTOCOL_VERSIONS[number]
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
 export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = 8 * 1024 * 1024
 
@@ -162,7 +164,8 @@ export interface GhostPersistedState {
 
 interface GhostWebviewEnvelope {
   source: 'ghost-webview'
-  version: typeof GHOST_WEBVIEW_PROTOCOL_VERSION
+  version: GhostProtocolVersion
+  supportedVersions?: number[]
 }
 
 interface GhostRequestEnvelope extends GhostWebviewEnvelope {
@@ -201,7 +204,7 @@ export type GhostWebviewMessage =
 
 interface GhostExtensionEnvelope {
   source: 'ghost-extension'
-  version: typeof GHOST_WEBVIEW_PROTOCOL_VERSION
+  version: GhostProtocolVersion
 }
 
 export type GhostStreamEvent =
@@ -231,6 +234,7 @@ interface GhostRequestEnvelopeBase {
 }
 
 export type GhostExtensionMessage =
+  | (GhostExtensionEnvelope & { type: 'protocol-negotiated'; negotiatedVersion: GhostProtocolVersion; supportedVersions: GhostProtocolVersion[] })
   | (GhostExtensionEnvelope & { type: 'state'; status: GhostViewStatus; detail: string })
   | (GhostExtensionEnvelope & { type: 'reset' | 'clear' })
   | (GhostExtensionEnvelope & { type: 'persisted-state'; state: GhostPersistedState })
@@ -313,6 +317,22 @@ const isBoundedString = (value: unknown, maximum: number): value is string => (
 const isFiniteNumber = (value: unknown): value is number => (
   typeof value === 'number' && Number.isFinite(value)
 )
+
+export function negotiateGhostProtocolVersion(peerVersions: readonly number[]): GhostProtocolVersion | undefined {
+  return [...GHOST_SUPPORTED_PROTOCOL_VERSIONS]
+    .reverse()
+    .find(version => peerVersions.includes(version))
+}
+
+export function migrateGhostWebviewMessage(value: unknown): unknown {
+  if (!isRecord(value) || value.source !== 'ghost-webview' || value.version !== 1) {
+    return value
+  }
+  return {
+    ...value,
+    ...(value.type === 'ready' && value.supportedVersions === undefined ? { supportedVersions: [1] } : {})
+  }
+}
 
 const isPersistedState = (value: unknown): value is GhostPersistedState => (
   isRecord(value) &&
@@ -440,7 +460,8 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
 }
 
 export function decodeGhostWebviewMessage(value: unknown): GhostWebviewMessage | undefined {
-  return isGhostWebviewMessage(value) ? value : undefined
+  const migrated = migrateGhostWebviewMessage(value)
+  return isGhostWebviewMessage(migrated) ? migrated : undefined
 }
 
 export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMessage {
@@ -454,7 +475,11 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   } catch {
     return false
   }
-  if (!isRecord(value) || value.source !== 'ghost-webview' || value.version !== GHOST_WEBVIEW_PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
+  if (!isRecord(value) || value.source !== 'ghost-webview' || !GHOST_SUPPORTED_PROTOCOL_VERSIONS.includes(value.version as GhostProtocolVersion) || !isNonEmptyString(value.type)) {
+    return false
+  }
+
+  if (value.supportedVersions !== undefined && (!Array.isArray(value.supportedVersions) || value.supportedVersions.length === 0 || value.supportedVersions.length > GHOST_SUPPORTED_PROTOCOL_VERSIONS.length || !value.supportedVersions.every(version => typeof version === 'number' && GHOST_SUPPORTED_PROTOCOL_VERSIONS.includes(version as GhostProtocolVersion)))) {
     return false
   }
 

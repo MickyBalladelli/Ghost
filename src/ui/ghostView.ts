@@ -21,6 +21,7 @@ import { parseFileTransaction, prepareFileTransaction } from '../tools/transacti
 import { isExternalEndpoint, redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import {
   GHOST_WEBVIEW_PROTOCOL_VERSION,
+  GHOST_SUPPORTED_PROTOCOL_VERSIONS,
   GHOST_PERSISTENCE_SCHEMA_VERSION,
   GhostAttachment,
   GhostContinuation,
@@ -32,8 +33,10 @@ import {
   GhostToolDiffPreview,
   GhostViewStatus,
   GhostWebviewRequestOptions,
-  decodeGhostWebviewMessage
+  decodeGhostWebviewMessage,
+  negotiateGhostProtocolVersion
 } from './ghostProtocol'
+import type { GhostProtocolVersion } from './ghostProtocol'
 import type { GhostRequestStatus } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
@@ -74,6 +77,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly disposables: vscode.Disposable[] = []
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
+  private negotiatedProtocolVersion: GhostProtocolVersion = GHOST_WEBVIEW_PROTOCOL_VERSION
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
   private static readonly providerStatusCacheTtlMs = 30_000
@@ -181,6 +185,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.negotiatedProtocolVersion = GHOST_WEBVIEW_PROTOCOL_VERSION
     this.webviewLifecycle.attach(webviewView)
     webviewView.webview.options = {
       enableScripts: true,
@@ -2172,6 +2177,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     switch (message.type) {
       case 'ready':
+        this.negotiatedProtocolVersion = negotiateGhostProtocolVersion(message.supportedVersions ?? [message.version]) ?? GHOST_WEBVIEW_PROTOCOL_VERSION
+        this.postMessage({
+          source: 'ghost-extension',
+          version: GHOST_WEBVIEW_PROTOCOL_VERSION,
+          type: 'protocol-negotiated',
+          negotiatedVersion: this.negotiatedProtocolVersion,
+          supportedVersions: [...GHOST_SUPPORTED_PROTOCOL_VERSIONS]
+        })
         await this.sendPersistedState()
         this.postState()
         await this.sendControlsState()
@@ -2294,7 +2307,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
 
-    void this.view.webview.postMessage(redactSensitiveValue(message))
+    const safeMessage = redactSensitiveValue(message) as GhostExtensionMessage
+    void this.view.webview.postMessage({ ...safeMessage, version: this.negotiatedProtocolVersion })
   }
 
   private createMessage(type: 'reset' | 'clear'): GhostExtensionMessage {

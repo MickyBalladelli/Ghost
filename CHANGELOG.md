@@ -38,6 +38,7 @@ All notable changes to this extension are documented here.
 - Centralize file mutation validation, change creation, conflict checks, atomic writes, and readback verification for all file tools.
 - Add provider-neutral chat request, message, tool, response, vision, and stream types; keep MLX names as deprecated compatibility aliases only.
 - Add one Ghost state store for request lifecycle, conversations, settings, approvals, provider status, and persistence snapshots with state-change subscriptions.
+- Add webview/extension protocol version negotiation, legacy v1 compatibility, and persisted/message migration hooks.
 
 ## 1.1.17 - 2026-08-18
 
