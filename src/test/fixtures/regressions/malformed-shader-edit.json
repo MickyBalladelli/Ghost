@@ -1,0 +1,15 @@
+{
+  "path": "src/components/GPGPUOcean.tsx",
+  "edit": {
+    "path": "src/components/GPGPUOcean.tsx",
+    "hunks": [
+      {
+        "startLine": 0,
+        "endLine": 1,
+        "replacement": "uniform float waveStrength;",
+        "oldText": "uniform float waveHeight;"
+      }
+    ]
+  },
+  "expectedError": "invalid line bounds"
+}

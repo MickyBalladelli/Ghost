@@ -146,20 +146,20 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## P2 — testing and quality
 
-- [ ] Add fast pure unit tests for settings defaults/migrations, endpoint normalization, capability mapping, redaction, workspace paths, edit application, and tool result limits.
-- [ ] Add tests for chunked reads, line ranges, UTF-8/CRLF files, binary detection, large files, directory pagination, and no-op writes.
-- [ ] Add tests for edit conflicts, stale hashes, overlapping hunks, repeated edits, oscillating edits, multi-file rollback, and approval races.
-- [ ] Add tests for malformed compact names, raw multiline JSON, truncated JSON, multiple tool calls, unknown tools, invalid schemas, and output-only model replies.
-- [ ] Add tests that verify the 4096-token minimum tool budget and the 128-call safety boundary without making live provider requests.
-- [ ] Add OpenAI-compatible, native Ollama, MLX, and image request fixtures. Assert unsupported parameters are omitted, not merely ignored by the server.
-- [ ] Add fake-provider integration tests for read → edit → approve → verify, failure → retry, cancellation, empty output, and context compaction.
-- [ ] Add webview tests for keyboard navigation, focus traps, approval controls, failure colors/icons, live regions, history restore, and reduced motion.
-- [ ] Add property/fuzz tests for tool JSON parsing, edit hunks, protocol messages, redaction, and endpoint handling.
-- [ ] Add accessibility checks for every modal, button, status update, contrast mode, and keyboard path.
-- [ ] Separate fast tests from VS Code extension-host tests. Make CI run the fast suite on every change.
-- [ ] Add CI for compile, unit/integration tests, packaging, VSIX install smoke test, and supported OS versions.
-- [ ] Add dependency security checks and a policy for updating TypeScript, VS Code types, `node-fetch`, `vsce`, and test tooling.
-- [ ] Add regression fixtures from real failures: malformed shader edits, missing files, provider-empty output, failed apply, truncated tool arguments, and repeated same-file edits.
+- [x] Add fast pure unit tests for settings defaults/migrations, endpoint normalization, capability mapping, redaction, workspace paths, edit application, and tool result limits.
+- [x] Add tests for chunked reads, line ranges, UTF-8/CRLF files, binary detection, large files, directory pagination, and no-op writes.
+- [x] Add tests for edit conflicts, stale hashes, overlapping hunks, repeated edits, oscillating edits, multi-file rollback, and approval races.
+- [x] Add tests for malformed compact names, raw multiline JSON, truncated JSON, multiple tool calls, unknown tools, invalid schemas, and output-only model replies.
+- [x] Add tests that verify the 4096-token minimum tool budget and the 128-call safety boundary without making live provider requests.
+- [x] Add OpenAI-compatible, native Ollama, MLX, and image request fixtures. Assert unsupported parameters are omitted, not merely ignored by the server.
+- [x] Add fake-provider integration tests for read → edit → approve → verify, failure → retry, cancellation, empty output, and context compaction.
+- [x] Add webview tests for keyboard navigation, focus traps, approval controls, failure colors/icons, live regions, history restore, and reduced motion.
+- [x] Add property/fuzz tests for tool JSON parsing, edit hunks, protocol messages, redaction, and endpoint handling.
+- [x] Add accessibility checks for every modal, button, status update, contrast mode, and keyboard path.
+- [x] Separate fast tests from VS Code extension-host tests. Make CI run the fast suite on every change.
+- [x] Add CI for compile, unit/integration tests, packaging, VSIX install smoke test, and supported OS versions.
+- [x] Add dependency security checks and a policy for updating TypeScript, VS Code types, `node-fetch`, `vsce`, and test tooling.
+- [x] Add regression fixtures from real failures: malformed shader edits, missing files, provider-empty output, failed apply, truncated tool arguments, and repeated same-file edits.
 
 ## P2 — docs and release hygiene
 

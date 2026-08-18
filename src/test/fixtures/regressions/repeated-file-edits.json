@@ -1,0 +1,33 @@
+{
+  "first": {
+    "signature": "shader-file:line-42:waveHeight-to-waveStrength",
+    "fingerprint": "shader-file:line-42:waveHeight-to-waveStrength",
+    "ranges": [
+      { "startLine": 42, "endLine": 42 }
+    ],
+    "hunks": [
+      {
+        "startLine": 42,
+        "endLine": 42,
+        "oldText": "uniform float waveHeight;",
+        "replacement": "uniform float waveStrength;"
+      }
+    ]
+  },
+  "second": {
+    "signature": "shader-file:line-42:waveHeight-to-waveStrength",
+    "fingerprint": "shader-file:line-42:waveHeight-to-waveStrength",
+    "ranges": [
+      { "startLine": 42, "endLine": 42 }
+    ],
+    "hunks": [
+      {
+        "startLine": 42,
+        "endLine": 42,
+        "oldText": "uniform float waveHeight;",
+        "replacement": "uniform float waveStrength;"
+      }
+    ]
+  },
+  "expectedReason": "repeated or alternating edits"
+}

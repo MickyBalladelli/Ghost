@@ -5,6 +5,7 @@ import { applyGhostEdit, GhostEditHunk, parseGhostEdit } from './editWorkflow'
 import { readWorkspaceFile, sameWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
 import { resolveWorkspacePath } from './workspacePath'
 import { throwIfCancelled } from './cancellation'
+import { GhostFileSystem, vscodeFileSystem } from '../runtimeDependencies'
 
 export interface TransactionFileInput {
   path: string
@@ -74,12 +75,13 @@ export function parseFileTransaction(value: Record<string, unknown>): FileTransa
 export async function prepareFileTransaction(
   transaction: FileTransactionInput,
   expectedSnapshots?: Record<string, WorkspaceFileSnapshot>,
-  token?: vscode.CancellationToken
+  token?: vscode.CancellationToken,
+  filesystem: GhostFileSystem = vscodeFileSystem
 ): Promise<PreparedTransactionFile[]> {
   return Promise.all(transaction.edits.map(async edit => {
     throwIfCancelled(token)
     const uri = resolveWorkspacePath(edit.path)
-    const before = await readWorkspaceFile(uri, token)
+    const before = await readWorkspaceFile(uri, token, filesystem)
     const expected = expectedSnapshots?.[uri.fsPath]
       ?? (edit.expectedContent !== undefined ? { exists: true, content: edit.expectedContent } : undefined)
     if (expected && !sameWorkspaceFile(before, expected)) {
@@ -92,9 +94,9 @@ export async function prepareFileTransaction(
   }))
 }
 
-async function deleteIfPresent(uri: vscode.Uri): Promise<void> {
+async function deleteIfPresent(uri: vscode.Uri, filesystem: GhostFileSystem): Promise<void> {
   try {
-    await vscode.workspace.fs.delete(uri, { useTrash: false })
+    await filesystem.delete(uri, { useTrash: false })
   } catch (error) {
     if (!(error instanceof vscode.FileSystemError) || error.code !== 'FileNotFound') {
       throw error
@@ -102,36 +104,37 @@ async function deleteIfPresent(uri: vscode.Uri): Promise<void> {
   }
 }
 
-async function restoreFile(file: PreparedTransactionFile): Promise<void> {
-  const current = await readWorkspaceFile(file.uri)
+async function restoreFile(file: PreparedTransactionFile, filesystem: GhostFileSystem): Promise<void> {
+  const current = await readWorkspaceFile(file.uri, undefined, filesystem)
   if (!sameWorkspaceFile(current, { exists: true, content: file.after })) {
     throw new Error(`Cannot roll back ${file.path} because it changed during the transaction`)
   }
   if (!file.before.exists) {
-    await deleteIfPresent(file.uri)
+    await deleteIfPresent(file.uri, filesystem)
     return
   }
-  await atomicWriteFile(file.uri, Buffer.from(file.before.content, 'utf8'), current)
+  await atomicWriteFile(file.uri, Buffer.from(file.before.content, 'utf8'), current, undefined, filesystem)
 }
 
 export async function applyFileTransaction(
   transaction: FileTransactionInput,
   expectedSnapshots?: Record<string, WorkspaceFileSnapshot>,
-  token?: vscode.CancellationToken
+  token?: vscode.CancellationToken,
+  filesystem: GhostFileSystem = vscodeFileSystem
 ): Promise<PreparedTransactionFile[]> {
-  const prepared = await prepareFileTransaction(transaction, expectedSnapshots, token)
+  const prepared = await prepareFileTransaction(transaction, expectedSnapshots, token, filesystem)
   const changed = prepared.filter(file => !sameWorkspaceFile(file.before, { exists: true, content: file.after }))
   const applied: PreparedTransactionFile[] = []
 
   try {
     for (const file of changed) {
       throwIfCancelled(token)
-      await atomicWriteFile(file.uri, Buffer.from(file.after, 'utf8'), file.before, token)
+      await atomicWriteFile(file.uri, Buffer.from(file.after, 'utf8'), file.before, token, filesystem)
       applied.push(file)
     }
     for (const file of changed) {
       throwIfCancelled(token)
-      const current = await readWorkspaceFile(file.uri, token)
+      const current = await readWorkspaceFile(file.uri, token, filesystem)
       if (!sameWorkspaceFile(current, { exists: true, content: file.after })) {
         throw new Error(`Transaction verification failed for ${file.path}`)
       }
@@ -140,7 +143,7 @@ export async function applyFileTransaction(
   } catch (error) {
     for (const file of [...applied].reverse()) {
       try {
-        await restoreFile(file)
+        await restoreFile(file, filesystem)
       } catch (restoreError) {
         const message = restoreError instanceof Error ? restoreError.message : String(restoreError)
         throw new Error(`Transaction failed and rollback failed: ${message}`)

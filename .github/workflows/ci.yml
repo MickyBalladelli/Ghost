@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  fast-tests:
+    name: Compile and fast tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - run: npm run test:fast
+
+  dependency-security:
+    name: Dependency security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run security:audit
+
+  extension-host:
+    name: VS Code host tests (${{ matrix.os }})
+    needs: fast-tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - name: Run host tests on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:host
+      - name: Run host tests on macOS and Windows
+        if: runner.os != 'Linux'
+        run: npm run test:host
+
+  package-smoke:
+    name: Package and install VSIX
+    needs:
+      - fast-tests
+      - extension-host
+      - dependency-security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build VSIX
+        id: package
+        shell: bash
+        run: |
+          npm run package
+          VSIX_PATH="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -name '*.vsix' -print -quit)"
+          test -n "$VSIX_PATH"
+          echo "path=$VSIX_PATH" >> "$GITHUB_OUTPUT"
+      - name: Install VSIX in downloaded VS Code
+        run: node scripts/smokeVsix.js "${{ steps.package.outputs.path }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-vsix
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error

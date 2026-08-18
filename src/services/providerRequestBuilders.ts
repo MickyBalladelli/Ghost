@@ -63,9 +63,6 @@ export function buildMlxChatBody(options: ChatRequestOptions): Record<string, un
     ...(generation.stop?.length ? { stop: generation.stop } : {}),
     ...(generation.grammar ? { grammar: generation.grammar } : {}),
     max_tokens: generation.maxTokens,
-    ...(options.tools?.length ? { tools: options.tools } : {}),
-    ...(options.toolChoice ? { tool_choice: options.toolChoice } : {}),
-    ...(options.responseFormat ? { response_format: options.responseFormat } : {}),
     stream: true
   }
 }

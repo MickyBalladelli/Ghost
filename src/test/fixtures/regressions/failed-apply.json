@@ -1,0 +1,7 @@
+{
+  "path": "regression-failed-apply.ts",
+  "before": "const value = 'before'\n",
+  "after": "const value = 'after'\n",
+  "failOn": ".ghost-",
+  "expectedError": "Injected write failure"
+}

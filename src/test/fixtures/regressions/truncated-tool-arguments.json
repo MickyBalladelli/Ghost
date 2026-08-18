@@ -1,0 +1,4 @@
+{
+  "response": "{\"tool\":\"ghost_apply_edit\",\"arguments\":{\"path\":\"src/components/GPGPUOcean.tsx\"",
+  "expectedState": "truncated-json"
+}

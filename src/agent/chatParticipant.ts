@@ -25,6 +25,9 @@ import type { GhostModelRole } from '../services/modelProfiles'
 import { profileProtocol } from '../services/profiledProviderClient'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { createToolErrorResult, replaceToolResultText, ToolResult } from '../tools/toolResult'
+import { limitToolResultText } from '../tools/toolResultLimits'
+import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
+import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, MIN_TOOL_CALL_TOKENS, outputTokenBudget } from './budgetPolicy'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -48,22 +51,7 @@ const SYSTEM_PROMPT = [
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
-const MAX_TOOL_ROUNDS = GHOST_POLICY.agent.maxToolRounds
-const MIN_TOOL_CALL_TOKENS = GHOST_POLICY.agent.minToolCallTokens
-const TOOL_RESULT_CHARACTER_LIMITS = GHOST_POLICY.agent.toolResultCharacterLimits
 const REQUEST_BUDGET_LIMITS = GHOST_POLICY.agent.requestBudget
-
-interface EditRecord {
-  signature: string
-  fingerprint: string
-  ranges: Array<{ startLine: number; endLine: number }>
-  hunks: GhostEditHunk[]
-}
-
-interface FileEditState {
-  signatures: Set<string>
-  history: EditRecord[]
-}
 
 interface EditCost {
   changedLines: number
@@ -185,7 +173,7 @@ const compactHistoryMessage = (message: ChatMessage, maxTokens: number, tokenize
   return { ...message, content: compactText(message.content, maxTokens, marker, tokenizer) }
 }
 
-class ContextBudgetManager {
+export class ContextBudgetManager {
   private readonly inputTokenBudget: number
   private readonly tokenizer: ContextTokenizer
 
@@ -195,10 +183,7 @@ class ContextBudgetManager {
     toolsEnabled: boolean,
     tokenizer: ContextTokenizer = tokenizeContext
   ) {
-    const outputReserve = Math.max(
-      toolsEnabled ? MIN_TOOL_CALL_TOKENS : 512,
-      requestedOutputTokens ?? 0
-    )
+    const outputReserve = outputTokenBudget(requestedOutputTokens, toolsEnabled) ?? 512
     this.inputTokenBudget = Math.max(256, Math.floor(maxContextTokens) - outputReserve)
     this.tokenizer = tokenizer
   }
@@ -260,34 +245,6 @@ function summarizeToolResult(value: string): string {
 
 function isProviderConnectivityFailure(value: string): boolean {
   return /abort|connection refused|connection reset|econn|enotfound|etimedout|fetch failed|network|socket|timed out|timeout|502|503|504|temporarily unavailable|offline/i.test(value)
-}
-
-function toolResultContinuation(toolName: LocalToolCall['name'], value: string): string {
-  if (toolName === 'ghost_read_file') {
-    const existingHint = value.match(/\[File output truncated\.[\s\S]*?\]/)?.[0]
-    return existingHint ?? 'Read the next file chunk with ghost_read_file using startLine and endLine.'
-  }
-  if (toolName === 'ghost_list_directory') {
-    return 'Call ghost_list_directory on a narrower directory or use a non-recursive listing.'
-  }
-  if (toolName === 'ghost_run_terminal_command') {
-    return 'Run a narrower inspection command, such as head, tail, or a filtered search.'
-  }
-  return 'Inspect the affected file with ghost_read_file before continuing.'
-}
-
-function limitToolResult(toolName: LocalToolCall['name'], value: string): string {
-  const limit = TOOL_RESULT_CHARACTER_LIMITS[toolName]
-  if (value.length <= limit) {
-    return value
-  }
-  const bytes = Buffer.byteLength(value, 'utf8')
-  const metadata = `Tool result truncated for ${toolName}.\nbytes: ${bytes}\ncontinuation: ${toolResultContinuation(toolName, value)}\nhead:\n`
-  const tailLabel = '\n\ntail:\n'
-  const remainingCharacters = Math.max(256, limit - metadata.length - tailLabel.length - 40)
-  const headCharacters = Math.floor(remainingCharacters * 0.62)
-  const tailCharacters = Math.max(128, remainingCharacters - headCharacters)
-  return `${metadata}${value.slice(0, headCharacters)}${tailLabel}${value.slice(-tailCharacters)}`
 }
 
 function describesWorkspaceChange(value: string): boolean {
@@ -501,39 +458,6 @@ function noToolRecoveryMessage(state: ReturnType<typeof classifyLocalToolRespons
         ? 'the model returned invalid tool JSON'
         : 'the model described an edit without calling a workspace tool'
   return `Ghost could not complete the requested edit because ${reason} after ${retries} retries. No workspace change was made. Use Retry to send the request again, or Regenerate for a fresh model response.`
-}
-
-function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
-  return left.startLine <= right.endLine && right.startLine <= left.endLine
-}
-
-function isInverseEdit(previous: EditRecord | undefined, current: EditRecord): boolean {
-  if (!previous || previous.hunks.length === 0 || previous.hunks.length !== current.hunks.length) {
-    return false
-  }
-
-  return previous.hunks.every((previousHunk, index) => {
-    const currentHunk = current.hunks[index]
-    return previousHunk.startLine === currentHunk.startLine
-      && previousHunk.endLine === currentHunk.endLine
-      && previousHunk.oldText !== undefined
-      && currentHunk.oldText !== undefined
-      && previousHunk.replacement === currentHunk.oldText
-      && currentHunk.replacement === previousHunk.oldText
-  })
-}
-
-function getEditLoopReason(state: FileEditState, record: EditRecord): string | undefined {
-  if (state.history.some(previous => previous.fingerprint === record.fingerprint)) {
-    return 'repeated or alternating edits'
-  }
-  if (isInverseEdit(state.history.at(-1), record)) {
-    return 'an undo/reapply edit loop'
-  }
-  if (record.ranges.length > 0 && state.history.some(previous => previous.ranges.some(previousRange => record.ranges.some(range => rangesOverlap(previousRange, range))))) {
-    return 'overlapping edits'
-  }
-  return undefined
 }
 
 function getToolArgumentError(call: LocalToolCall): string | undefined {
@@ -1320,9 +1244,7 @@ export function createChatParticipantHandler(
       },
       userMessage
     ]
-    const outputTokens = toolsEnabled
-      ? Math.max(modelSettings.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
-      : modelSettings.maxTokens
+    const outputTokens = outputTokenBudget(modelSettings.maxTokens, toolsEnabled)
     const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, toolsEnabled)
     let contextCompactionReported = false
     const cancellation = createCancellationSignal(token)
@@ -1483,7 +1405,7 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (toolCallCount >= MAX_TOOL_ROUNDS) {
+        if (hasReachedToolCallLimit(toolCallCount)) {
           const shouldContinue = requestOptions.confirmContinue
             ? await requestOptions.confirmContinue(toolCallCount)
             : await vscode.window.showWarningMessage(
@@ -1624,7 +1546,7 @@ export function createChatParticipantHandler(
           return
         }
 
-        const limitedToolResult = limitToolResult(toolCall.name, toolOutcome.text)
+        const limitedToolResult = limitToolResultText(toolCall.name, toolOutcome.text)
         if (limitedToolResult !== toolOutcome.text) {
           toolOutcome = replaceToolResultText(toolOutcome, limitedToolResult, { truncated: true })
         }

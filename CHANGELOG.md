@@ -9,6 +9,11 @@ All notable changes to this extension are documented here.
 - Add built-in Coding, Balanced, and Creative model profiles with effective-value display and restore defaults.
 - Add a first-run setup flow with provider checks, model discovery, capability notes, and an optional test request.
 - Improve accessibility with VS Code theme variables, forced-colors styling, reduced-motion handling, screen-reader status updates, and modal keyboard focus trapping.
+- Add accessibility contract checks for modal semantics, button names, live status regions, contrast mode, focus styling, and keyboard paths.
+- Separate plain-Node fast tests from VS Code extension-host tests, with CI running compile and fast tests on every push and pull request.
+- Expand CI with VS Code host tests on Linux, macOS, and Windows, plus VSIX packaging, install smoke testing, and artifact upload.
+- Add dependency security auditing, grouped weekly Dependabot updates, and review policy for compiler, provider, packaging, and test tooling dependencies.
+- Add named regression fixtures for malformed shader edits, missing files, empty provider output, failed applies, truncated tool arguments, and repeated edits.
 - Reuse visible message elements during refreshes and centralize generated markdown markup through safe DOM fragments.
 - Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
 - Add shared provider HTTP transport diagnostics with keep-alive agents, timeout, abort, and retry handling for local and profiled providers.
@@ -43,9 +48,18 @@ All notable changes to this extension are documented here.
 - Add shared typed tool results with status, exit codes, changed files, output bytes, truncation, warnings, and retryability metadata.
 - Group tool, agent, provider, persistence, protocol, and context limits in one shared policy module.
 - Add shared Ghost error codes and error classes across provider, tool, persistence, approval, and UI boundaries.
+- Add file-tool tests for chunked reads, line ranges, UTF-8/CRLF files, binary detection, large files, directory pagination, and no-op writes.
+- Add edit-safety tests for stale conflicts, edit loops, multi-file rollback, and approval races.
+- Add parser tests for malformed and truncated tool calls, multiple calls, unknown names, invalid schemas, and output-only replies.
+- Add pure tests for the 4096-token tool budget minimum and 128-call safety boundary.
+- Add provider request fixtures for OpenAI-compatible, Ollama, MLX, and image payloads with unsupported fields omitted.
+- Add fake-provider integration tests for file edits, retries, cancellation, empty output, and context compaction.
+- Add webview accessibility tests for focus traps, approval shortcuts, status presentation, live regions, history, and reduced motion.
+- Add deterministic property and fuzz coverage for tool parsing, edits, protocol messages, redaction, and endpoints.
 - Add Ghost settings schema versioning with activation-time migrations for legacy approval and debug settings.
 - Add injectable runtime dependencies for clocks, process runners, filesystems, storage, webview messaging, and local tool execution.
 - Add disposal ownership for Ghost state, request orchestration, provider transports, provider clients, secrets, workspace caches, and view lifecycle.
+- Add fast helper tests for settings migrations, endpoints, provider capabilities, redaction, workspace paths, edits, and tool-result limits.
 
 ## 1.1.17 - 2026-08-18
 

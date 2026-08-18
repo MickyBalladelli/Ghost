@@ -90,7 +90,7 @@ async function resolveReadableFilePath(input: string, token: vscode.Cancellation
   throw new Error(`File '${input}' was not found. Retry with the workspace-relative path shown by ghost_list_directory.`)
 }
 
-function decodeText(bytes: Uint8Array): string {
+export function decodeText(bytes: Uint8Array): string {
   if (bytes.subarray(0, Math.min(bytes.length, 4096)).includes(0)) {
     throw new Error('Binary files are not supported by the text file tool')
   }
@@ -113,6 +113,10 @@ function assertNotCancelled(token: vscode.CancellationToken): void {
 }
 
 const { maxReadLines: MAX_READ_LINES, maxReadCharacters: MAX_READ_CHARACTERS, maxReadBytes: MAX_READ_BYTES, maxSafeReadBytes: MAX_SAFE_READ_BYTES } = GHOST_POLICY.file
+
+export function isReadTooLarge(sizeBytes: number): boolean {
+  return sizeBytes > MAX_SAFE_READ_BYTES
+}
 
 const VENDORED_DIRECTORY_NAMES = new Set([
   '.git',
@@ -342,7 +346,7 @@ function isUtf8Boundary(bytes: Uint8Array, offset: number): boolean {
   return offset === 0 || offset === bytes.length || (bytes[offset] & 0xc0) !== 0x80
 }
 
-function readFileWindow(content: string, bytes: Uint8Array, input: ReadFileInput, filePath: string): string {
+export function readFileWindow(content: string, bytes: Uint8Array, input: ReadFileInput, filePath: string): string {
   const lines = splitLines(content)
   const metadata = getFileMetadata(bytes, content)
   const mode = input.mode ?? (input.startByte !== undefined || input.endByte !== undefined
@@ -441,7 +445,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
       if (await isGitIgnored(uri, token)) {
         reasons.push('matched .gitignore')
       }
-      if (bytes.length > MAX_SAFE_READ_BYTES) {
+      if (isReadTooLarge(bytes.length)) {
         return blockedReadResult(uri.fsPath, [...reasons, `very large editor buffer (${bytes.length} bytes)`], 'Read a smaller editor selection or use ghost_search_workspace for exact text matches.')
       }
       if (reasons.length > 0 && !options.input.allowSpecialFile) {
@@ -460,7 +464,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     if (await isGitIgnored(uri, token)) {
       reasons.push('matched .gitignore')
     }
-    if (stat.size > MAX_SAFE_READ_BYTES) {
+    if (isReadTooLarge(stat.size)) {
       return blockedReadResult(
         uri.fsPath,
         [...reasons, `very large file (${stat.size} bytes)`],
@@ -621,6 +625,21 @@ async function collectDirectoryEntries(
   }
 }
 
+export interface DirectoryPage {
+  entries: string[]
+  hasMore: boolean
+  nextCursor: number
+}
+
+export function paginateDirectoryEntries(entries: string[], cursor: number, pageSize: number): DirectoryPage {
+  const page = entries.slice(cursor, cursor + pageSize)
+  return {
+    entries: page,
+    hasMore: entries.length > cursor + pageSize,
+    nextCursor: cursor + page.length
+  }
+}
+
 export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectoryInput> {
   async invoke(
     options: vscode.LanguageModelToolInvocationOptions<ListDirectoryInput>,
@@ -654,9 +673,8 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
       throw new Error('Tool invocation cancelled')
     }
 
-    const page = entries.slice(cursor, cursor + pageSize)
-    const hasMore = entries.length > cursor + pageSize
-    const nextCursor = cursor + page.length
+    const pageResult = paginateDirectoryEntries(entries, cursor, pageSize)
+    const { entries: page, hasMore, nextCursor } = pageResult
     const suffix = hasMore
       ? `\n\n[Directory page truncated. Continue with ghost_list_directory({"path":"${uri.fsPath}","recursive":${recursive},"pageSize":${pageSize},"maxDepth":${maxDepth},"cursor":"${nextCursor}"}).]`
       : ''

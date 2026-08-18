@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      compiler-and-vscode-types:
+        patterns:
+          - typescript
+          - '@types/node'
+          - '@types/vscode'
+      provider-runtime:
+        patterns:
+          - node-fetch
+          - '@types/node-fetch'
+          - http-proxy-agent
+          - https-proxy-agent
+      packaging-and-test-tooling:
+        patterns:
+          - '@vscode/vsce'
+          - '@vscode/test-electron'
+          - mocha
+          - '@types/mocha'
+          - eslint

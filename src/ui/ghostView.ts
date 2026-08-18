@@ -69,6 +69,7 @@ import { GHOST_RETRY_POLICIES, retryDelay } from '../agent/retryPolicy'
 import { effectiveGhostLogLevel, writeGhostLog } from '../logging/ghostLogger'
 import { GhostError, toGhostError } from '../ghostErrors'
 import { GhostClock, GhostStorage, GhostWebviewMessenger, systemClock } from '../runtimeDependencies'
+import { ApprovalRaceGuard } from './approvalRaceGuard'
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
@@ -78,6 +79,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly stateStore: GhostStateStore
   private readonly disposables: vscode.Disposable[] = []
   private readonly stagedEditChanges = new vscode.EventEmitter<void>()
+  private readonly approvalRaceGuard = new ApprovalRaceGuard()
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
   private readonly clock: GhostClock
   private readonly messenger?: GhostWebviewMessenger
@@ -1264,6 +1266,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         void this.restoreStagedEdit(staged)
       }
       this.pendingApprovals.delete(toolCallId)
+      this.approvalRaceGuard.end(toolCallId)
       pending.resolve(approval)
     }
   }
@@ -1290,6 +1293,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   ): void {
     const pending = this.pendingApprovals.get(toolCallId)
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
+      return
+    }
+    if (!this.approvalRaceGuard.begin(toolCallId)) {
       return
     }
     this.stateStore.notify('approval')
@@ -1319,23 +1325,24 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       const staged = this.stagedEdits.get(toolCallId)
       if (staged) {
         if (approval.decision === 'reject') {
-          void this.rejectStagedEdit(toolCallId)
+          void this.rejectStagedEdit(toolCallId).finally(() => this.approvalRaceGuard.end(toolCallId))
           return
         }
         if (approval.selectedHunkIndexes) {
           void this.restoreStagedEdit(staged).then(() => this.verifyExternalEdit(pending, approval)).catch(error => {
             pending.resolve({ decision: 'reject', reason: error instanceof Error ? error.message : 'Ghost could not prepare the selected hunks.' })
-          })
+          }).finally(() => this.approvalRaceGuard.end(toolCallId))
           return
         }
-        void this.acceptStagedApproval(pending, staged, approval)
+        void this.acceptStagedApproval(pending, staged, approval).finally(() => this.approvalRaceGuard.end(toolCallId))
         return
       }
-      void this.verifyExternalEdit(pending, approval)
+      void this.verifyExternalEdit(pending, approval).finally(() => this.approvalRaceGuard.end(toolCallId))
       return
     }
     this.pendingApprovals.delete(toolCallId)
     pending.resolve(approval)
+    this.approvalRaceGuard.end(toolCallId)
   }
 
   private async acceptStagedApproval(
@@ -2169,6 +2176,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     this.requestOrchestrator.clear()
     this.pendingApprovals.clear()
+    this.approvalRaceGuard.clear()
     for (const staged of this.stagedEdits.values()) {
       void this.restoreStagedEdit(staged)
     }
@@ -2349,6 +2357,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const toolTimelineUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewToolTimeline.js'))
     const composerUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewComposer.js'))
     const modalsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewModals.js'))
+    const accessibilityUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewAccessibility.js'))
     const iconUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'icon.png')
     )
@@ -4270,6 +4279,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     <script nonce="${nonce}" src="${toolTimelineUri}"></script>
     <script nonce="${nonce}" src="${composerUri}"></script>
     <script nonce="${nonce}" src="${modalsUri}"></script>
+    <script nonce="${nonce}" src="${accessibilityUri}"></script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`

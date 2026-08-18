@@ -37,6 +37,18 @@ import type {
 } from './ghostWebviewTypes'
 import type { GhostExtensionMessage } from '../ui/ghostProtocol'
 
+type GhostHistoryStoreApi = {
+  filterConversations: <T extends { title: string; messages: Array<{ content: string; bookmarked?: boolean }> }>(conversations: T[], query: string, bookmarksOnly: boolean) => T[]
+  matchingMessageCount: (conversations: Array<{ messages: Array<{ content: string; bookmarked?: boolean }> }>, query: string) => number
+}
+
+type GhostAccessibilityApi = {
+  focusWrapTarget: (focusableCount: number, activeIndex: number, backwards: boolean) => number | undefined
+  approvalKeyboardAction: (key: string, modifiers?: boolean) => 'next-hunk' | 'previous-hunk' | 'approve' | 'reject' | undefined
+  shouldAnimateStatus: (reducedMotion: boolean) => boolean
+  toolStatusPresentation: (status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed') => { className: string; icon: string }
+}
+
 const builtInModelProfiles: Record<string, ModelProfile> = {
   coding: { temperature: 0.2, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.1, maxContextTokens: 16384, maxTokens: 2048 },
   balanced: { temperature: 0.3, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.05, maxContextTokens: 8192, maxTokens: 1024 },
@@ -94,6 +106,7 @@ const ghostShell = (globalThis as typeof globalThis & { GhostShell: { createAppS
 const toolTimeline = (globalThis as typeof globalThis & { GhostToolTimeline: GhostToolTimelineApi }).GhostToolTimeline
 const composerStore = (globalThis as typeof globalThis & { GhostComposer: GhostComposerApi }).GhostComposer
 const modalStore = (globalThis as typeof globalThis & { GhostModal: GhostModalApi }).GhostModal
+const accessibility = (globalThis as typeof globalThis & { GhostAccessibility: GhostAccessibilityApi }).GhostAccessibility
 const createId = protocolClient.createId
 const escapeHtml = rendering.escapeHtml
 const escapeAttribute = rendering.escapeAttribute
@@ -1628,7 +1641,7 @@ const clearAnimatedStatusHighlights = (): void => {
 }
 
 const updateAnimatedStatusLabels = (timestamp: number): void => {
-  if (reducedMotionQuery.matches) {
+  if (!accessibility.shouldAnimateStatus(reducedMotionQuery.matches)) {
     clearAnimatedStatusHighlights()
     animatedStatusFrame = undefined
     return
@@ -1654,7 +1667,7 @@ const updateAnimatedStatusLabels = (timestamp: number): void => {
 }
 
 const ensureAnimatedStatusLabels = (): void => {
-  if (reducedMotionQuery.matches) {
+  if (!accessibility.shouldAnimateStatus(reducedMotionQuery.matches)) {
     clearAnimatedStatusHighlights()
     return
   }
@@ -1664,7 +1677,7 @@ const ensureAnimatedStatusLabels = (): void => {
 }
 
 const handleReducedMotionChange = (): void => {
-  if (reducedMotionQuery.matches) {
+  if (!accessibility.shouldAnimateStatus(reducedMotionQuery.matches)) {
     if (animatedStatusFrame !== undefined) {
       cancelAnimationFrame(animatedStatusFrame)
       animatedStatusFrame = undefined
@@ -2386,16 +2399,9 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
       ? ` — ${escapeHtml(part.toolCall.result.replace(/^Tool error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 240))}`
       : ''
-    const toolStatusClass = part.toolCall.status === 'completed'
-      ? 'tool-success'
-      : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
-        ? 'tool-failure'
-        : ''
-    const toolStatusIcon = part.toolCall.status === 'completed'
-      ? '✓'
-      : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
-        ? '✕'
-        : '•'
+    const toolStatus = accessibility.toolStatusPresentation(part.toolCall.status)
+    const toolStatusClass = toolStatus.className
+    const toolStatusIcon = toolStatus.icon
     const approvalCardClass = part.toolCall.requiresApproval && part.toolCall.status === 'requested' ? ' tool-approval-card' : ''
     return `<div class="message-progress tool-progress ${toolStatusClass}${approvalCardClass}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }
@@ -4362,35 +4368,33 @@ document.addEventListener('keydown', event => {
     const focusable = Array.from(activeModal.querySelectorAll<HTMLElement>('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])'))
       .filter(element => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
     if (focusable.length > 0) {
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        last.focus()
-        event.preventDefault()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        first.focus()
+      const activeIndex = focusable.indexOf(document.activeElement as HTMLElement)
+      const targetIndex = accessibility.focusWrapTarget(focusable.length, activeIndex, event.shiftKey)
+      if (targetIndex !== undefined) {
+        focusable[targetIndex].focus()
         event.preventDefault()
       }
     }
   }
   const approvalCard = (event.target as HTMLElement).closest<HTMLElement>('.tool-approval-card')
   if (approvalCard && !event.altKey && !event.metaKey && !event.ctrlKey) {
-    if (event.key === 'j' || event.key === 'ArrowDown') {
+    const approvalAction = accessibility.approvalKeyboardAction(event.key)
+    if (approvalAction === 'next-hunk') {
       moveApprovalHunk(approvalCard, 1)
       event.preventDefault()
       return
     }
-    if (event.key === 'k' || event.key === 'ArrowUp') {
+    if (approvalAction === 'previous-hunk') {
       moveApprovalHunk(approvalCard, -1)
       event.preventDefault()
       return
     }
-    if (event.key.toLowerCase() === 'a') {
+    if (approvalAction === 'approve') {
       approvalCard.querySelector<HTMLButtonElement>('[data-tool-action="approve"]')?.click()
       event.preventDefault()
       return
     }
-    if (event.key.toLowerCase() === 'r') {
+    if (approvalAction === 'reject') {
       approvalCard.querySelector<HTMLButtonElement>('[data-tool-action="reject"]')?.click()
       event.preventDefault()
       return
