@@ -2,12 +2,45 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.46 - 2026-08-18
+
+- Keep message action buttons out of the conversation rerender lookup so final replies cannot be replaced by Branch or Edit buttons.
+
+## 1.1.44 - 2026-08-18
+
+- Keep startup persistence from replacing state while a request is active.
+- Refresh message action buttons during live response updates.
+- Disable automatic conversation restoration so live messages are never replaced by saved state.
+- Ignore unmarked reset or clear messages so Ghost cannot silently remove conversation content.
+
+## 1.1.43 - 2026-08-18
+
+- Prevent a delayed startup persistence snapshot from replacing a live conversation and clearing a visible reply.
+- Keep startup persistence from replacing state while a request is active.
+- Refresh message action buttons during live response updates.
+
+## 1.1.42 - 2026-08-18
+
+- Detect hidden or whitespace-only provider output before accepting a reply.
+- Use a small no-tools request for ordinary conversation such as greetings.
+- Do not show a fallback completion record for ordinary chat replies.
+- Preserve visible assistant output during completion and rerender updates.
+- Keep completion records below the conversation output.
+- Ignore late empty persistence snapshots so completed test output cannot be wiped.
+- Do not save or replace conversation state when finishing first-run setup.
+- Do not write an empty webview state on every render when persistence is disabled.
+- Never replace a live transcript with an empty startup persistence snapshot.
+- Make the Send button use the same submit path as Enter.
+
 ## 1.1.28 - 2026-08-18
 
 - Make the initial model test a tool-free chat check without a completion-record warning.
 - Create a clean completion record when a completed response omits the bookkeeping tool call.
 - Show the initial test reply in the conversation before reopening setup.
 - Add a Ghost: Open setup command for reopening setup after closing it.
+- Keep the completion tool out of ordinary chat so simple questions receive a normal reply.
+- Retry once when a conversational model turn returns no visible text.
+- Detect hidden or whitespace-only provider output before accepting a reply.
 
 ## 1.1.27 - 2026-08-18
 

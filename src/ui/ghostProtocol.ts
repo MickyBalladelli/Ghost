@@ -237,7 +237,7 @@ interface GhostRequestEnvelopeBase {
 export type GhostExtensionMessage =
   | (GhostExtensionEnvelope & { type: 'protocol-negotiated'; negotiatedVersion: GhostProtocolVersion; supportedVersions: GhostProtocolVersion[] })
   | (GhostExtensionEnvelope & { type: 'state'; status: GhostViewStatus; detail: string })
-  | (GhostExtensionEnvelope & { type: 'reset' | 'clear' })
+  | (GhostExtensionEnvelope & { type: 'reset' | 'clear'; action: 'explicit-user-command' })
   | (GhostExtensionEnvelope & { type: 'open-first-run' })
   | (GhostExtensionEnvelope & { type: 'persisted-state'; state: GhostPersistedState })
   | (GhostExtensionEnvelope & {

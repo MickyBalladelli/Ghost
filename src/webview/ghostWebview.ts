@@ -328,29 +328,6 @@ const recoverInterruptedConversation = (conversation: Conversation): Conversatio
 }
 
 const getInitialState = (): GhostState => {
-  const stored = vscode.getState<Partial<GhostState>>()
-  if (
-    stored &&
-    Array.isArray(stored.conversations) &&
-    stored.conversations.length > 0 &&
-    typeof stored.activeConversationId === 'string'
-  ) {
-    const conversations = stored.conversations.map(conversation => recoverInterruptedConversation(normalizeConversation(conversation)))
-    const activeConversationId = conversations.some(conversation => conversation.id === stored.activeConversationId)
-      ? stored.activeConversationId
-      : conversations[0].id
-    migrateLegacyPromptHistory(conversations, activeConversationId, stored.promptHistory)
-    return {
-      schemaVersion: persistenceSchemaVersion,
-      conversations,
-      activeConversationId,
-      ...(Array.isArray(stored.promptHistory) ? { promptHistory: stored.promptHistory.filter(item => typeof item === 'string').slice(0, 100) } : {}),
-      ...(Array.isArray(stored.presets) ? { presets: stored.presets } : {}),
-      ...(typeof stored.showReasoning === 'boolean' ? { showReasoning: stored.showReasoning } : {}),
-      ...(stored.preferences ? { preferences: stored.preferences } : {})
-    }
-  }
-
   const conversation = createConversation()
   return {
     schemaVersion: persistenceSchemaVersion,
@@ -727,18 +704,10 @@ const createPersistedState = () => compactPersistedState({
 })
 
 const saveState = () => {
-  if (controls.enableConversationPersistence) {
-    vscode.setState(compactPersistedState(redactPersistedValue(state)) as GhostState)
-  } else {
-    vscode.setState({
-      schemaVersion: persistenceSchemaVersion,
-      conversations: [createConversation()],
-      activeConversationId: '',
-      promptHistory: [],
-      presets: [],
-      showReasoning: false
-    })
+  if (!controls.enableConversationPersistence) {
+    return
   }
+  vscode.setState(compactPersistedState(redactPersistedValue(state)) as GhostState)
   if (persistenceReady) {
     if (persistenceTimer !== undefined) {
       window.clearTimeout(persistenceTimer)
@@ -1959,6 +1928,32 @@ const addAction = (container: HTMLElement, label: string, action: string, messag
   container.append(button)
 }
 
+const syncMessageActions = (article: HTMLElement, message: ChatMessage): void => {
+  const actions = article.querySelector<HTMLElement>('.message-actions')
+  if (!actions) {
+    return
+  }
+  actions.replaceChildren()
+  addAction(actions, message.bookmarked ? 'Unbookmark' : 'Bookmark', 'toggle-bookmark', message.id)
+  addAction(actions, 'Branch', 'branch-message', message.id)
+  if (message.role === 'assistant') {
+    const stopped = requestIsStopped(message)
+    if (message.content) {
+      addAction(actions, 'Copy', 'copy', message.id)
+    }
+    if (!stopped && message.content) {
+      addAction(actions, 'Retry', 'retry', message.id)
+      addAction(actions, 'Regenerate', 'regenerate', message.id)
+    }
+    if (message.content) {
+      addAction(actions, 'Edit & resend', 'edit-resend', message.id)
+    }
+  }
+  if (message.role === 'user') {
+    addAction(actions, 'Edit', 'edit', message.id)
+  }
+}
+
 const appendCopyControl = (container: HTMLElement, text: string, label: string): void => {
   const button = document.createElement('button')
   button.type = 'button'
@@ -2130,26 +2125,7 @@ const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTML
     <div class="message-actions" aria-label="Message actions"></div>
   `)
   const actions = article.querySelector<HTMLElement>('.message-actions')
-  if (actions) {
-    addAction(actions, message.bookmarked ? 'Unbookmark' : 'Bookmark', 'toggle-bookmark', message.id)
-    addAction(actions, 'Branch', 'branch-message', message.id)
-  }
-  if (actions && message.role === 'assistant') {
-    const stopped = requestIsStopped(message)
-    if (message.content) {
-      addAction(actions, 'Copy', 'copy', message.id)
-    }
-    if (!stopped && message.content) {
-      addAction(actions, 'Retry', 'retry', message.id)
-      addAction(actions, 'Regenerate', 'regenerate', message.id)
-    }
-    if (message.content) {
-      addAction(actions, 'Edit & resend', 'edit-resend', message.id)
-    }
-  }
-  if (actions && message.role === 'user') {
-    addAction(actions, 'Edit', 'edit', message.id)
-  }
+  if (actions) syncMessageActions(article, message)
   addMessageCopyControls(article, message)
   return article
 }
@@ -2458,7 +2434,8 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   }
   const body = element.querySelector<HTMLElement>('.message-body')
   const status = element.querySelector<HTMLElement>('.message-state')
-  if (body && body.dataset.deferredMarkdown !== 'true') {
+  const hasRenderedOutput = Boolean(body?.textContent?.trim())
+  if (body && body.dataset.deferredMarkdown !== 'true' && (message.content.trim() || !hasRenderedOutput)) {
     const showThinkingPlaceholder = message.role === 'assistant' && (
       message.status === 'streaming' ||
       ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
@@ -2504,6 +2481,7 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
     if (actions) insertMarkupBefore(actions, requestActionCard)
   }
   element.classList.toggle('error', message.status === 'error')
+  syncMessageActions(element, message)
   addMessageCopyControls(element, message)
   ensureAnimatedStatusLabels()
 }
@@ -2528,7 +2506,9 @@ const lazyMessageObserver = typeof IntersectionObserver === 'undefined'
         message.status === 'streaming' ||
         ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
       )
-      body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
+      if (message.content.trim() || !body.textContent?.trim()) {
+        body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
+      }
       lazyMessageObserver?.unobserve(element)
     }
   }, { root: messagesElement, rootMargin: '600px 0px' })
@@ -2617,21 +2597,29 @@ const createCompletionRecordElement = (record: CompletionRecord): HTMLElement =>
   return element
 }
 
+const reconcileMessagePane = (fragment: DocumentFragment): void => {
+  const desiredNodes = Array.from(fragment.childNodes)
+  desiredNodes.forEach((node, index) => {
+    const current = messagesElement.childNodes[index]
+    if (current !== node) {
+      messagesElement.insertBefore(node, current ?? null)
+    }
+  })
+  while (messagesElement.childNodes.length > desiredNodes.length) {
+    messagesElement.lastChild?.remove()
+  }
+}
+
 const renderMessages = (forceScroll: boolean) => {
   const conversation = getActiveConversation()
   const previousScrollTop = messagesElement.scrollTop
   const existingMessages = new Map(
-    Array.from(messagesElement.querySelectorAll<HTMLElement>('[data-message-id]'))
+    Array.from(messagesElement.children)
+      .filter((element): element is HTMLElement => element instanceof HTMLElement && element.matches('article.message[data-message-id]'))
       .map(element => [element.dataset.messageId, element] as const)
       .filter((entry): entry is readonly [string, HTMLElement] => Boolean(entry[0]))
   )
   const fragment = document.createDocumentFragment()
-  if (conversation.taskPlan) {
-    fragment.append(createTaskPlanElement(conversation.taskPlan))
-  }
-  if (conversation.completionRecord) {
-    fragment.append(createCompletionRecordElement(conversation.completionRecord))
-  }
   if (conversation.messages.length === 0) {
     fragment.append(createMarkupFragment(stateCard()))
   } else {
@@ -2655,7 +2643,13 @@ const renderMessages = (forceScroll: boolean) => {
       }
     }
   }
-  messagesElement.replaceChildren(fragment)
+  if (conversation.taskPlan) {
+    fragment.append(createTaskPlanElement(conversation.taskPlan))
+  }
+  if (conversation.completionRecord) {
+    fragment.append(createCompletionRecordElement(conversation.completionRecord))
+  }
+  reconcileMessagePane(fragment)
   observeDeferredMessages()
   if (!forceScroll && !userIsAtBottom) {
     requestAnimationFrame(() => {
@@ -3296,221 +3290,10 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'persisted-state') {
-    if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
-      const conversations = message.state.conversations.map(value => recoverInterruptedConversation(normalizeConversation(value as Partial<Conversation>)))
-      state = {
-        schemaVersion: persistenceSchemaVersion,
-        conversations,
-        activeConversationId: conversations.some(conversation => conversation.id === message.state.activeConversationId)
-          ? message.state.activeConversationId as string
-          : conversations[0].id,
-        promptHistory: message.state.promptHistory?.filter(item => typeof item === 'string').slice(0, 100),
-        presets: message.state.presets as PromptPreset[] | undefined,
-        showReasoning: message.state.showReasoning === true,
-        preferences: message.state.preferences as Partial<ControlSettings> & Partial<UiPreferences> | undefined
-      }
-      migrateLegacyPromptHistory(conversations, state.activeConversationId, message.state.promptHistory)
-      state.promptHistory = state.conversations.find(conversation => conversation.id === state.activeConversationId)?.promptHistory ?? []
-      showReasoning = state.showReasoning === true
-      const preferences = message.state.preferences ?? {}
-      if (preferences.provider === 'ollama' || preferences.provider === 'mlx-vlm' || preferences.provider === 'openai-compatible') {
-        controls.provider = preferences.provider
-      }
-      if (typeof preferences.chatModel === 'string' && preferences.chatModel.trim()) {
-        controls.chatModel = preferences.chatModel
-      }
-      if (typeof preferences.autocompleteModel === 'string' && preferences.autocompleteModel.trim()) {
-        controls.autocompleteModel = preferences.autocompleteModel
-      }
-      if (typeof preferences.modelProfile === 'string') {
-        controls.modelProfile = preferences.modelProfile
-      }
-      if (typeof preferences.maxContextTokens === 'number' && Number.isFinite(preferences.maxContextTokens)) {
-        controls.maxContextTokens = Math.max(1, Math.floor(preferences.maxContextTokens))
-      }
-      if (typeof preferences.temperature === 'number' && Number.isFinite(preferences.temperature)) {
-        controls.temperature = Math.min(2, Math.max(0, preferences.temperature))
-      }
-      if (typeof preferences.topP === 'number' && Number.isFinite(preferences.topP)) {
-        controls.topP = Math.min(1, Math.max(0, preferences.topP))
-      }
-      if (typeof preferences.topK === 'number' && Number.isFinite(preferences.topK)) {
-        controls.topK = Math.max(0, Math.floor(preferences.topK))
-      }
-      if (typeof preferences.minP === 'number' && Number.isFinite(preferences.minP)) {
-        controls.minP = Math.min(1, Math.max(0, preferences.minP))
-      }
-      if (typeof preferences.presencePenalty === 'number' && Number.isFinite(preferences.presencePenalty)) {
-        controls.presencePenalty = Math.min(2, Math.max(-2, preferences.presencePenalty))
-      }
-      if (typeof preferences.repeatPenalty === 'number' && Number.isFinite(preferences.repeatPenalty)) {
-        controls.repeatPenalty = Math.min(3, Math.max(0, preferences.repeatPenalty))
-      }
-      if (preferences.responseLength === 'short' || preferences.responseLength === 'balanced' || preferences.responseLength === 'long' || preferences.responseLength === 'unlimited') {
-        controls.responseLength = preferences.responseLength
-      }
-      if (preferences.mode === 'ask' || preferences.mode === 'edit' || preferences.mode === 'agent' || preferences.mode === 'explain' || preferences.mode === 'inline') {
-        controls.mode = preferences.mode
-      }
-      if (preferences.autoAcceptScope === 'confirm' || preferences.autoAcceptScope === 'one-edit' || preferences.autoAcceptScope === 'current-file' || preferences.autoAcceptScope === 'request' || preferences.autoAcceptScope === 'session' || preferences.autoAcceptScope === 'workspace' || preferences.autoAcceptScope === 'always') {
-        controls.fileEditApproval = preferences.autoAcceptScope
-      } else if (preferences.fileEditApproval === 'confirm' || preferences.fileEditApproval === 'auto') {
-        controls.fileEditApproval = preferences.fileEditApproval === 'auto' ? 'always' : 'confirm'
-      }
-      if (typeof preferences.enableConversationPersistence === 'boolean') {
-        controls.enableConversationPersistence = preferences.enableConversationPersistence
-      }
-      if (typeof preferences.ollamaUrl === 'string') {
-        controls.ollamaUrl = preferences.ollamaUrl
-      }
-      if (typeof preferences.mlxUrl === 'string') {
-        controls.mlxUrl = preferences.mlxUrl
-      }
-      if (typeof preferences.openaiUrl === 'string') {
-        controls.openaiUrl = preferences.openaiUrl
-      }
-      if (preferences.openaiProfile === 'generic' || preferences.openaiProfile === 'anthropic' || preferences.openaiProfile === 'gemini' || preferences.openaiProfile === 'azure-openai' || preferences.openaiProfile === 'lm-studio' || preferences.openaiProfile === 'llama-cpp' || preferences.openaiProfile === 'vllm' || preferences.openaiProfile === 'litellm' || preferences.openaiProfile === 'custom') {
-        controls.openaiProfile = preferences.openaiProfile
-      }
-      if (typeof preferences.openaiApiVersion === 'string') {
-        controls.openaiApiVersion = preferences.openaiApiVersion
-      }
-      if (typeof preferences.openaiCustomModelsPath === 'string') {
-        controls.openaiCustomModelsPath = preferences.openaiCustomModelsPath
-      }
-      if (typeof preferences.openaiCustomChatPath === 'string') {
-        controls.openaiCustomChatPath = preferences.openaiCustomChatPath
-      }
-      if (typeof preferences.openaiCustomRequestTemplate === 'string') {
-        controls.openaiCustomRequestTemplate = preferences.openaiCustomRequestTemplate
-      }
-      if (preferences.openaiCustomResponseFormat === 'openai-sse' || preferences.openaiCustomResponseFormat === 'json') {
-        controls.openaiCustomResponseFormat = preferences.openaiCustomResponseFormat
-      }
-      if (typeof preferences.openaiApiKeyHeader === 'string') {
-        controls.openaiApiKeyHeader = preferences.openaiApiKeyHeader
-      }
-      if (typeof preferences.openaiApiKeyPrefix === 'string') {
-        controls.openaiApiKeyPrefix = preferences.openaiApiKeyPrefix
-      }
-      if (typeof preferences.openaiOrganizationHeader === 'string') {
-        controls.openaiOrganizationHeader = preferences.openaiOrganizationHeader
-      }
-      if (typeof preferences.openaiOrganization === 'string') {
-        controls.openaiOrganization = preferences.openaiOrganization
-      }
-      if (typeof preferences.openaiProjectHeader === 'string') {
-        controls.openaiProjectHeader = preferences.openaiProjectHeader
-      }
-      if (typeof preferences.openaiProject === 'string') {
-        controls.openaiProject = preferences.openaiProject
-      }
-      if (typeof preferences.openaiProxy === 'string') {
-        controls.openaiProxy = preferences.openaiProxy
-      }
-      if (typeof preferences.openaiNoProxy === 'string') {
-        controls.openaiNoProxy = preferences.openaiNoProxy
-      }
-      if (typeof preferences.openaiTlsRejectUnauthorized === 'boolean') {
-        controls.openaiTlsRejectUnauthorized = preferences.openaiTlsRejectUnauthorized
-      }
-      if (typeof preferences.openaiTlsCaFile === 'string') {
-        controls.openaiTlsCaFile = preferences.openaiTlsCaFile
-      }
-      if (typeof preferences.openaiTlsCertFile === 'string') {
-        controls.openaiTlsCertFile = preferences.openaiTlsCertFile
-      }
-      if (typeof preferences.openaiTlsKeyFile === 'string') {
-        controls.openaiTlsKeyFile = preferences.openaiTlsKeyFile
-      }
-      if (Array.isArray(preferences.toolAllowlist)) {
-        controls.toolAllowlist = preferences.toolAllowlist.filter((item): item is string => typeof item === 'string')
-      }
-      if (Array.isArray(preferences.toolAsklist)) {
-        controls.toolAsklist = preferences.toolAsklist.filter((item): item is string => typeof item === 'string')
-      }
-      if (Array.isArray(preferences.toolDenylist)) {
-        controls.toolDenylist = preferences.toolDenylist.filter((item): item is string => typeof item === 'string')
-      }
-      if (Array.isArray(preferences.terminalEnvironmentAllowlist)) {
-        controls.terminalEnvironmentAllowlist = preferences.terminalEnvironmentAllowlist
-          .filter((item): item is string => typeof item === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(item))
-      }
-      if (Array.isArray(preferences.terminalEnvironmentAsklist)) {
-        controls.terminalEnvironmentAsklist = preferences.terminalEnvironmentAsklist
-          .filter((item): item is string => typeof item === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(item))
-      }
-      if (typeof preferences.enableDebugLogging === 'boolean') {
-        controls.enableDebugLogging = preferences.enableDebugLogging
-      }
-      if (preferences.logLevel === 'off' || preferences.logLevel === 'error' || preferences.logLevel === 'warn' || preferences.logLevel === 'info' || preferences.logLevel === 'debug') {
-        controls.logLevel = preferences.logLevel
-      } else if (controls.enableDebugLogging) {
-        controls.logLevel = 'debug'
-      }
-      if (typeof preferences.composerHeight === 'number' && Number.isFinite(preferences.composerHeight)) {
-        composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
-      }
-      if (typeof preferences.promptRows === 'number' && Number.isFinite(preferences.promptRows)) {
-        promptRows = settingsStore.clampPromptRows(preferences.promptRows)
-      }
-      if (typeof preferences.promptHistoryLimit === 'number' && Number.isFinite(preferences.promptHistoryLimit)) {
-        uiPreferences.promptHistoryLimit = settingsStore.clampPromptHistoryLimit(preferences.promptHistoryLimit, defaultPromptHistoryLimit)
-      }
-      if (typeof preferences.assistantName === 'string') {
-        uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
-      }
-      if (typeof preferences.assistantAvatar === 'string') {
-        uiPreferences.assistantAvatar = preferences.assistantAvatar.slice(0, 4)
-      }
-      if (typeof preferences.accentColor === 'string' && /^#[0-9a-f]{6}$/i.test(preferences.accentColor)) {
-        uiPreferences.accentColor = preferences.accentColor
-      }
-      if (typeof preferences.compactLayout === 'boolean') {
-        uiPreferences.compactLayout = preferences.compactLayout
-      }
-      if (typeof preferences.showThinkingDetails === 'boolean') {
-        uiPreferences.showThinkingDetails = preferences.showThinkingDetails
-      }
-      if (typeof preferences.verboseToolDetails === 'boolean') {
-        uiPreferences.showToolProgress = preferences.verboseToolDetails
-      }
-      if (typeof preferences.showDiagnostics === 'boolean') {
-        uiPreferences.showDiagnostics = preferences.showDiagnostics
-      }
-      if (typeof preferences.autoContext === 'boolean') {
-        uiPreferences.autoContext = preferences.autoContext
-      }
-      if (typeof preferences.customSystemInstructions === 'string') {
-        uiPreferences.customSystemInstructions = preferences.customSystemInstructions.slice(0, 8000)
-      }
-      if (typeof preferences.workspaceRoot === 'string') {
-        uiPreferences.workspaceRoot = preferences.workspaceRoot
-      }
-      if (typeof preferences.firstRunSetupComplete === 'boolean') {
-        uiPreferences.firstRunSetupComplete = preferences.firstRunSetupComplete
-      }
-      if (typeof preferences.workspaceOnly === 'boolean') {
-        uiPreferences.workspaceOnly = preferences.workspaceOnly
-      }
-      uiPreferences.composerHeight = composerHeight
-      uiPreferences.promptRows = promptRows
-      trimPromptHistories()
-    } else if (!controls.enableConversationPersistence) {
-      state = {
-        schemaVersion: persistenceSchemaVersion,
-        conversations: [createConversation()],
-        activeConversationId: '',
-        promptHistory: [],
-        presets: [],
-        showReasoning: false
-      }
-      state.activeConversationId = state.conversations[0].id
-      showReasoning = false
+    if (persistenceReady) {
+      return
     }
     persistenceReady = true
-    render(false)
-    restoreDraft()
     return
   }
   if (message.type === 'state') {
@@ -3781,9 +3564,17 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     const status = message.status ?? 'failed'
     const completionRecord = normalizeCompletionRecord(message.completionRecord)
     const eventLog = normalizeRequestEventLog(message.eventLog)
-    if (completionRecord) {
-      conversation.completionRecord = completionRecord
-    } else if (request.setupTest) {
+    const workspaceChangedFiles = summaryChangedFiles(assistantMessage)
+    const workspaceCommandCount = summaryCommandCount(assistantMessage)
+    const usedWorkspaceTools = assistantMessage.parts.some(part => part.kind === 'tool') || workspaceChangedFiles.length > 0 || workspaceCommandCount > 0
+    const hasMeaningfulCompletionRecord = Boolean(completionRecord && (
+      usedWorkspaceTools ||
+      completionRecord.changedFiles.length > 0 ||
+      completionRecord.checksRun.length > 0 ||
+      completionRecord.failures.length > 0 ||
+      completionRecord.remainingWork.length > 0
+    ))
+    if (request.setupTest) {
       conversation.completionRecord = undefined
       if (status === 'completed') {
         const reply = assistantMessage.content.trim().replace(/\s+/g, ' ')
@@ -3794,14 +3585,18 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
         setupTestStatusElement.textContent = `Test failed: ${status}.`
       }
       setModalVisibility(firstRunModalElement, true)
-    } else {
+    } else if (completionRecord && hasMeaningfulCompletionRecord) {
+      conversation.completionRecord = completionRecord
+    } else if (status !== 'completed' || usedWorkspaceTools) {
       conversation.completionRecord = {
-        changedFiles: summaryChangedFiles(assistantMessage),
+        changedFiles: workspaceChangedFiles,
         checksRun: [],
         failures: status === 'completed' ? [] : [`Request ended before completion (${status}).`],
         remainingWork: status === 'completed' ? [] : ['Review the result and retry the request if needed.'],
         recordedAt: Date.now()
       }
+    } else {
+      conversation.completionRecord = undefined
     }
     request.status = status
     assistantMessage.requestStatus = status
@@ -3910,7 +3705,7 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
     return (message.status === 'ready' || message.status === 'offline') && typeof message.detail === 'string'
   }
   if (message.type === 'reset' || message.type === 'clear') {
-    return true
+    return message.action === 'explicit-user-command'
   }
   if (message.type === 'persisted-state') {
     const state = message.state as { schemaVersion?: unknown }
@@ -4374,7 +4169,6 @@ setupTestRequestElement.addEventListener('click', () => {
 })
 finishFirstRunElement.addEventListener('click', () => {
   uiPreferences.firstRunSetupComplete = true
-  saveState()
   setModalVisibility(firstRunModalElement, false)
 })
 document.getElementById('history')?.addEventListener('click', () => {
@@ -4646,6 +4440,9 @@ promptElement.addEventListener('keydown', event => {
 composerElement.addEventListener('submit', event => {
   event.preventDefault()
   submitPrompt(promptElement.value)
+})
+sendElement.addEventListener('click', () => {
+  composerElement.requestSubmit()
 })
 window.addEventListener('message', event => {
   if (event.origin === window.location.origin && isExtensionMessage(event.data)) {

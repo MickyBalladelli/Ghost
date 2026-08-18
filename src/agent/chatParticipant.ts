@@ -47,9 +47,10 @@ const SYSTEM_PROMPT = [
   'Read source rule: ghost_read_file needs source:"editor" for an open unsaved buffer or source:"disk" for the saved file. If the file is dirty and source is omitted, the tool pauses and asks you to choose. Never edit a file while its editor buffer has unsaved changes; ask the user to save or discard them first.',
   'Git tool: ghost_git_context({"operation":"status|diff|stagedDiff|branch|history","path":"optional relative or absolute workspace file path","maxEntries":100}) reads non-ignored workspace Git status, selected-file diffs, branch, or selected-file history. Use a path for diff, stagedDiff, and history when no active file is selected.',
   'Task plan tool: ghost_update_task_plan({"steps":[{"id":"step-1","title":"Do the work","checked":false}],"currentStep":"step-1","blockedReason":"optional","completionEvidence":["optional"]}) persists a bounded plan in the conversation. Use it for multi-step work and update checked steps as work finishes.',
-  'Completion tool: ghost_record_completion({"changedFiles":[],"checksRun":[],"failures":[],"remainingWork":[]}) records the required final structured completion record. Call it before the final answer on every request. List only checks actually run and work actually changed.',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
+
+const COMPLETION_RECORD_INSTRUCTION = 'Completion tool: ghost_record_completion({"changedFiles":[],"checksRun":[],"failures":[],"remainingWork":[]}) records the final structured completion record for workspace work. Call it before the final answer when you changed files, ran checks, or have remaining work. List only checks actually run and work actually changed.'
 
 const REQUEST_BUDGET_LIMITS = GHOST_POLICY.agent.requestBudget
 
@@ -249,6 +250,14 @@ function isProviderConnectivityFailure(value: string): boolean {
 
 function describesWorkspaceChange(value: string): boolean {
   return /\b(?:fix|edit|change|update|implement|create|write|remove|delete|add|replace|apply|modify|wire|refactor)\b/i.test(value)
+}
+
+function isLikelyConversationalPrompt(value: string): boolean {
+  const prompt = value.trim()
+  if (!prompt || prompt.length > 240 || describesWorkspaceChange(prompt)) {
+    return false
+  }
+  return !/\b(?:file|folder|workspace|project|repository|repo|code|bug|error|test|diagnostic|terminal|command|run|inspect|read|search|find|list|tool|function|class|module|api|extension)\b/i.test(prompt)
 }
 
 function isStaleEditConflict(value: string): boolean {
@@ -981,9 +990,10 @@ async function streamModelTurn(
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean; toolCall?: LocalToolCall }> {
+): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
   let generated = ''
   let modelCharacters = 0
+  let visibleCharacters = 0
   let decided = false
   let bufferingToolCall = false
   const toolCallAssembler = new LocalToolCallStreamAssembler()
@@ -1002,8 +1012,14 @@ async function streamModelTurn(
   }
 
   const emitVisibleChunk = (chunk: string): void => {
+    const emitMarkdown = (value: string): void => {
+      if (value.trim()) {
+        visibleCharacters += value.trim().length
+      }
+      response.markdown(value)
+    }
     if (showReasoning) {
-      response.markdown(chunk)
+      emitMarkdown(chunk)
       return
     }
     let remaining = chunk
@@ -1019,12 +1035,12 @@ async function streamModelTurn(
       }
       const opening = remaining.search(/<(?:think|analysis)>/i)
       if (opening < 0) {
-        response.markdown(remaining)
+        emitMarkdown(remaining)
         return
       }
       const visible = remaining.slice(0, opening)
       if (visible) {
-        response.markdown(visible)
+        emitMarkdown(visible)
       }
       if (!hiddenReasoningNotified) {
         response.progress('Safe progress: provider reasoning hidden')
@@ -1043,6 +1059,7 @@ async function streamModelTurn(
         streamed: false,
         modelTokens: Math.ceil(modelCharacters / 4),
         splitSuggested: false,
+        visibleText: visibleCharacters > 0,
         toolCall: nativeToolCall
       }
     }
@@ -1050,7 +1067,7 @@ async function streamModelTurn(
     const chunk = event.text
     modelCharacters += chunk.length
     if (token.isCancellationRequested) {
-      return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4), splitSuggested: false }
+      return { generated: '', streamed: false, modelTokens: Math.ceil(modelCharacters / 4), splitSuggested: false, visibleText: visibleCharacters > 0 }
     }
 
     if (bufferingToolCall) {
@@ -1060,7 +1077,8 @@ async function streamModelTurn(
           generated: toolCallAssembler.getText(),
           streamed: false,
           modelTokens: Math.ceil(modelCharacters / 4),
-          splitSuggested: update.splitSuggested
+          splitSuggested: update.splitSuggested,
+          visibleText: visibleCharacters > 0
         }
       }
       continue
@@ -1086,7 +1104,8 @@ async function streamModelTurn(
           generated: toolCallAssembler.getText(),
           streamed: false,
           modelTokens: Math.ceil(modelCharacters / 4),
-          splitSuggested: update.splitSuggested
+          splitSuggested: update.splitSuggested,
+          visibleText: visibleCharacters > 0
         }
       }
       continue
@@ -1113,7 +1132,8 @@ async function streamModelTurn(
             generated: toolCallAssembler.getText(),
             streamed: false,
             modelTokens: Math.ceil(modelCharacters / 4),
-            splitSuggested: update.splitSuggested
+            splitSuggested: update.splitSuggested,
+            visibleText: visibleCharacters > 0
           }
         }
       } else if (firstContent.startsWith('{') || firstContent.startsWith('<tool_call>')) {
@@ -1126,7 +1146,8 @@ async function streamModelTurn(
             generated: toolCallAssembler.getText(),
             streamed: false,
             modelTokens: Math.ceil(modelCharacters / 4),
-            splitSuggested: update.splitSuggested
+            splitSuggested: update.splitSuggested,
+            visibleText: visibleCharacters > 0
           }
         }
       } else if (firstContent) {
@@ -1148,6 +1169,7 @@ async function streamModelTurn(
     streamed: completedNativeToolCall ? false : decided && !bufferingToolCall,
     modelTokens: Math.ceil(modelCharacters / 4),
     splitSuggested: false,
+    visibleText: visibleCharacters > 0 || generated.trim().length > 0,
     ...(completedNativeToolCall ? { toolCall: completedNativeToolCall } : {})
   }
 }
@@ -1173,6 +1195,20 @@ export function createChatParticipantHandler(
     const requestStartedAt = Date.now()
     const settings = configuration.getSettings()
     const requestOptions = getRequestOptions(request)
+    const conversationalPrompt = isLikelyConversationalPrompt(request.prompt)
+    const contextOptions = conversationalPrompt
+      ? {
+          ...requestOptions,
+          context: {
+            workspace: false,
+            folders: false,
+            activeFile: false,
+            selection: false,
+            openFiles: false,
+            tools: false
+          }
+        }
+      : requestOptions
     const modelRole = requestOptions.modelRole ?? (requestOptions.mode === 'agent' ? 'agent' : 'chat')
     const modelSettings = resolveModelSettings(settings, modelRole, requestOptions.modelProfile, {
       provider: requestOptions.provider,
@@ -1205,18 +1241,20 @@ export function createChatParticipantHandler(
         return
       }
     }
-    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions, detail => response.progress(detail))
+    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, contextOptions, detail => response.progress(detail))
 
     if (token.isCancellationRequested) {
       return
     }
 
     const toolsEnabled = requestOptions.context?.tools !== false
-    const nativeToolCalling = toolsEnabled && (
+    const requestToolsEnabled = toolsEnabled && !conversationalPrompt
+    const nativeToolCalling = requestToolsEnabled && (
       modelSettings.provider === 'ollama' ||
       (modelSettings.provider === 'openai-compatible' && profileProtocol(settings.openaiProfile) === 'openai-chat')
     )
     const workspaceChangeRequested = describesWorkspaceChange(request.prompt)
+    const completionRecordEnabled = workspaceChangeRequested || requestOptions.mode === 'edit'
     if (!toolsEnabled && workspaceChangeRequested) {
       response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')
       return
@@ -1228,9 +1266,9 @@ export function createChatParticipantHandler(
         : workspaceChangeRequested
           ? '\n\nThe user directly requested a workspace change. Use tools to inspect and edit the real files. Do not answer with a plan. Start with ghost_read_file, then use ghost_apply_edit or ghost_write_file.'
           : ''
-    const baseSystemPrompt = !toolsEnabled
+    const baseSystemPrompt = !requestToolsEnabled
       ? 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
-      : `${SYSTEM_PROMPT}${workflowInstruction}`
+      : `${SYSTEM_PROMPT}${completionRecordEnabled ? ` ${COMPLETION_RECORD_INSTRUCTION}` : ''}${workflowInstruction}`
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
       : baseSystemPrompt
@@ -1244,8 +1282,8 @@ export function createChatParticipantHandler(
       },
       userMessage
     ]
-    const outputTokens = outputTokenBudget(modelSettings.maxTokens, toolsEnabled)
-    const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, toolsEnabled)
+    const outputTokens = outputTokenBudget(modelSettings.maxTokens, requestToolsEnabled)
+    const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, requestToolsEnabled)
     let contextCompactionReported = false
     const cancellation = createCancellationSignal(token)
     let finalStatus: 'ready' | 'offline' = 'ready'
@@ -1256,6 +1294,7 @@ export function createChatParticipantHandler(
       let toolCallCount = 0
       let missingToolRetries = 0
       let invalidToolRetries = 0
+      let emptyResponseRetries = 0
       let staleEditRetries = 0
       const staleEditRecoveryPaths = new Set<string>()
       let successfulWorkspaceChange = false
@@ -1304,7 +1343,14 @@ export function createChatParticipantHandler(
               ...(modelSettings.grammar ? { grammar: modelSettings.grammar } : {}),
               maxTokens: outputTokens
             },
-            ...(nativeToolCalling ? { tools: GHOST_NATIVE_TOOL_DEFINITIONS, toolChoice: 'auto' as const } : {}),
+            ...(requestToolsEnabled && nativeToolCalling
+              ? {
+                  tools: completionRecordEnabled
+                    ? GHOST_NATIVE_TOOL_DEFINITIONS
+                    : GHOST_NATIVE_TOOL_DEFINITIONS.filter(tool => tool.function.name !== 'ghost_record_completion'),
+                  toolChoice: 'auto' as const
+                }
+              : {}),
             ...(requestOptions.responseFormat
               ? { responseFormat: requestOptions.responseFormat }
               : (requestOptions.jsonMode ?? settings.jsonMode) && !nativeToolCalling
@@ -1315,7 +1361,7 @@ export function createChatParticipantHandler(
           response,
           token,
           requestOptions.showReasoning === true,
-          toolsEnabled
+          requestToolsEnabled
         )
 
         budget.modelTokens += turn.modelTokens
@@ -1373,8 +1419,21 @@ export function createChatParticipantHandler(
         const toolCall = turn.toolCall ?? parsedResponse.call
 
         if (!toolCall) {
+          if (!turn.visibleText && !workspaceChangeRequested && emptyResponseRetries < 1) {
+            emptyResponseRetries += 1
+            response.progress('The model returned no visible text. Asking for a plain answer.')
+            messages.push(
+              { role: 'assistant', content: generated },
+              { role: 'user', content: 'Your previous turn returned no visible text. Reply with a concise plain-text answer to the user. Do not call a tool because this request does not require workspace work.' }
+            )
+            continue
+          }
+          if (!turn.visibleText) {
+            response.markdown('The model returned no visible text. Retry the request.')
+            return
+          }
           const malformedToolCall = parsedResponse.state === 'malformed-json' || parsedResponse.state === 'truncated-json' || parsedResponse.state === 'unknown-tool'
-          const expectsWorkspaceTool = toolsEnabled && (malformedToolCall || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
+          const expectsWorkspaceTool = requestToolsEnabled && (malformedToolCall || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
           if (expectsWorkspaceTool && missingToolRetries < GHOST_RETRY_POLICIES.missingTool.maxRetries) {
             missingToolRetries += 1
             const retryMessage = parsedResponse.state === 'unknown-tool'

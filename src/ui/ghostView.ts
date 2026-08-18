@@ -2345,7 +2345,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return {
       source: 'ghost-extension',
       version: GHOST_WEBVIEW_PROTOCOL_VERSION,
-      type
+      type,
+      action: 'explicit-user-command'
     }
   }
 
