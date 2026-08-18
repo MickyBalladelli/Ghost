@@ -24,6 +24,7 @@ interface InlineCompletionCacheEntry {
 function createCancellationSignal(token: vscode.CancellationToken): {
   signal: AbortSignal
   dispose: () => void
+  cancel: () => void
 } {
   const controller = new AbortController()
   const subscription = token.onCancellationRequested(() => controller.abort())
@@ -34,6 +35,7 @@ function createCancellationSignal(token: vscode.CancellationToken): {
 
   return {
     signal: controller.signal,
+    cancel: () => controller.abort(),
     dispose: () => subscription.dispose()
   }
 }
@@ -137,13 +139,15 @@ function getInlineCompletionCacheKey(
   })
 }
 
-export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
+export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider, vscode.Disposable {
   private readonly configuration: GhostConfig
   private readonly fetchCompletion: FimCompletionFetcher
   private readonly apiKeyProvider?: () => string | undefined
   private readonly debounceMs: number
   private readonly completionCache = new Map<string, InlineCompletionCacheEntry>()
+  private readonly configurationListener: vscode.Disposable
   private requestSequence = 0
+  private activeCancellation?: { requestId: number; cancellation: ReturnType<typeof createCancellationSignal> }
 
   constructor(
     configuration: GhostConfig = ghostConfig,
@@ -155,6 +159,10 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     this.fetchCompletion = fetchCompletion
     this.debounceMs = debounceMs
     this.apiKeyProvider = apiKeyProvider
+    this.configurationListener = configuration.onDidChange(() => {
+      this.activeCancellation?.cancellation.cancel()
+      this.completionCache.clear()
+    })
   }
 
   async provideInlineCompletionItems(
@@ -175,25 +183,34 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     }
 
     const requestId = ++this.requestSequence
+    this.activeCancellation?.cancellation.cancel()
     const { prefix, suffix } = getDocumentPrefixAndSuffix(document, position)
 
     if (!prefix && !suffix) {
       return []
     }
 
+    const cancellation = createCancellationSignal(token)
+    this.activeCancellation = { requestId, cancellation }
     const cacheKey = getInlineCompletionCacheKey(document, position, prefix, suffix, settings, modelSettings)
     const cached = this.getCachedCompletion(cacheKey)
     if (cached) {
+      cancellation.dispose()
+      if (this.activeCancellation?.requestId === requestId) {
+        this.activeCancellation = undefined
+      }
       return [new vscode.InlineCompletionItem(cached, new vscode.Range(position, position))]
     }
 
     const debounceCompleted = await waitForDebounce(this.debounceMs, token)
 
     if (!debounceCompleted || requestId !== this.requestSequence || token.isCancellationRequested) {
+      cancellation.dispose()
+      if (this.activeCancellation?.requestId === requestId) {
+        this.activeCancellation = undefined
+      }
       return []
     }
-
-    const cancellation = createCancellationSignal(token)
 
     try {
       const useOpenAiCompatible = modelSettings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
@@ -233,6 +250,9 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       return []
     } finally {
       cancellation.dispose()
+      if (this.activeCancellation?.requestId === requestId) {
+        this.activeCancellation = undefined
+      }
     }
   }
 
@@ -263,6 +283,13 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       }
       this.completionCache.delete(oldestKey)
     }
+  }
+
+  dispose(): void {
+    this.configurationListener.dispose()
+    this.activeCancellation?.cancellation.cancel()
+    this.activeCancellation = undefined
+    this.completionCache.clear()
   }
 }
 

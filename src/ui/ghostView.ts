@@ -170,6 +170,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private view: vscode.WebviewView | undefined
   private readonly disposables: vscode.Disposable[] = []
   private readonly requests = new Map<string, GhostRequestState>()
+  private readonly activeRequestByConversation = new Map<string, string>()
   private readonly completedRequests = new Set<string>()
   private readonly pendingApprovals = new Map<string, PendingToolApproval>()
   private readonly stagedEdits = new Map<string, StagedEdit>()
@@ -216,7 +217,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.workspaceContextCache = undefined
       void this.sendControlsState()
     }
-    this.disposables.push(ghostConfig.onDidChange(() => {
+    this.disposables.push(ghostConfig.onDidChange((_settings, event) => {
+      if (event.affectsConfiguration('ghost')) {
+        this.cancelRequests()
+      }
       void this.sendControlsState()
     }), this.stagedEditChanges)
     this.disposables.push(
@@ -315,6 +319,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (this.disposed || this.requests.has(requestId) || this.completedRequests.has(requestId)) {
       return
     }
+    const previousRequestId = this.activeRequestByConversation.get(conversationId)
+    if (previousRequestId && previousRequestId !== requestId) {
+      this.cancel(previousRequestId, conversationId)
+    }
     this.debugLog('request started', { requestId, conversationId, promptLength: prompt.length })
 
     const cancellation = new vscode.CancellationTokenSource()
@@ -350,6 +358,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       eventLog: []
     }
     this.requests.set(requestId, request)
+    this.activeRequestByConversation.set(conversationId, requestId)
     this.postStreamEvent(requestId, request, {
       type: 'request-started'
     })
@@ -598,6 +607,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       clearTimeout(timeout)
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requests.delete(requestId)
+      if (this.activeRequestByConversation.get(conversationId) === requestId) {
+        this.activeRequestByConversation.delete(conversationId)
+      }
       this.completedRequests.add(requestId)
       if (this.completedRequests.size > 100) {
         const oldest = this.completedRequests.values().next().value
@@ -709,6 +721,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       eventLog: []
     }
     this.requests.set(requestId, request)
+    this.activeRequestByConversation.set(conversationId, requestId)
     this.postStreamEvent(requestId, request, { type: 'request-started' })
 
     try {
@@ -804,6 +817,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     } finally {
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requests.delete(requestId)
+      if (this.activeRequestByConversation.get(conversationId) === requestId) {
+        this.activeRequestByConversation.delete(conversationId)
+      }
       this.completedRequests.add(requestId)
       cancellation.dispose()
     }
@@ -2206,6 +2222,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       request.cancellation.dispose()
     }
     this.requests.clear()
+    this.activeRequestByConversation.clear()
     this.pendingApprovals.clear()
     for (const staged of this.stagedEdits.values()) {
       void this.restoreStagedEdit(staged)
