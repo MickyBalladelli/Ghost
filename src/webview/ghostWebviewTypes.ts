@@ -235,58 +235,6 @@ export interface GhostState {
   preferences?: Partial<ControlSettings> & Partial<UiPreferences>
 }
 
-export type GhostExtensionMessage =
-  | { source: 'ghost-extension'; version: 1; type: 'state'; status: GhostViewStatus; detail: string }
-  | { source: 'ghost-extension'; version: 1; type: 'reset' | 'clear' }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'controls-state'
-      settings: Omit<ControlSettings, 'fileEditApproval'> & { autoAcceptScope: AutoAcceptScope }
-      models: string[]
-      modelMetadata?: ModelMetadata[]
-      connection: 'online' | 'offline' | 'unknown'
-      context: Omit<ContextData, 'tools'>
-      tools: string[]
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'persisted-state'
-      state: { schemaVersion: number; conversations?: unknown[]; activeConversationId?: string; promptHistory?: string[]; presets?: unknown[]; showReasoning?: boolean; preferences?: Record<string, unknown> }
-    }
-  | { source: 'ghost-extension'; version: 1; type: 'file-picked'; attachments: Attachment[] }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'task-plan' | 'warning' | 'error' | 'request-completed'
-      requestId: string
-      conversationId: string
-      sequence: number
-      state?: RequestStatus
-      phase?: ProgressPhase
-      elapsedMs?: number
-      model?: string
-      provider?: GhostProvider
-      tokenCount?: number
-      tokensPerSecond?: number
-      startedAt?: number
-      detail?: string
-      delta?: string
-      tool?: string
-      toolCallId?: string
-      arguments?: Record<string, unknown>
-      requiresApproval?: boolean
-      diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
-      message?: string
-      resultStatus?: 'completed' | 'rejected' | 'failed'
-      plan?: TaskPlan
-      completionRecord?: CompletionRecord
-      eventLog?: RequestEvent[]
-      status?: 'completed' | 'cancelled' | 'failed'
-      stopReason?: StopReason
-    }
-
 export interface GhostWebviewApi {
   postMessage(message: unknown): void
   getState<T>(): T | undefined

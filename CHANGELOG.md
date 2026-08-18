@@ -34,6 +34,7 @@ All notable changes to this extension are documented here.
 - Extract tool approval policy, file-edit classification, and auto-accept scope rules into a dedicated module.
 - Extract provider cache-key and model-capability state helpers into a dedicated module.
 - Split Ghost view request registry, import/export helpers, and webview lifecycle state into dedicated modules.
+- Share the extension-message protocol type with the webview and remove its duplicated local message union.
 
 ## 1.1.17 - 2026-08-18
 

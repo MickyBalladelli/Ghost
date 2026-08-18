@@ -226,6 +226,8 @@ interface GhostRequestEnvelopeBase {
   tokenCount?: number
   tokensPerSecond?: number
   startedAt?: number
+  detail?: string
+  stopReason?: GhostStopReason
 }
 
 export type GhostExtensionMessage =

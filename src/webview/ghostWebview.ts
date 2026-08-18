@@ -9,7 +9,6 @@ import type {
   ControlSettings,
   Conversation,
   CustomResponseFormat,
-  GhostExtensionMessage,
   GhostMode,
   GhostProvider,
   GhostState,
@@ -36,6 +35,7 @@ import type {
   UiPreferences,
   WebviewRequestOptions
 } from './ghostWebviewTypes'
+import type { GhostExtensionMessage } from '../ui/ghostProtocol'
 
 const builtInModelProfiles: Record<string, ModelProfile> = {
   coding: { temperature: 0.2, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.1, maxContextTokens: 16384, maxTokens: 2048 },
