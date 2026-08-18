@@ -1804,6 +1804,40 @@ const escapeHtml = (value: string): string => value
 
 const escapeAttribute = (value: string): string => escapeHtml(value).replace(/\n/g, '&#10;')
 
+const animatedStatusLabel = (value: string): string => {
+  const characters = Array.from(value).map((character, index) => (
+    `<span class="animated-status-character" style="--character-index:${index}">${character === ' ' ? '&nbsp;' : escapeHtml(character)}</span>`
+  )).join('')
+  return `<span class="animated-status-label" aria-hidden="true">${characters}</span><span class="screen-reader-only">${escapeHtml(value)}</span>`
+}
+
+let animatedStatusFrame: number | undefined
+
+const updateAnimatedStatusLabels = (timestamp: number): void => {
+  const labels = Array.from(document.querySelectorAll<HTMLElement>('.animated-status-label'))
+  if (labels.length === 0) {
+    animatedStatusFrame = undefined
+    return
+  }
+  const stepMs = 110
+  for (const label of labels) {
+    const characters = Array.from(label.querySelectorAll<HTMLElement>('.animated-status-character'))
+    const cycleSteps = Math.max(1, characters.length * 2 - 2)
+    const phase = Math.floor(timestamp / stepMs) % cycleSteps
+    const highlightedIndex = phase < characters.length ? phase : cycleSteps - phase
+    characters.forEach((character, index) => {
+      character.classList.toggle('highlighted', index === highlightedIndex)
+    })
+  }
+  animatedStatusFrame = requestAnimationFrame(updateAnimatedStatusLabels)
+}
+
+const ensureAnimatedStatusLabels = (): void => {
+  if (animatedStatusFrame === undefined) {
+    animatedStatusFrame = requestAnimationFrame(updateAnimatedStatusLabels)
+  }
+}
+
 const safeLink = (value: string): string | undefined => {
   try {
     const url = new URL(value)
@@ -1879,7 +1913,7 @@ const isTableSeparator = (line: string): boolean => {
   return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
 }
 
-const renderMarkdown = (markdown: string): string => {
+const renderMarkdown = (markdown: string, showThinkingPlaceholder = true): string => {
   const lines = redactSensitiveText(markdown).slice(0, 120000).replace(/\r\n/g, '\n').split('\n')
   const output: string[] = []
   let paragraph: string[] = []
@@ -1975,7 +2009,7 @@ const renderMarkdown = (markdown: string): string => {
   }
   flushParagraph()
   closeList()
-  return output.join('') || '<p class="message-placeholder">Ghost is thinking…</p>'
+  return output.join('') || (showThinkingPlaceholder ? `<p class="message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</p>` : '')
 }
 
 const findMessage = (conversation: Conversation, messageId: string): ChatMessage | undefined => (
@@ -2087,10 +2121,14 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
       : message.stopReason
         ? stopReasonLabel(message.stopReason)
       : ''
+  const showThinkingPlaceholder = message.role === 'assistant' && (
+    message.status === 'streaming' ||
+    ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+  )
   article.innerHTML = `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     ${partSummary}
-    <div class="message-body">${renderMarkdown(message.content)}</div>
+    <div class="message-body">${renderMarkdown(message.content, showThinkingPlaceholder)}</div>
     ${responseStats}
     <div class="message-actions" aria-label="Message actions"></div>
   `
@@ -2233,6 +2271,9 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
     : ''
   const renderedTools = toolParts.map(part => {
+    const actionText = toolActionText(part.toolCall)
+    const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+    const animatedAction = requestActive && (part.toolCall.status === 'running' || (part.toolCall.status === 'requested' && part.toolCall.requiresApproval))
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
     const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
     const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''
@@ -2280,7 +2321,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       : part.toolCall.status === 'failed' || part.toolCall.status === 'rejected'
         ? '✕'
         : '•'
-    return `<div class="message-progress tool-progress ${toolStatusClass}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${escapeHtml(toolActionText(part.toolCall))}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+    return `<div class="message-progress tool-progress ${toolStatusClass}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
@@ -2309,7 +2350,11 @@ const updateMessageElement = (message: ChatMessage) => {
   const body = element.querySelector<HTMLElement>('.message-body')
   const status = element.querySelector<HTMLElement>('.message-state')
   if (body) {
-    body.innerHTML = renderMarkdown(message.content)
+    const showThinkingPlaceholder = message.role === 'assistant' && (
+      message.status === 'streaming' ||
+      ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+    )
+    body.innerHTML = renderMarkdown(message.content, showThinkingPlaceholder)
   }
   if (status) {
     status.textContent = message.status === 'streaming'
@@ -2333,6 +2378,7 @@ const updateMessageElement = (message: ChatMessage) => {
     element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', stats)
   }
   element.classList.toggle('error', message.status === 'error')
+  ensureAnimatedStatusLabels()
 }
 
 const scrollMessages = (force: boolean) => {
@@ -2359,7 +2405,6 @@ const updateComposer = () => {
   promptElement.disabled = busy
   composerElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('busy', busy)
-  statusFooterElement.classList.toggle('thinking', activeRequest?.status === 'thinking')
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
 }
 
@@ -2442,6 +2487,7 @@ const renderMessages = (forceScroll: boolean) => {
   } else {
     scrollMessages(forceScroll)
   }
+  ensureAnimatedStatusLabels()
 }
 
 const updateStatus = () => {
@@ -2462,7 +2508,9 @@ const updateStatus = () => {
       ? ` · ~${activeRequest.tokenCount} tok${activeRequest.tokensPerSecond ? ` · ~${activeRequest.tokensPerSecond.toFixed(1)} tok/s` : ''}`
       : ''
     const diagnostics = uiPreferences.showDiagnostics && activeRequest.latestDetail ? ` · ${activeRequest.latestDetail}` : ''
-    statusTextElement.textContent = `${statusLabels[activeRequest.status]} · ${activeRequest.model} · ${elapsed}${telemetry}${diagnostics}`
+    const label = statusLabels[activeRequest.status]
+    const suffix = ` · ${activeRequest.model} · ${elapsed}${telemetry}${diagnostics}`
+    statusTextElement.textContent = `${label}${suffix}`
     screenReaderStatusElement.textContent = activeRequest.latestDetail || statusLabels[activeRequest.status]
   } else if (viewStatus === 'offline') {
     statusTextElement.textContent = 'Offline'

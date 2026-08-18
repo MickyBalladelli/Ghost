@@ -3507,9 +3507,26 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         line-height: 1;
       }
 
-      .status-footer.thinking #status-text {
-        animation: ghost-thinking-pulse 1.2s ease-in-out infinite;
+      .status-footer.busy #status-text {
+        animation: ghost-status-pulse 1.2s ease-in-out infinite;
         display: inline-block;
+      }
+
+      .animated-status-label {
+        display: inline-block;
+        white-space: pre-wrap;
+      }
+
+      .animated-status-character {
+        display: inline-block;
+        font-weight: 400;
+        transition: color 80ms linear, font-weight 80ms linear, text-shadow 80ms linear;
+      }
+
+      .animated-status-character.highlighted {
+        color: var(--ghost-accent);
+        font-weight: 700;
+        text-shadow: 0 0 8px var(--ghost-accent);
       }
 
       .status-footer.offline .status-dot {
@@ -3539,23 +3556,31 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         }
       }
 
-      @keyframes ghost-thinking-pulse {
+      @keyframes ghost-status-pulse {
         0%,
         100% {
-          opacity: 0.62;
-          text-shadow: none;
+          opacity: 0.72;
         }
 
         50% {
           opacity: 1;
-          text-shadow: 0 0 8px color-mix(in srgb, var(--ghost-accent) 45%, transparent);
         }
       }
 
       @media (prefers-reduced-motion: reduce) {
         .status-footer.busy .thinking-ghost,
-        .status-footer.thinking #status-text {
+        .status-footer.busy #status-text {
           animation: none;
+        }
+
+        .animated-status-character {
+          transition: none;
+        }
+
+        .animated-status-character.highlighted {
+          color: inherit;
+          font-weight: 400;
+          text-shadow: none;
         }
       }
 

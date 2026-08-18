@@ -2,6 +2,15 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.12 - 2026-08-18
+
+- Make result-area and active tool labels highlight exactly one character at a time from left to right and back, while keeping the bottom status animation separate.
+- Remove the thinking placeholder when a request is cancelled or otherwise finished without a response.
+
+## 1.1.11 - 2026-08-18
+
+- Animate thinking and activity labels with a character-by-character light sweep in the result area, status footer, and active tool labels.
+
 ## 1.1.10 - 2026-08-18
 
 - Show model context/output limits, provider capabilities, sampling support, and ignored settings beside the model selector.
