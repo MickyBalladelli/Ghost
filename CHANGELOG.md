@@ -6,6 +6,8 @@ All notable changes to this extension are documented here.
 
 - Add a shared fill-in-the-middle provider contract with capability checks and provider endpoint routing.
 - Route supported generation controls through FIM requests for Ollama and OpenAI-compatible providers.
+- Show short live tool progress by default, with detailed arguments and results behind verbose tool progress.
+- Apply the character-sweep animation to every active requested or running tool action.
 
 ## 1.1.16 - 2026-08-18
 

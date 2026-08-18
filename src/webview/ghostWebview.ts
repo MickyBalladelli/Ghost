@@ -2224,6 +2224,33 @@ const readScopeText = (args: Record<string, unknown>, result?: string): string =
 }
 
 const toolActionText = (toolCall: ToolCall): string => {
+  const compactAction = toolCall.name === 'ghost_read_file'
+    ? 'Reading file'
+    : toolCall.name === 'ghost_search_workspace'
+      ? 'Searching workspace'
+      : toolCall.name === 'ghost_get_diagnostics'
+        ? 'Checking result'
+        : toolCall.name === 'ghost_git_context'
+          ? 'Checking Git context'
+          : toolCall.name === 'ghost_update_task_plan'
+            ? 'Updating task plan'
+            : toolCall.name === 'ghost_record_completion'
+              ? 'Recording completion'
+              : toolCall.name === 'ghost_write_file'
+                ? 'Writing file'
+                : toolCall.name === 'ghost_apply_edit'
+                  ? 'Applying edit'
+                  : toolCall.name === 'ghost_apply_transaction'
+                    ? 'Applying file transaction'
+                    : toolCall.name === 'ghost_run_terminal_command'
+                      ? 'Running command'
+                      : toolCall.name === 'ghost_list_directory'
+                        ? 'Listing directory'
+                        : `Running ${toolCall.name}`
+  if (!uiPreferences.showToolProgress) {
+    return toolCall.status === 'running' ? `${compactAction}…` : compactAction
+  }
+
   let args: Record<string, unknown> = {}
   if (toolCall.arguments) {
     try {
@@ -2287,7 +2314,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   const renderedTools = toolParts.map(part => {
     const actionText = toolActionText(part.toolCall)
     const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-    const animatedAction = requestActive && (part.toolCall.status === 'running' || (part.toolCall.status === 'requested' && part.toolCall.requiresApproval))
+    const animatedAction = requestActive && (part.toolCall.status === 'running' || part.toolCall.status === 'requested')
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
     const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
     const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''

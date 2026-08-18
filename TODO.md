@@ -78,7 +78,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## P1 — user experience
 
-- [ ] Show simple live progress by default: “Reading file…”, “Running command…”, “Applying edit…”, “Checking result…”. Keep verbose arguments/results behind a setting.
+- [x] Show simple live progress by default: “Reading file…”, “Running command…”, “Applying edit…”, “Checking result…”. Keep verbose arguments/results behind a setting.
 - [ ] Add a request summary card with changed files, commands, elapsed time, model, provider, tokens, and final status.
 - [ ] Group repeated tool calls and show a compact expandable timeline instead of many duplicate blocks.
 - [ ] Add Cancel, Retry, Continue, Regenerate, and Open Diff actions to the stopped/failed card.
