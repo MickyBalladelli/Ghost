@@ -2,9 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.14 - 2026-08-18
+
+- Keep animated label width stable with a fixed-width font and one reserved cell per character.
+
 ## 1.1.13 - 2026-08-18
 
 - Improve the result-area thinking animation: normal-weight text, one bold highlighted character, softer glow, and cleaner timing.
+- Use a fixed-width font and character cells so bold highlights do not change the label width.
 
 ## 1.1.12 - 2026-08-18
 

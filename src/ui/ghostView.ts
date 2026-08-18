@@ -3518,13 +3518,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .animated-status-label {
         display: inline-block;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-variant-ligatures: none;
         white-space: pre-wrap;
       }
 
       .animated-status-character {
+        box-sizing: border-box;
         display: inline-block;
         font-weight: 400;
+        text-align: center;
         transition: color 90ms linear, text-shadow 90ms linear;
+        width: 1ch;
       }
 
       .animated-status-character.highlighted {
