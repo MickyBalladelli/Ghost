@@ -800,6 +800,7 @@ let persistenceReady = false
 let persistenceTimer: number | undefined
 let settingsTimer: number | undefined
 let modelRefreshTimer: number | undefined
+const transientTimers = new Set<number>()
 let historyIndex = -1
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
@@ -808,6 +809,15 @@ const MESSAGE_RENDER_WINDOW = 200
 const HOT_MESSAGE_COUNT = 40
 let visibleMessageCount = MESSAGE_RENDER_WINDOW
 let firstRunSetupOpened = false
+
+const setTransientTimeout = (callback: () => void, milliseconds: number): number => {
+  const timer = window.setTimeout(() => {
+    transientTimers.delete(timer)
+    callback()
+  }, milliseconds)
+  transientTimers.add(timer)
+  return timer
+}
 
 const formatElapsed = (milliseconds: number): string => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
@@ -2355,7 +2365,7 @@ const ensureAnimatedStatusLabels = (): void => {
   }
 }
 
-reducedMotionQuery.addEventListener('change', () => {
+const handleReducedMotionChange = (): void => {
   if (reducedMotionQuery.matches) {
     if (animatedStatusFrame !== undefined) {
       cancelAnimationFrame(animatedStatusFrame)
@@ -2365,7 +2375,9 @@ reducedMotionQuery.addEventListener('change', () => {
   } else {
     ensureAnimatedStatusLabels()
   }
-})
+}
+
+reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
 
 const safeLink = (value: string): string | undefined => {
   try {
@@ -3900,7 +3912,7 @@ const openConversationMessage = (conversationId: string, messageId: string): voi
     const element = messagesElement.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
     element?.scrollIntoView({ block: 'center' })
     element?.classList.add('search-hit')
-    window.setTimeout(() => element?.classList.remove('search-hit'), 1600)
+    setTransientTimeout(() => element?.classList.remove('search-hit'), 1600)
   })
 }
 
@@ -5015,7 +5027,7 @@ quickModelElement.addEventListener('change', () => {
 quickRefreshModelsElement.addEventListener('click', () => {
   quickRefreshModelsElement.disabled = true
   post('refresh-models')
-  window.setTimeout(() => {
+  setTransientTimeout(() => {
     quickRefreshModelsElement.disabled = false
   }, 1000)
 })
@@ -5322,6 +5334,49 @@ window.addEventListener('message', event => {
     handleExtensionMessage(event.data)
   }
 })
+
+const disposeWebviewResources = (): void => {
+  if (persistenceTimer !== undefined) {
+    window.clearTimeout(persistenceTimer)
+    persistenceTimer = undefined
+    if (persistenceReady && controls.enableConversationPersistence) {
+      post('persist-state', { state: createPersistedState() })
+    }
+  }
+  if (settingsTimer !== undefined) {
+    window.clearTimeout(settingsTimer)
+    settingsTimer = undefined
+  }
+  if (modelRefreshTimer !== undefined) {
+    window.clearTimeout(modelRefreshTimer)
+    modelRefreshTimer = undefined
+  }
+  for (const timer of transientTimers) {
+    window.clearTimeout(timer)
+  }
+  transientTimers.clear()
+  stopProgressTimer()
+  if (animatedStatusFrame !== undefined) {
+    cancelAnimationFrame(animatedStatusFrame)
+    animatedStatusFrame = undefined
+  }
+  if (pendingStreamFrame !== undefined) {
+    cancelAnimationFrame(pendingStreamFrame)
+    pendingStreamFrame = undefined
+  }
+  pendingStreamMessages.length = 0
+  lazyMessageObserver?.disconnect()
+  reducedMotionQuery.removeEventListener('change', handleReducedMotionChange)
+  for (const request of requests.values()) {
+    post('cancel', {
+      requestId: request.requestId,
+      conversationId: request.conversationId
+    })
+  }
+  requests.clear()
+}
+
+window.addEventListener('pagehide', disposeWebviewResources, { once: true })
 
 render(false)
 restoreDraft()

@@ -22,6 +22,7 @@ All notable changes to this extension are documented here.
 - Keep conversation rendering bounded to a recent message window and lazily render older Markdown/code as it enters view.
 - Keep terminal output in a bounded tail ring and report omitted output with timeout and exit metadata.
 - Bound persisted conversations and message text, and skip unchanged autosave writes.
+- Dispose webview timers, animation frames, observers, queued stream work, and active requests during unload.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18
