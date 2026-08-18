@@ -214,6 +214,15 @@ export class GhostConfig {
       .update(setting, value, target)
   }
 
+  async clear<K extends GhostSetting>(
+    setting: K,
+    target: vscode.ConfigurationTarget
+  ): Promise<void> {
+    await vscode.workspace
+      .getConfiguration(GHOST_CONFIGURATION_SECTION)
+      .update(setting, undefined, target)
+  }
+
   onDidChange(listener: GhostSettingsChangeListener): vscode.Disposable {
     return vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(GHOST_CONFIGURATION_SECTION)) {

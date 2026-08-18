@@ -1184,7 +1184,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     })
 
     if (blockedByPolicy) {
-      return { decision: 'reject', reason: 'Tool blocked by workspace policy.' }
+      return {
+        decision: 'reject',
+        reason: `Tool '${call.name}' is denied by Ghost's workspace policy. Choose Allow or Ask first in Tool permissions.`
+      }
     }
     if (!needsInteractiveApproval) {
       await this.rememberRecovery(requestId, request.conversationId, pending.toolCallId, call, expectedSnapshot, expectedFiles)
@@ -1745,6 +1748,24 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
   private async updateSettings(update: GhostSettingsUpdate): Promise<void> {
     const target = update.workspaceOnly ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global
+    const settingsBeforeUpdate = getGhostSettings()
+    const sameStringList = (left: string[], right: string[] | undefined): boolean => {
+      const rightSet = new Set(right ?? [])
+      return left.length === rightSet.size && left.every(item => rightSet.has(item))
+    }
+    const updatePermissionList = async (
+      setting: 'toolAllowlist' | 'toolAsklist' | 'toolDenylist' | 'terminalEnvironmentAllowlist' | 'terminalEnvironmentAsklist',
+      value: string[],
+      previousValue: string[] | undefined
+    ): Promise<void> => {
+      if (sameStringList(value, previousValue)) {
+        return
+      }
+      await ghostConfig.update(setting, value, target)
+      if (target === vscode.ConfigurationTarget.Global) {
+        await ghostConfig.clear(setting, vscode.ConfigurationTarget.Workspace)
+      }
+    }
     if (typeof update.ollamaUrl === 'string' && update.ollamaUrl.trim()) {
       await ghostConfig.update('ollamaUrl', update.ollamaUrl.trim(), target)
     }
@@ -1797,19 +1818,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       await ghostConfig.update('openaiTlsRejectUnauthorized', update.openaiTlsRejectUnauthorized, target)
     }
     if (Array.isArray(update.toolAllowlist)) {
-      await ghostConfig.update('toolAllowlist', update.toolAllowlist, target)
+      await updatePermissionList('toolAllowlist', update.toolAllowlist, settingsBeforeUpdate.toolAllowlist)
     }
     if (Array.isArray(update.toolAsklist)) {
-      await ghostConfig.update('toolAsklist', update.toolAsklist, target)
+      await updatePermissionList('toolAsklist', update.toolAsklist, settingsBeforeUpdate.toolAsklist)
     }
     if (Array.isArray(update.toolDenylist)) {
-      await ghostConfig.update('toolDenylist', update.toolDenylist, target)
+      await updatePermissionList('toolDenylist', update.toolDenylist, settingsBeforeUpdate.toolDenylist)
     }
     if (Array.isArray(update.terminalEnvironmentAllowlist)) {
-      await ghostConfig.update('terminalEnvironmentAllowlist', update.terminalEnvironmentAllowlist, target)
+      await updatePermissionList(
+        'terminalEnvironmentAllowlist',
+        update.terminalEnvironmentAllowlist,
+        settingsBeforeUpdate.terminalEnvironmentAllowlist
+      )
     }
     if (Array.isArray(update.terminalEnvironmentAsklist)) {
-      await ghostConfig.update('terminalEnvironmentAsklist', update.terminalEnvironmentAsklist, target)
+      await updatePermissionList(
+        'terminalEnvironmentAsklist',
+        update.terminalEnvironmentAsklist,
+        settingsBeforeUpdate.terminalEnvironmentAsklist
+      )
     }
     if (update.provider) {
       await ghostConfig.update('provider', update.provider, target)

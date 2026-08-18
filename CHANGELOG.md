@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.4 - 2026-08-18
+
+- Fixed global tool permission changes being hidden by stale workspace-specific deny rules.
+- Blocked-tool messages now identify the denied tool and explain how to change its policy.
+
 ## 1.1.3 - 2026-08-18
 
 - Replaced raw tool and terminal environment permission fields with clear Allow, Ask, and Deny dialogs.
