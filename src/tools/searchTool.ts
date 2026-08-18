@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 
 import * as vscode from 'vscode'
@@ -29,6 +31,37 @@ const MAX_QUERY_LENGTH = 1000
 const DEFAULT_MAX_RESULTS = 100
 const MAX_RESULTS = 200
 
+function findRipgrepExecutable(): string {
+  const executable = process.platform === 'win32' ? 'rg.exe' : 'rg'
+  const pathEntries = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)
+  const candidates = [
+    ...pathEntries.map(entry => path.join(entry, executable)),
+    path.join(os.homedir(), '.cargo', 'bin', executable),
+    path.join(os.homedir(), '.local', 'bin', executable),
+    ...(process.platform === 'darwin' ? [
+      `/opt/homebrew/bin/${executable}`,
+      `/usr/local/bin/${executable}`
+    ] : []),
+    ...(process.platform !== 'win32' ? [
+      `/usr/bin/${executable}`,
+      `/bin/${executable}`,
+      path.join(vscode.env.appRoot, 'node_modules', '@vscode', 'ripgrep', 'bin', executable),
+      path.join(vscode.env.appRoot, 'node_modules.asar.unpacked', '@vscode', 'ripgrep', 'bin', executable)
+    ] : [])
+  ]
+
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK)
+      return candidate
+    } catch {
+      // Try the next known location.
+    }
+  }
+
+  return executable
+}
+
 function textResult(value: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(value)])
 }
@@ -40,7 +73,7 @@ function runRipgrep(
   maxResults: number
 ): Promise<RipgrepResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn('rg', args, { cwd, shell: false, windowsHide: true })
+    const child = spawn(findRipgrepExecutable(), args, { cwd, shell: false, windowsHide: true })
     let errorOutput = ''
     let pending = ''
     let matches: SearchMatch[] = []
@@ -69,6 +102,10 @@ function runRipgrep(
     })
 
     child.on('error', error => {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+        finish(new Error('Ghost could not find ripgrep (rg). Install ripgrep or add it to PATH, then reload VS Code.'))
+        return
+      }
       finish(error instanceof Error ? error : new Error('Could not start ripgrep'))
     })
     child.stdout.on('data', chunk => {

@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.5 - 2026-08-18
+
+- Fixed workspace search when VS Code starts with a reduced PATH and cannot find ripgrep by command name.
+- Added a clear error when ripgrep is not installed or cannot be located.
+
 ## 1.1.4 - 2026-08-18
 
 - Fixed global tool permission changes being hidden by stale workspace-specific deny rules.
