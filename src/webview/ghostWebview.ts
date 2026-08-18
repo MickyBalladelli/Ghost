@@ -141,6 +141,7 @@ interface ChatMessage {
   content: string
   parts: MessagePart[]
   responseStats?: ResponseStats
+  requestSummary?: RequestSummary
   status?: 'streaming' | 'error'
   requestStatus?: RequestStatus
   stopReason?: StopReason
@@ -155,6 +156,17 @@ interface ResponseStats {
   tokenCount: number
   tokensPerSecond: number
   model?: string
+  provider?: GhostProvider
+}
+
+interface RequestSummary {
+  changedFiles: string[]
+  commandCount: number
+  elapsedMs: number
+  model?: string
+  provider?: GhostProvider
+  tokenCount: number
+  status: string
 }
 
 type MessagePart =
@@ -289,6 +301,7 @@ type GhostExtensionMessage =
       phase?: ProgressPhase
       elapsedMs?: number
       model?: string
+      provider?: GhostProvider
       tokenCount?: number
       tokensPerSecond?: number
       startedAt?: number
@@ -323,6 +336,7 @@ interface ActiveRequest {
   attempt: number
   startedAt: number
   model: string
+  provider?: GhostProvider
   phase: ProgressPhase
   latestDetail: string
   tokenCount: number
@@ -497,6 +511,9 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
   const responseStats = value.responseStats && typeof value.responseStats.elapsedMs === 'number' && typeof value.responseStats.tokenCount === 'number' && typeof value.responseStats.tokensPerSecond === 'number'
     ? value.responseStats
     : undefined
+  const requestSummary = value.requestSummary && Array.isArray(value.requestSummary.changedFiles) && typeof value.requestSummary.commandCount === 'number' && typeof value.requestSummary.elapsedMs === 'number' && typeof value.requestSummary.tokenCount === 'number' && typeof value.requestSummary.status === 'string'
+    ? value.requestSummary
+    : undefined
   const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
   return {
     id: typeof value.id === 'string' ? value.id : createId('message'),
@@ -504,6 +521,7 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
     content,
     parts,
     ...(responseStats ? { responseStats } : {}),
+    ...(requestSummary ? { requestSummary } : {}),
     ...(value.status ? { status: value.status } : {}),
     ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
     ...(value.stopReason ? { stopReason: value.stopReason } : {}),
@@ -2144,6 +2162,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     ${partSummary}
     <div class="message-body">${renderMarkdown(message.content, showThinkingPlaceholder)}</div>
     ${responseStats}
+    ${renderRequestSummary(message)}
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
@@ -2175,6 +2194,48 @@ const renderResponseStats = (message: ChatMessage): string => {
   const { elapsedMs, model, tokenCount, tokensPerSecond } = message.responseStats
   const modelLabel = model ? ` · ${escapeHtml(model)}` : ''
   return `<div class="message-response-stats">${formatElapsed(elapsedMs)} · ${tokenCount} tok · ${tokensPerSecond.toFixed(1)} tok/s${modelLabel}</div>`
+}
+
+const parseToolArguments = (toolCall: ToolCall): Record<string, unknown> => {
+  if (!toolCall.arguments) return {}
+  try {
+    const value = JSON.parse(toolCall.arguments) as unknown
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+const summaryChangedFiles = (message: ChatMessage): string[] => {
+  const files = new Set<string>()
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && value.trim()) files.add(value.trim())
+  }
+  for (const part of message.parts) {
+    if (part.kind !== 'tool' || !['ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction'].includes(part.toolCall.name)) continue
+    const args = parseToolArguments(part.toolCall)
+    add(args.path)
+    if (Array.isArray(args.edits)) {
+      for (const edit of args.edits) {
+        if (edit && typeof edit === 'object' && !Array.isArray(edit)) add((edit as Record<string, unknown>).path)
+      }
+    }
+    add(part.toolCall.diffPreview?.path)
+  }
+  return [...files].sort()
+}
+
+const summaryCommandCount = (message: ChatMessage): number => (
+  message.parts.filter(part => part.kind === 'tool' && part.toolCall.name === 'ghost_run_terminal_command').length
+)
+
+const renderRequestSummary = (message: ChatMessage): string => {
+  if (message.role !== 'assistant' || !message.requestSummary) return ''
+  const summary = message.requestSummary
+  const files = summary.changedFiles.length > 0
+    ? `<ul>${summary.changedFiles.slice(0, 12).map(file => `<li>${escapeHtml(file)}</li>`).join('')}${summary.changedFiles.length > 12 ? `<li>+${summary.changedFiles.length - 12} more</li>` : ''}</ul>`
+    : '<span>None</span>'
+  return `<section class="request-summary" aria-label="Request summary"><strong>Request summary</strong><div class="request-summary-grid"><div><span>Final status</span><b>${escapeHtml(summary.status)}</b></div><div><span>Elapsed</span><b>${formatElapsed(summary.elapsedMs)}</b></div><div><span>Model</span><b>${summary.model ? escapeHtml(summary.model) : 'Unknown'}</b></div><div><span>Provider</span><b>${summary.provider ? escapeHtml(summary.provider) : 'Unknown'}</b></div><div><span>Tokens</span><b>${summary.tokenCount}</b></div><div><span>Commands</span><b>${summary.commandCount}</b></div></div><div class="request-summary-files"><span>Changed files</span>${files}</div></section>`
 }
 
 const renderRequestEventLog = (message: ChatMessage): string => {
@@ -2417,6 +2478,13 @@ const updateMessageElement = (message: ChatMessage) => {
     existingStats.outerHTML = stats || '<div class="message-response-stats" hidden></div>'
   } else if (stats) {
     element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', stats)
+  }
+  const existingRequestSummary = element.querySelector<HTMLElement>('.request-summary')
+  const requestSummary = renderRequestSummary(message)
+  if (existingRequestSummary) {
+    existingRequestSummary.outerHTML = requestSummary || '<section class="request-summary" hidden></section>'
+  } else if (requestSummary) {
+    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', requestSummary)
   }
   element.classList.toggle('error', message.status === 'error')
   ensureAnimatedStatusLabels()
@@ -3311,18 +3379,22 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.model) {
     request.model = message.model
   }
+  if (message.provider) {
+    request.provider = message.provider
+  }
   if (typeof message.tokenCount === 'number') {
     request.tokenCount = message.tokenCount
   }
   if (typeof message.tokensPerSecond === 'number') {
     request.tokensPerSecond = message.tokensPerSecond
   }
-  if (typeof message.elapsedMs === 'number' && typeof message.tokenCount === 'number' && typeof message.tokensPerSecond === 'number') {
+  if (typeof message.elapsedMs === 'number' && typeof message.tokenCount === 'number' && (typeof message.tokensPerSecond === 'number' || message.type === 'request-completed')) {
     assistantMessage.responseStats = {
       elapsedMs: message.elapsedMs,
       tokenCount: message.tokenCount,
-      tokensPerSecond: message.tokensPerSecond,
-      ...(message.model ? { model: message.model } : {})
+      tokensPerSecond: message.tokensPerSecond ?? 0,
+      ...(message.model || request.model ? { model: message.model ?? request.model } : {}),
+      ...(message.provider || request.provider ? { provider: message.provider ?? request.provider } : {})
     }
   }
   if (typeof message.startedAt === 'number' && message.type === 'request-started') {
@@ -3474,6 +3546,16 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
+    const changedFiles = [...new Set([...(completionRecord?.changedFiles ?? []), ...summaryChangedFiles(assistantMessage)])].sort()
+    assistantMessage.requestSummary = {
+      changedFiles,
+      commandCount: summaryCommandCount(assistantMessage),
+      elapsedMs: typeof message.elapsedMs === 'number' ? message.elapsedMs : Date.now() - request.startedAt,
+      ...(message.model || request.model ? { model: message.model ?? request.model } : {}),
+      ...(message.provider || request.provider ? { provider: message.provider ?? request.provider } : {}),
+      tokenCount: typeof message.tokenCount === 'number' ? message.tokenCount : request.tokenCount,
+      status: status === 'completed' ? 'Completed' : message.stopReason ? stopReasonLabel(message.stopReason) : status === 'cancelled' ? 'Cancelled' : 'Failed'
+    }
     if (eventLog.length > 0) {
       assistantMessage.eventLog = eventLog
     }

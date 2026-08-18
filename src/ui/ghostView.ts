@@ -56,6 +56,7 @@ interface GhostRequestState {
   stopReason?: GhostStopReason
   stopMessage?: string
   model: string
+  provider?: GhostProvider
   outputTokens: number
   eventLog: GhostRequestEvent[]
   completionRecord?: CompletionRecord
@@ -321,6 +322,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       lastActivityAt: Date.now(),
       timedOut: false,
       model: modelSettings.model,
+      provider: modelSettings.provider,
       outputTokens: 0,
       eventLog: []
     }
@@ -1585,6 +1587,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       phase: event.phase as GhostStreamEvent['phase'],
       elapsedMs: Date.now() - request.startedAt,
       model: request.model,
+      provider: request.provider,
       tokenCount: request.outputTokens,
       startedAt: request.startedAt,
       ...(request.outputTokens > 0
@@ -3182,6 +3185,52 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
         margin-top: 8px;
+      }
+
+      .request-summary {
+        background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+        border: 1px solid var(--vscode-widget-border, var(--ghost-border));
+        border-radius: 4px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.82em;
+        margin-top: 10px;
+        padding: 8px 10px;
+      }
+
+      .request-summary > strong {
+        color: var(--vscode-foreground);
+      }
+
+      .request-summary-grid {
+        display: grid;
+        gap: 6px 12px;
+        grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+        margin-top: 7px;
+      }
+
+      .request-summary-grid div,
+      .request-summary-files {
+        display: grid;
+        gap: 2px;
+      }
+
+      .request-summary-grid span,
+      .request-summary-files > span {
+        font-size: 0.9em;
+      }
+
+      .request-summary-grid b {
+        color: var(--vscode-foreground);
+        font-weight: 600;
+      }
+
+      .request-summary-files {
+        margin-top: 7px;
+      }
+
+      .request-summary-files ul {
+        margin: 0;
+        padding-left: 18px;
       }
 
       .message-part-summary {

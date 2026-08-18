@@ -216,6 +216,7 @@ interface GhostRequestEnvelopeBase {
   phase?: GhostProgressPhase
   elapsedMs?: number
   model?: string
+  provider?: GhostProvider
   tokenCount?: number
   tokensPerSecond?: number
   startedAt?: number
