@@ -6,6 +6,7 @@ All notable changes to this extension are documented here.
 
 - Cache provider health and model discovery for 30 seconds.
 - Add a manual Refresh models action that forces a fresh provider check.
+- Reuse repeated identical file reads instead of stopping the request as an invalid model response.
 
 ## 1.1.6 - 2026-08-18
 

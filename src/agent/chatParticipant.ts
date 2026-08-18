@@ -1085,7 +1085,7 @@ export function createChatParticipantHandler(
       let emptyProviderRetries = 0
       let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
-      const completedReadCalls = new Set<string>()
+      const completedReadCalls = new Map<string, string>()
       const budget: RequestBudget = {
         startedAt: requestStartedAt,
         files: new Set<string>(),
@@ -1256,11 +1256,14 @@ export function createChatParticipantHandler(
         }
 
         const readSignature = readToolCallSignature(toolCall)
-        if (readSignature && completedReadCalls.has(readSignature)) {
-          const message = 'Ghost stopped because it requested the same file range again. The previous read result is already in context; retry with a different range or continue with the task.'
-          requestOptions.onStop?.('invalid-model-response', message)
-          response.markdown(message)
-          return
+        const cachedReadResult = readSignature ? completedReadCalls.get(readSignature) : undefined
+        if (cachedReadResult !== undefined) {
+          response.progress('Reusing the previous file read')
+          messages.push(
+            { role: 'assistant', content: generated },
+            { role: 'user', content: `Tool result for ${toolCall.name}:\nThe exact file range was already read earlier in this request. Reusing the previous result. Do not request the same range again unless the file changes.\n\n${cachedReadResult}` }
+          )
+          continue
         }
 
         response.progress(`Running ${toolCall.name}`)
@@ -1410,7 +1413,7 @@ export function createChatParticipantHandler(
           }
         }
         if (readSignature && !editFailed) {
-          completedReadCalls.add(readSignature)
+          completedReadCalls.set(readSignature, toolResult)
         }
       }
 
