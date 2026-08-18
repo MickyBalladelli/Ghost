@@ -120,6 +120,64 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 )
 
+const MAX_PERSISTED_STRING_CHARS = 24000
+const MAX_PERSISTED_STATE_BYTES = 4 * 1024 * 1024
+
+const truncatePersistedString = (value: string): string => {
+  if (value.length <= MAX_PERSISTED_STRING_CHARS) {
+    return value
+  }
+  const marker = '\n[Older content omitted from persistence]\n'
+  const available = Math.max(0, MAX_PERSISTED_STRING_CHARS - marker.length)
+  const head = Math.floor(available * 0.7)
+  return `${value.slice(0, head)}${marker}${value.slice(-(available - head))}`
+}
+
+const compactPersistedValue = (value: unknown, key = ''): unknown => {
+  if (typeof value === 'string') {
+    return truncatePersistedString(value)
+  }
+  if (Array.isArray(value)) {
+    const limit = key === 'conversations'
+      ? 24
+      : key === 'messages'
+        ? 120
+        : key === 'parts'
+          ? 40
+          : key === 'eventLog'
+            ? 100
+            : key === 'presets'
+              ? 50
+              : undefined
+    const items = limit === undefined ? value : value.slice(-limit)
+    return items.map(item => compactPersistedValue(item))
+  }
+  if (isStoredRecord(value)) {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      compactPersistedValue(entryValue, entryKey)
+    ]))
+  }
+  return value
+}
+
+const compactPersistedState = (state: GhostPersistedState): GhostPersistedState => {
+  const compacted = compactPersistedValue(state) as GhostPersistedState
+  if (JSON.stringify(compacted).length <= MAX_PERSISTED_STATE_BYTES || !Array.isArray(compacted.conversations)) {
+    return compacted
+  }
+  compacted.conversations = compacted.conversations.slice(-8).map(conversation => {
+    if (!isStoredRecord(conversation) || !Array.isArray(conversation.messages)) {
+      return conversation
+    }
+    return {
+      ...conversation,
+      messages: conversation.messages.slice(-40)
+    }
+  })
+  return compacted
+}
+
 interface ProviderStatus {
   connection: 'online' | 'offline'
   models: string[]
@@ -192,6 +250,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private providerStatusCache?: ProviderStatusCache
   private providerStatusRequest?: { key: string; promise: Promise<ProviderStatus> }
   private workspaceContextCache?: WorkspaceContextSnapshot
+  private persistedGlobalSnapshot?: string
+  private persistedWorkspaceSnapshot?: string
   private static readonly providerStatusCacheTtlMs = 30_000
 
   private readonly chatHandler: vscode.ChatRequestHandler
@@ -1715,7 +1775,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
     })
-    return JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState
+    return compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
   }
 
   private async sendPersistedState(): Promise<void> {
@@ -1737,21 +1797,35 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (!this.persistenceEnabled()) {
       await this.globalState.update(GhostViewProvider.globalStateKey, undefined)
       await this.workspaceState.update(GhostViewProvider.workspaceStateKey, undefined)
+      this.persistedGlobalSnapshot = undefined
+      this.persistedWorkspaceSnapshot = undefined
       return
     }
-    const safeState = JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState
-    await this.globalState.update(GhostViewProvider.globalStateKey, {
+    const safeState = compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
+    const globalState: StoredGlobalState = {
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       promptHistory: normalizePromptHistory(safeState.promptHistory),
       presets: safeState.presets ?? [],
       showReasoning: safeState.showReasoning === true,
       preferences: safeState.preferences ?? {}
-    } satisfies StoredGlobalState)
-    await this.workspaceState.update(GhostViewProvider.workspaceStateKey, {
+    }
+    const workspaceState: StoredWorkspaceState = {
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       conversations: safeState.conversations ?? [],
       activeConversationId: safeState.activeConversationId
-    } satisfies StoredWorkspaceState)
+    }
+    const globalSnapshot = JSON.stringify(globalState)
+    const workspaceSnapshot = JSON.stringify(workspaceState)
+    const writes: Thenable<void>[] = []
+    if (globalSnapshot !== this.persistedGlobalSnapshot) {
+      writes.push(this.globalState.update(GhostViewProvider.globalStateKey, globalState))
+      this.persistedGlobalSnapshot = globalSnapshot
+    }
+    if (workspaceSnapshot !== this.persistedWorkspaceSnapshot) {
+      writes.push(this.workspaceState.update(GhostViewProvider.workspaceStateKey, workspaceState))
+      this.persistedWorkspaceSnapshot = workspaceSnapshot
+    }
+    await Promise.all(writes)
   }
 
   private async clearPersistedState(): Promise<void> {
@@ -1759,6 +1833,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.globalState?.update(GhostViewProvider.globalStateKey, undefined),
       this.workspaceState?.update(GhostViewProvider.workspaceStateKey, undefined)
     ])
+    this.persistedGlobalSnapshot = undefined
+    this.persistedWorkspaceSnapshot = undefined
   }
 
   private async importState(): Promise<void> {
@@ -2263,7 +2339,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await this.importState()
         return
       case 'persist-state':
-        await this.persistState(message.state)
+        try {
+          await this.persistState(message.state)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'Unknown storage error'
+          this.debugLog('conversation persistence failed', detail)
+          await vscode.window.showWarningMessage(`Ghost could not save conversation history: ${detail}`)
+        }
         return
       case 'check-status':
         await vscode.commands.executeCommand('ghost.checkOllamaStatus')

@@ -461,6 +461,61 @@ const redactPersistedValue = (value: unknown): unknown => {
   return value
 }
 
+const MAX_PERSISTED_STRING_CHARS = 24000
+const MAX_PERSISTED_STATE_BYTES = 4 * 1024 * 1024
+
+const compactPersistedValue = (value: unknown, key = ''): unknown => {
+  if (typeof value === 'string') {
+    if (value.length <= MAX_PERSISTED_STRING_CHARS) {
+      return value
+    }
+    const marker = '\n[Older content omitted from persistence]\n'
+    const available = Math.max(0, MAX_PERSISTED_STRING_CHARS - marker.length)
+    const head = Math.floor(available * 0.7)
+    return `${value.slice(0, head)}${marker}${value.slice(-(available - head))}`
+  }
+  if (Array.isArray(value)) {
+    const limit = key === 'conversations'
+      ? 24
+      : key === 'messages'
+        ? 120
+        : key === 'parts'
+          ? 40
+          : key === 'eventLog'
+            ? 100
+            : key === 'presets'
+              ? 50
+              : undefined
+    const items = limit === undefined ? value : value.slice(-limit)
+    return items.map(item => compactPersistedValue(item))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [
+      entryKey,
+      compactPersistedValue(entryValue, entryKey)
+    ]))
+  }
+  return value
+}
+
+const compactPersistedState = <T>(value: T): T => {
+  const compacted = compactPersistedValue(value) as Record<string, unknown>
+  if (JSON.stringify(compacted).length <= MAX_PERSISTED_STATE_BYTES || !Array.isArray(compacted.conversations)) {
+    return compacted as T
+  }
+  compacted.conversations = compacted.conversations.slice(-8).map(conversation => {
+    if (!conversation || typeof conversation !== 'object' || Array.isArray(conversation)) {
+      return conversation
+    }
+    const record = conversation as Record<string, unknown>
+    return {
+      ...record,
+      messages: Array.isArray(record.messages) ? record.messages.slice(-40) : record.messages
+    }
+  })
+  return compacted as T
+}
+
 const createConversation = (): Conversation => {
   const timestamp = Date.now()
   return {
@@ -1243,7 +1298,7 @@ const post = (type: string, details: Record<string, unknown> = {}) => {
   })
 }
 
-const createPersistedState = () => ({
+const createPersistedState = () => compactPersistedState({
   schemaVersion: persistenceSchemaVersion,
   conversations: redactPersistedValue(state.conversations) as Conversation[],
   activeConversationId: state.activeConversationId,
@@ -1313,7 +1368,7 @@ const createPersistedState = () => ({
 
 const saveState = () => {
   if (controls.enableConversationPersistence) {
-    vscode.setState(redactPersistedValue(state) as GhostState)
+    vscode.setState(compactPersistedState(redactPersistedValue(state)) as GhostState)
   } else {
     vscode.setState({
       schemaVersion: persistenceSchemaVersion,
