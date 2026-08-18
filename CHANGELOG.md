@@ -30,6 +30,7 @@ All notable changes to this extension are documented here.
 - Move shared webview state and protocol types into a dedicated module to make the webview split incremental and behavior-neutral.
 - Extract conversation creation and prompt-history operations into a runtime webview store loaded before the UI.
 - Split webview protocol, settings, history, rendering, tool timeline, composer, and modal helpers into separate runtime modules.
+- Extract persisted-state shapes and bounded storage compaction into a dedicated UI persistence module.
 
 ## 1.1.17 - 2026-08-18
 
