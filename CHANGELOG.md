@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.47 - 2026-08-18
+
+- Allow slow local models up to five minutes to start returning provider output before timing out.
+
 ## 1.1.46 - 2026-08-18
 
 - Keep message action buttons out of the conversation rerender lookup so final replies cannot be replaced by Branch or Edit buttons.
