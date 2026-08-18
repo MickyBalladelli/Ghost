@@ -107,7 +107,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Cache workspace context, file reads, directory listings, model lists, and provider health. Invalidate caches on relevant VS Code events.
 - [x] Make context selection relevance-based: active file, diagnostics, changed files, search matches, and user-mentioned files first.
 - [x] Add a tokenizer-aware context packer instead of character-only limits. Report how much context was omitted.
-- [ ] Cache inline completions by document version, position, prefix, suffix, language, model, and settings.
+- [x] Cache inline completions by document version, position, prefix, suffix, language, model, and settings.
 - [ ] Cancel obsolete inline requests and agent requests immediately when the document, prompt, provider, or request changes.
 - [ ] Add adaptive inline debounce, minimum prefix length, suffix limits, and separate completion timeout/model settings.
 - [ ] Batch webview stream updates with `requestAnimationFrame`; do not rebuild the entire message DOM for each token or event.

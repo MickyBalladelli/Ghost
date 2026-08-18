@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
 import { GhostConfig, ghostConfig } from '../config'
+import type { GhostSettings } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
 import { createOpenAiTransportSettings } from '../services/openAiTransport'
 import { isFimCompatibleProfile, resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
@@ -12,6 +13,13 @@ export type FimCompletionFetcher = (
 ) => Promise<string>
 
 const DEFAULT_DEBOUNCE_MS = 300
+const INLINE_CACHE_TTL_MS = 30_000
+const INLINE_CACHE_MAX_ENTRIES = 64
+
+interface InlineCompletionCacheEntry {
+  completion: string
+  expiresAt: number
+}
 
 function createCancellationSignal(token: vscode.CancellationToken): {
   signal: AbortSignal
@@ -73,11 +81,68 @@ function getDocumentPrefixAndSuffix(document: vscode.TextDocument, position: vsc
   }
 }
 
+function getInlineCompletionCacheKey(
+  document: vscode.TextDocument,
+  position: vscode.Position,
+  prefix: string,
+  suffix: string,
+  settings: GhostSettings,
+  modelSettings: ReturnType<typeof resolveModelSettings>
+): string {
+  const endpoint = modelSettings.provider === 'openai-compatible'
+    ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+    : settings.ollamaUrl
+  return JSON.stringify({
+    document: {
+      uri: document.uri.toString(),
+      version: document.version,
+      language: document.languageId
+    },
+    position: { line: position.line, character: position.character },
+    prefix,
+    suffix,
+    endpoint,
+    provider: modelSettings.provider,
+    model: modelSettings.model,
+    profile: modelSettings.profileName,
+    generation: {
+      temperature: modelSettings.temperature,
+      topP: modelSettings.topP,
+      topK: modelSettings.topK,
+      minP: modelSettings.minP,
+      presencePenalty: modelSettings.presencePenalty,
+      repeatPenalty: modelSettings.repeatPenalty,
+      seed: modelSettings.seed,
+      stopSequences: modelSettings.stopSequences,
+      contextWindow: modelSettings.contextWindow,
+      grammar: modelSettings.grammar,
+      maxTokens: modelSettings.maxTokens
+    },
+    transport: {
+      openaiProfile: settings.openaiProfile,
+      openaiApiVersion: settings.openaiApiVersion,
+      openaiApiKeyHeader: settings.openaiApiKeyHeader,
+      openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
+      openaiOrganizationHeader: settings.openaiOrganizationHeader,
+      openaiOrganization: settings.openaiOrganization,
+      openaiProjectHeader: settings.openaiProjectHeader,
+      openaiProject: settings.openaiProject,
+      openaiProxy: settings.openaiProxy,
+      openaiNoProxy: settings.openaiNoProxy,
+      openaiTlsRejectUnauthorized: settings.openaiTlsRejectUnauthorized,
+      openaiTlsCaFile: settings.openaiTlsCaFile,
+      openaiTlsCertFile: settings.openaiTlsCertFile,
+      openaiTlsKeyFile: settings.openaiTlsKeyFile
+    }
+  })
+}
+
 export class InlineCompletionProvider implements vscode.InlineCompletionItemProvider {
   private readonly configuration: GhostConfig
   private readonly fetchCompletion: FimCompletionFetcher
   private readonly apiKeyProvider?: () => string | undefined
   private readonly debounceMs: number
+  private readonly completionCache = new Map<string, InlineCompletionCacheEntry>()
   private requestSequence = 0
 
   constructor(
@@ -114,6 +179,12 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 
     if (!prefix && !suffix) {
       return []
+    }
+
+    const cacheKey = getInlineCompletionCacheKey(document, position, prefix, suffix, settings, modelSettings)
+    const cached = this.getCachedCompletion(cacheKey)
+    if (cached) {
+      return [new vscode.InlineCompletionItem(cached, new vscode.Range(position, position))]
     }
 
     const debounceCompleted = await waitForDebounce(this.debounceMs, token)
@@ -156,11 +227,41 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
         return []
       }
 
+      this.cacheCompletion(cacheKey, completion)
       return [new vscode.InlineCompletionItem(completion, new vscode.Range(position, position))]
     } catch {
       return []
     } finally {
       cancellation.dispose()
+    }
+  }
+
+  private getCachedCompletion(key: string): string | undefined {
+    const entry = this.completionCache.get(key)
+    if (!entry) {
+      return undefined
+    }
+    if (entry.expiresAt <= Date.now()) {
+      this.completionCache.delete(key)
+      return undefined
+    }
+    this.completionCache.delete(key)
+    this.completionCache.set(key, entry)
+    return entry.completion
+  }
+
+  private cacheCompletion(key: string, completion: string): void {
+    this.completionCache.delete(key)
+    this.completionCache.set(key, {
+      completion,
+      expiresAt: Date.now() + INLINE_CACHE_TTL_MS
+    })
+    while (this.completionCache.size > INLINE_CACHE_MAX_ENTRIES) {
+      const oldestKey = this.completionCache.keys().next().value
+      if (!oldestKey) {
+        break
+      }
+      this.completionCache.delete(oldestKey)
     }
   }
 }

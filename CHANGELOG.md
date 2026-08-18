@@ -15,6 +15,7 @@ All notable changes to this extension are documented here.
 - Cache workspace context, file reads, directory listings, model discovery, and provider health with event-based invalidation.
 - Prioritize active files, diagnostics, unsaved changed files, attachments, user-mentioned files, and workspace search matches in model context.
 - Use tokenizer-aware context packing and report the approximate number of omitted tokens when context is compacted.
+- Cache inline completions with document, cursor, prompt, model, provider, and generation settings in a bounded LRU cache.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18
