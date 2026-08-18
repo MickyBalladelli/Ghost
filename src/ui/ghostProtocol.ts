@@ -132,8 +132,10 @@ export interface GhostSettingsUpdate {
   openaiTlsKeyFile?: string
   workspaceOnly?: boolean
   toolAllowlist?: string[]
+  toolAsklist?: string[]
   toolDenylist?: string[]
   terminalEnvironmentAllowlist?: string[]
+  terminalEnvironmentAsklist?: string[]
 }
 
 export interface GhostPersistedState {
@@ -254,8 +256,10 @@ export type GhostExtensionMessage =
         openaiTlsCertFile: string
         openaiTlsKeyFile: string
         toolAllowlist: string[]
+        toolAsklist: string[]
         toolDenylist: string[]
         terminalEnvironmentAllowlist: string[]
+        terminalEnvironmentAsklist: string[]
         enableDebugLogging: boolean
         networkAccess: 'local' | 'external'
       }
@@ -391,8 +395,10 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     && (value.openaiTlsKeyFile === undefined || isBoundedString(value.openaiTlsKeyFile, 4096))
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
     && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.length <= 100 && value.toolAllowlist.every(item => isBoundedString(item, 256))))
+    && (value.toolAsklist === undefined || (Array.isArray(value.toolAsklist) && value.toolAsklist.length <= 100 && value.toolAsklist.every(item => isBoundedString(item, 256))))
     && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.length <= 100 && value.toolDenylist.every(item => isBoundedString(item, 256))))
     && (value.terminalEnvironmentAllowlist === undefined || (Array.isArray(value.terminalEnvironmentAllowlist) && value.terminalEnvironmentAllowlist.length <= 100 && value.terminalEnvironmentAllowlist.every(item => isBoundedString(item, 256))))
+    && (value.terminalEnvironmentAsklist === undefined || (Array.isArray(value.terminalEnvironmentAsklist) && value.terminalEnvironmentAsklist.length <= 100 && value.terminalEnvironmentAsklist.every(item => isBoundedString(item, 256))))
   )
 }
 

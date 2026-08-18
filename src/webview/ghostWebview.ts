@@ -52,8 +52,10 @@ interface ControlSettings {
   openaiTlsCertFile: string
   openaiTlsKeyFile: string
   toolAllowlist: string[]
+  toolAsklist: string[]
   toolDenylist: string[]
   terminalEnvironmentAllowlist: string[]
+  terminalEnvironmentAsklist: string[]
   enableDebugLogging: boolean
   networkAccess: 'local' | 'external'
   chatModel: string
@@ -110,6 +112,8 @@ const toolDescriptions: Record<string, string> = {
   ghost_run_terminal_command: 'Run a shell command in the workspace.',
   ghost_list_directory: 'List files and folders in the workspace.'
 }
+
+const terminalEnvironmentDefaults = ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
 
 interface ChatMessage {
   id: string
@@ -587,7 +591,9 @@ let controls: ControlSettings = {
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
   toolAllowlist: [],
+  toolAsklist: [],
   toolDenylist: [],
+  terminalEnvironmentAsklist: [],
   enableDebugLogging: false,
   networkAccess: 'local',
   chatModel: 'qwen2.5-coder:7b',
@@ -809,13 +815,10 @@ app.innerHTML = `
           <input id="openai-tls-key-file" type="text" placeholder="Optional PEM file path">
           <p class="settings-help">OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.</p>
           <button type="button" id="test-provider">Test provider connection</button>
-          <label for="tool-allowlist">Allowed tools</label>
-          <input id="tool-allowlist" type="text" placeholder="ghost_read_file, ghost_apply_edit">
-          <label for="tool-denylist">Denied tools</label>
-          <input id="tool-denylist" type="text" placeholder="ghost_run_terminal_command">
-          <label for="terminal-environment-allowlist">Terminal environment allowlist</label>
-          <input id="terminal-environment-allowlist" type="text" placeholder="PATH, HOME, LANG">
-          <p class="settings-help">Names only. Secret-looking variables are always blocked and values are masked before Ghost sees command output.</p>
+          <div class="settings-help"><strong>Tool permissions</strong><br><span id="tool-permissions-summary">Configure which tools Ghost can use.</span></div>
+          <button type="button" class="secondary" id="open-tool-permissions">Configure tool permissions…</button>
+          <div class="settings-help"><strong>Terminal environment</strong><br><span id="terminal-environment-permissions-summary">Configure which environment variables Ghost passes to commands.</span></div>
+          <button type="button" class="secondary" id="open-terminal-environment-permissions">Configure terminal environment…</button>
           <label for="assistant-name">Assistant name</label>
           <input id="assistant-name" type="text" maxlength="40" value="Ghost">
           <label for="assistant-avatar">Assistant avatar</label>
@@ -844,6 +847,27 @@ app.innerHTML = `
           </div>
         </div>
         <div class="modal-footer"><button type="button" id="save-preset">Save</button><button type="button" class="secondary" data-close-modal="settings-modal">Close</button></div>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="tool-permissions-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tool-permissions-title">
+        <div class="modal-header"><h2 id="tool-permissions-title">Tool permissions</h2><button type="button" class="icon-button" data-close-modal="tool-permissions-modal" aria-label="Close tool permissions">×</button></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Choose what Ghost does for each tool. Allow runs safe tools automatically. Ask pauses for your approval. Deny blocks the tool.</p>
+          <div id="tool-permissions-list"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="tool-permissions-modal">Done</button></div>
+      </section>
+    </div>
+    <div class="modal-backdrop" id="terminal-environment-permissions-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="terminal-environment-permissions-title">
+        <div class="modal-header"><h2 id="terminal-environment-permissions-title">Terminal environment</h2><button type="button" class="icon-button" data-close-modal="terminal-environment-permissions-modal" aria-label="Close terminal environment">×</button></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Choose which environment variables Ghost may pass to approved terminal commands. Secret-looking names are always blocked.</p>
+          <div id="terminal-environment-permissions-list"></div>
+          <div class="settings-help"><label for="terminal-environment-name">Add variable name</label><input id="terminal-environment-name" type="text" placeholder="MY_VARIABLE"><button type="button" class="secondary" id="add-terminal-environment">Add variable</button></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="secondary" data-close-modal="terminal-environment-permissions-modal">Done</button></div>
       </section>
     </div>
     <div class="modal-backdrop" id="privacy-modal" hidden>
@@ -941,9 +965,16 @@ const openAiTlsCaFileElement = document.getElementById('openai-tls-ca-file') as 
 const openAiTlsCertFileElement = document.getElementById('openai-tls-cert-file') as HTMLInputElement
 const openAiTlsKeyFileElement = document.getElementById('openai-tls-key-file') as HTMLInputElement
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
-const toolAllowlistElement = document.getElementById('tool-allowlist') as HTMLInputElement
-const toolDenylistElement = document.getElementById('tool-denylist') as HTMLInputElement
-const terminalEnvironmentAllowlistElement = document.getElementById('terminal-environment-allowlist') as HTMLInputElement
+const openToolPermissionsElement = document.getElementById('open-tool-permissions') as HTMLButtonElement
+const toolPermissionsSummaryElement = document.getElementById('tool-permissions-summary') as HTMLElement
+const toolPermissionsModalElement = document.getElementById('tool-permissions-modal') as HTMLElement
+const toolPermissionsListElement = document.getElementById('tool-permissions-list') as HTMLElement
+const openTerminalEnvironmentPermissionsElement = document.getElementById('open-terminal-environment-permissions') as HTMLButtonElement
+const terminalEnvironmentPermissionsSummaryElement = document.getElementById('terminal-environment-permissions-summary') as HTMLElement
+const terminalEnvironmentPermissionsModalElement = document.getElementById('terminal-environment-permissions-modal') as HTMLElement
+const terminalEnvironmentPermissionsListElement = document.getElementById('terminal-environment-permissions-list') as HTMLElement
+const terminalEnvironmentNameElement = document.getElementById('terminal-environment-name') as HTMLInputElement
+const addTerminalEnvironmentElement = document.getElementById('add-terminal-environment') as HTMLButtonElement
 const fileEditApprovalElement = document.getElementById('file-edit-approval') as HTMLSelectElement
 const assistantNameElement = document.getElementById('assistant-name') as HTMLInputElement
 const assistantAvatarElement = document.getElementById('assistant-avatar') as HTMLInputElement
@@ -1033,8 +1064,10 @@ const createPersistedState = () => ({
     openaiTlsCertFile: controls.openaiTlsCertFile,
     openaiTlsKeyFile: controls.openaiTlsKeyFile,
     toolAllowlist: controls.toolAllowlist,
+    toolAsklist: controls.toolAsklist,
     toolDenylist: controls.toolDenylist,
     terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
+    terminalEnvironmentAsklist: controls.terminalEnvironmentAsklist,
     chatModel: controls.chatModel,
     autocompleteModel: controls.autocompleteModel,
     maxContextTokens: controls.maxContextTokens,
@@ -1161,8 +1194,10 @@ const sendSettingsUpdate = () => {
         openaiTlsCertFile: controls.openaiTlsCertFile,
         openaiTlsKeyFile: controls.openaiTlsKeyFile,
         toolAllowlist: controls.toolAllowlist,
+        toolAsklist: controls.toolAsklist,
         toolDenylist: controls.toolDenylist,
         terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
+        terminalEnvironmentAsklist: controls.terminalEnvironmentAsklist,
         chatModel: controls.chatModel,
         maxContextTokens: controls.maxContextTokens,
         temperature: controls.temperature,
@@ -1215,6 +1250,133 @@ const applyUiPreferences = () => {
   document.documentElement.style.setProperty('--ghost-accent', accent || 'var(--vscode-textLink-foreground, #3794ff)')
   document.body.classList.toggle('compact-layout', uiPreferences.compactLayout)
   document.title = uiPreferences.assistantName || 'Ghost'
+}
+
+const getToolPolicy = (tool: string): 'allow' | 'ask' | 'deny' => {
+  if (controls.toolDenylist.includes(tool)) {
+    return 'deny'
+  }
+  if (controls.toolAsklist.includes(tool)) {
+    return 'ask'
+  }
+  if (controls.toolAllowlist.length > 0 && !controls.toolAllowlist.includes(tool)) {
+    return 'deny'
+  }
+  return 'allow'
+}
+
+const getEnvironmentPolicy = (name: string): 'allow' | 'ask' | 'deny' => {
+  if (controls.terminalEnvironmentAsklist.includes(name)) {
+    return 'ask'
+  }
+  if (controls.terminalEnvironmentAllowlist.includes(name)) {
+    return 'allow'
+  }
+  return 'deny'
+}
+
+const setToolPolicy = (tool: string, policy: 'allow' | 'ask' | 'deny'): void => {
+  controls.toolAllowlist = controls.toolAllowlist.filter(item => item !== tool)
+  controls.toolAsklist = controls.toolAsklist.filter(item => item !== tool)
+  controls.toolDenylist = controls.toolDenylist.filter(item => item !== tool)
+  if (policy === 'allow') {
+    controls.toolAllowlist.push(tool)
+  } else if (policy === 'ask') {
+    controls.toolAsklist.push(tool)
+  } else {
+    controls.toolDenylist.push(tool)
+  }
+}
+
+const setEnvironmentPolicy = (name: string, policy: 'allow' | 'ask' | 'deny'): void => {
+  controls.terminalEnvironmentAllowlist = controls.terminalEnvironmentAllowlist.filter(item => item !== name)
+  controls.terminalEnvironmentAsklist = controls.terminalEnvironmentAsklist.filter(item => item !== name)
+  if (policy === 'allow') {
+    controls.terminalEnvironmentAllowlist.push(name)
+  } else if (policy === 'ask') {
+    controls.terminalEnvironmentAsklist.push(name)
+  }
+}
+
+const renderPermissionControls = (): void => {
+  toolPermissionsListElement.textContent = ''
+  for (const tool of Object.keys(toolDescriptions)) {
+    const row = document.createElement('div')
+    row.className = 'permission-row'
+    const details = document.createElement('div')
+    details.className = 'permission-details'
+    const title = document.createElement('strong')
+    title.textContent = tool
+    const description = document.createElement('small')
+    description.textContent = toolDescriptions[tool]
+    details.append(title, document.createElement('br'), description)
+    const options = document.createElement('div')
+    options.className = 'permission-options'
+    for (const policy of ['allow', 'ask', 'deny'] as const) {
+      const label = document.createElement('label')
+      label.className = 'permission-choice'
+      const input = document.createElement('input')
+      input.type = 'radio'
+      input.name = `tool-policy-${tool}`
+      input.value = policy
+      input.checked = getToolPolicy(tool) === policy
+      input.addEventListener('change', () => {
+        setToolPolicy(tool, policy)
+        sendSettingsUpdate()
+        saveState()
+        renderPermissionControls()
+      })
+      label.append(input, document.createTextNode(` ${policy[0].toUpperCase()}${policy.slice(1)}`))
+      options.append(label)
+    }
+    row.append(details, options)
+    toolPermissionsListElement.append(row)
+  }
+  const toolAllowCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'allow').length
+  const toolAskCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'ask').length
+  const toolDenyCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'deny').length
+  toolPermissionsSummaryElement.textContent = `${toolAllowCount} allowed · ${toolAskCount} ask first · ${toolDenyCount} denied`
+
+  terminalEnvironmentPermissionsListElement.textContent = ''
+  const environmentNames = [...new Set([
+    ...terminalEnvironmentDefaults,
+    ...controls.terminalEnvironmentAllowlist,
+    ...controls.terminalEnvironmentAsklist
+  ])]
+  for (const name of environmentNames) {
+    const row = document.createElement('div')
+    row.className = 'permission-row'
+    const details = document.createElement('div')
+    details.className = 'permission-details'
+    const title = document.createElement('strong')
+    title.textContent = name
+    details.append(title)
+    const options = document.createElement('div')
+    options.className = 'permission-options'
+    for (const policy of ['allow', 'ask', 'deny'] as const) {
+      const label = document.createElement('label')
+      label.className = 'permission-choice'
+      const input = document.createElement('input')
+      input.type = 'radio'
+      input.name = `environment-policy-${name}`
+      input.value = policy
+      input.checked = getEnvironmentPolicy(name) === policy
+      input.addEventListener('change', () => {
+        setEnvironmentPolicy(name, policy)
+        sendSettingsUpdate()
+        saveState()
+        renderPermissionControls()
+      })
+      label.append(input, document.createTextNode(` ${policy[0].toUpperCase()}${policy.slice(1)}`))
+      options.append(label)
+    }
+    row.append(details, options)
+    terminalEnvironmentPermissionsListElement.append(row)
+  }
+  const environmentAllowCount = environmentNames.filter(name => getEnvironmentPolicy(name) === 'allow').length
+  const environmentAskCount = environmentNames.filter(name => getEnvironmentPolicy(name) === 'ask').length
+  const environmentDenyCount = environmentNames.filter(name => getEnvironmentPolicy(name) === 'deny').length
+  terminalEnvironmentPermissionsSummaryElement.textContent = `${environmentAllowCount} passed · ${environmentAskCount} after approval · ${environmentDenyCount} blocked`
 }
 
 const renderControls = () => {
@@ -1288,9 +1450,7 @@ const renderControls = () => {
     : controls.provider === 'openai-compatible'
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
       : 'Ollama endpoint.'
-  toolAllowlistElement.value = controls.toolAllowlist.join(', ')
-  toolDenylistElement.value = controls.toolDenylist.join(', ')
-  terminalEnvironmentAllowlistElement.value = controls.terminalEnvironmentAllowlist.join(', ')
+  renderPermissionControls()
   debugLoggingElement.checked = controls.enableDebugLogging
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
@@ -2742,11 +2902,18 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (Array.isArray(preferences.toolAllowlist)) {
         controls.toolAllowlist = preferences.toolAllowlist.filter((item): item is string => typeof item === 'string')
       }
+      if (Array.isArray(preferences.toolAsklist)) {
+        controls.toolAsklist = preferences.toolAsklist.filter((item): item is string => typeof item === 'string')
+      }
       if (Array.isArray(preferences.toolDenylist)) {
         controls.toolDenylist = preferences.toolDenylist.filter((item): item is string => typeof item === 'string')
       }
       if (Array.isArray(preferences.terminalEnvironmentAllowlist)) {
         controls.terminalEnvironmentAllowlist = preferences.terminalEnvironmentAllowlist
+          .filter((item): item is string => typeof item === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(item))
+      }
+      if (Array.isArray(preferences.terminalEnvironmentAsklist)) {
+        controls.terminalEnvironmentAsklist = preferences.terminalEnvironmentAsklist
           .filter((item): item is string => typeof item === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(item))
       }
       if (typeof preferences.enableDebugLogging === 'boolean') {
@@ -3330,24 +3497,25 @@ for (const element of [
   element.addEventListener('change', updateOpenAiSettings)
 }
 testProviderElement.addEventListener('click', () => post('test-provider'))
-const readToolNames = (value: string): string[] => [...new Set(value.split(',').map(item => item.trim()).filter(Boolean))].slice(0, 20)
-const updateToolPermissions = () => {
-  controls.toolAllowlist = readToolNames(toolAllowlistElement.value)
-  controls.toolDenylist = readToolNames(toolDenylistElement.value)
+openToolPermissionsElement.addEventListener('click', () => {
+  renderPermissionControls()
+  setModalVisibility(toolPermissionsModalElement, true)
+})
+openTerminalEnvironmentPermissionsElement.addEventListener('click', () => {
+  renderPermissionControls()
+  setModalVisibility(terminalEnvironmentPermissionsModalElement, true)
+})
+addTerminalEnvironmentElement.addEventListener('click', () => {
+  const name = terminalEnvironmentNameElement.value.trim()
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    return
+  }
+  setEnvironmentPolicy(name, 'ask')
+  terminalEnvironmentNameElement.value = ''
   sendSettingsUpdate()
   saveState()
-}
-toolAllowlistElement.addEventListener('change', updateToolPermissions)
-toolDenylistElement.addEventListener('change', updateToolPermissions)
-const updateTerminalEnvironmentAllowlist = () => {
-  controls.terminalEnvironmentAllowlist = [...new Set(terminalEnvironmentAllowlistElement.value
-    .split(',')
-    .map(item => item.trim())
-    .filter(item => /^[A-Za-z_][A-Za-z0-9_]*$/.test(item)))].slice(0, 40)
-  sendSettingsUpdate()
-  saveState()
-}
-terminalEnvironmentAllowlistElement.addEventListener('change', updateTerminalEnvironmentAllowlist)
+  renderPermissionControls()
+})
 
 modelElement.addEventListener('change', () => {
   controls.chatModel = modelElement.value

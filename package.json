@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.98",
+  "version": "1.1.2",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -424,7 +424,28 @@
             "ghost_run_terminal_command",
             "ghost_list_directory"
           ],
-          "description": "Tools Ghost may use. Workspace settings can restrict this list."
+          "description": "Tools Ghost may use automatically. Tools in the ask list need your approval first."
+        },
+        "ghost.toolAsklist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ghost_read_file",
+              "ghost_search_workspace",
+              "ghost_get_diagnostics",
+              "ghost_git_context",
+              "ghost_update_task_plan",
+              "ghost_record_completion",
+              "ghost_write_file",
+              "ghost_apply_edit",
+              "ghost_apply_transaction",
+              "ghost_run_terminal_command",
+              "ghost_list_directory"
+            ]
+          },
+          "default": [],
+          "description": "Tools Ghost may use only after asking you. Deny rules override this list."
         },
         "ghost.toolDenylist": {
           "type": "array",
@@ -445,7 +466,7 @@
             ]
           },
           "default": [],
-          "description": "Tools Ghost must never use in this workspace."
+          "description": "Tools Ghost must never use. Deny rules override allow and ask rules."
         },
         "ghost.terminalEnvironmentAllowlist": {
           "type": "array",
@@ -470,7 +491,16 @@
             "CI",
             "PWD"
           ],
-          "description": "Environment variable names allowed in Ghost terminal processes. Secret-looking names are always excluded."
+          "description": "Environment variables Ghost passes to approved terminal commands without asking. Secret-looking names are always excluded."
+        },
+        "ghost.terminalEnvironmentAsklist": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "default": [],
+          "description": "Environment variables Ghost passes to approved terminal commands after asking. Secret-looking names are always excluded."
         }
       }
     },

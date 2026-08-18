@@ -99,7 +99,7 @@ Ghost exposes these tools to the agent:
 | `ghost_run_terminal_command` | Runs a shell command in the workspace. | Required |
 | `ghost_list_directory` | Lists files and folders under a workspace path. | Safe workspace tool |
 
-The **Context** popup shows the tools currently available to the request. The **Settings** panel and `ghost.toolAllowlist` / `ghost.toolDenylist` settings control which tools Ghost may use.
+The **Context** popup shows the tools currently available to the request. The **Settings** panel has clear permission dialogs for tools and terminal environment variables. Each item can be set to **Allow**, **Ask**, or **Deny**. Deny always wins.
 
 Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Ghost also stops repeated edits to the same file and stops after eight successful edits to one file to prevent edit loops.
 
@@ -147,8 +147,11 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.toolAllowlist` | All five tools | Tools Ghost may use in the workspace. |
-| `ghost.toolDenylist` | `[]` | Tools Ghost must never use in the workspace. Deny rules override allow rules. |
+| `ghost.toolAllowlist` | All tools | Tools Ghost may use automatically. |
+| `ghost.toolAsklist` | `[]` | Tools Ghost may use only after asking you. |
+| `ghost.toolDenylist` | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |
+| `ghost.terminalEnvironmentAllowlist` | Safe common variables | Environment variables passed to approved terminal commands without asking. |
+| `ghost.terminalEnvironmentAsklist` | `[]` | Environment variables passed only after terminal approval. |
 | `ghost.fileEditApproval` | `confirm` | Ask before each file edit, or use `auto` to apply file edits automatically. |
 
 ### Persistence and diagnostics

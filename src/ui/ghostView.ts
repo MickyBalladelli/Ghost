@@ -1120,8 +1120,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.failedToolRetries.set(pending.toolCallId, { requestId, conversationId: request.conversationId, call })
     const settings = getGhostSettings()
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
+    const askedTools = settings.toolAsklist ?? []
     const deniedTools = settings.toolDenylist ?? []
-    const blockedByPolicy = !this.isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || deniedTools.includes(call.name))
+    const blockedByPolicy = !this.isConversationStateTool(call.name) && ((!allowedTools.includes(call.name) && !askedTools.includes(call.name)) || deniedTools.includes(call.name))
     const isFileEditTool = this.isFileEditTool(call.name)
     const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
     if (unsavedEditorWarning) {
@@ -1136,8 +1137,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
       return { decision: 'reject', reason: unsavedEditorWarning }
     }
-    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
-    const requiresApproval = this.requiresToolApproval(call.name) && !blockedByPolicy && !autoAcceptedFileEdit
+    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && !askedTools.includes(call.name) && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
+    const requiresApproval = (this.requiresToolApproval(call.name) || askedTools.includes(call.name)) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
     const needsInteractiveApproval = requiresApproval && (isFileEditTool
       ? !this.sessionApprovedFileEdits
@@ -1663,7 +1664,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       : undefined
     const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
     const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
-    const allowedTools = (settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]).filter(tool => !(settings.toolDenylist ?? []).includes(tool))
+    const allowedTools = [...new Set([
+      ...(settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]),
+      ...(settings.toolAsklist ?? [])
+    ])].filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
     this.postMessage({
       source: 'ghost-extension',
@@ -1706,8 +1710,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         openaiTlsCertFile: settings.openaiTlsCertFile,
         openaiTlsKeyFile: settings.openaiTlsKeyFile,
         toolAllowlist: settings.toolAllowlist ?? [...GHOST_TOOL_NAMES],
+        toolAsklist: settings.toolAsklist ?? [],
         toolDenylist: settings.toolDenylist ?? [],
         terminalEnvironmentAllowlist: settings.terminalEnvironmentAllowlist,
+        terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
         networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
       },
@@ -1795,11 +1801,17 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (Array.isArray(update.toolAllowlist)) {
       await ghostConfig.update('toolAllowlist', update.toolAllowlist, target)
     }
+    if (Array.isArray(update.toolAsklist)) {
+      await ghostConfig.update('toolAsklist', update.toolAsklist, target)
+    }
     if (Array.isArray(update.toolDenylist)) {
       await ghostConfig.update('toolDenylist', update.toolDenylist, target)
     }
     if (Array.isArray(update.terminalEnvironmentAllowlist)) {
       await ghostConfig.update('terminalEnvironmentAllowlist', update.terminalEnvironmentAllowlist, target)
+    }
+    if (Array.isArray(update.terminalEnvironmentAsklist)) {
+      await ghostConfig.update('terminalEnvironmentAsklist', update.terminalEnvironmentAsklist, target)
     }
     if (update.provider) {
       await ghostConfig.update('provider', update.provider, target)
@@ -2644,6 +2656,43 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         font-size: 0.8em;
         grid-column: 1 / -1;
         margin: -4px 0 2px;
+      }
+
+      .permission-row {
+        align-items: center;
+        border-bottom: 1px solid var(--vscode-panel-border);
+        display: grid;
+        gap: 12px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        margin-bottom: 8px;
+        padding: 8px 0;
+      }
+
+      .permission-details {
+        min-width: 0;
+      }
+
+      .permission-details strong,
+      .permission-details small {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+
+      .permission-options {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+        white-space: nowrap;
+      }
+
+      .permission-choice {
+        align-items: center;
+        display: flex;
+        gap: 4px;
+      }
+
+      .permission-choice input {
+        margin: 0;
       }
 
       .compact-layout .message {

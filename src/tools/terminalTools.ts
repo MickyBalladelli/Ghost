@@ -37,8 +37,13 @@ function getEnvironmentValue(name: string): string | undefined {
 }
 
 function getTerminalEnvironment(): NodeJS.ProcessEnv {
-  const configured = getGhostSettings().terminalEnvironmentAllowlist
-  const names = Array.isArray(configured) ? configured : DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST
+  const settings = getGhostSettings()
+  const configured = settings.terminalEnvironmentAllowlist
+  const asked = settings.terminalEnvironmentAsklist
+  const names = [
+    ...(Array.isArray(configured) ? configured : DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST),
+    ...(Array.isArray(asked) ? asked : [])
+  ]
   const environment: NodeJS.ProcessEnv = {}
   for (const rawName of names) {
     const name = typeof rawName === 'string' ? rawName.trim() : ''

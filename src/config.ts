@@ -81,8 +81,10 @@ export interface GhostSettings {
   enableConversationPersistence: boolean
   enableDebugLogging: boolean
   toolAllowlist?: string[]
+  toolAsklist?: string[]
   toolDenylist?: string[]
   terminalEnvironmentAllowlist: string[]
+  terminalEnvironmentAsklist: string[]
 }
 
 export type GhostSetting = keyof GhostSettings
@@ -127,8 +129,10 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   enableConversationPersistence: false,
   enableDebugLogging: false,
   toolAllowlist: [...GHOST_TOOL_NAMES],
+  toolAsklist: [],
   toolDenylist: [],
-  terminalEnvironmentAllowlist: [...DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST]
+  terminalEnvironmentAllowlist: [...DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST],
+  terminalEnvironmentAsklist: []
 }
 
 export type GhostSettingsChangeListener = (
@@ -188,8 +192,10 @@ export class GhostConfig {
       enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOST_SETTINGS.enableConversationPersistence),
       enableDebugLogging: configuration.get('enableDebugLogging', DEFAULT_GHOST_SETTINGS.enableDebugLogging),
       toolAllowlist: configuration.get('toolAllowlist', DEFAULT_GHOST_SETTINGS.toolAllowlist),
+      toolAsklist: configuration.get('toolAsklist', DEFAULT_GHOST_SETTINGS.toolAsklist),
       toolDenylist: configuration.get('toolDenylist', DEFAULT_GHOST_SETTINGS.toolDenylist),
-      terminalEnvironmentAllowlist: configuration.get('terminalEnvironmentAllowlist', DEFAULT_GHOST_SETTINGS.terminalEnvironmentAllowlist)
+      terminalEnvironmentAllowlist: configuration.get('terminalEnvironmentAllowlist', DEFAULT_GHOST_SETTINGS.terminalEnvironmentAllowlist),
+      terminalEnvironmentAsklist: configuration.get('terminalEnvironmentAsklist', DEFAULT_GHOST_SETTINGS.terminalEnvironmentAsklist)
     }
   }
 
