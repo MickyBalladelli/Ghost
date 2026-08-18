@@ -18,6 +18,8 @@ import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { resolveModelSettings } from '../services/modelProfiles'
+import type { GhostModelRole } from '../services/modelProfiles'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -509,6 +511,8 @@ export interface GhostContextSelection {
 export interface GhostRequestOptions {
   provider?: GhostProvider
   model?: string
+  modelProfile?: string
+  modelRole?: GhostModelRole
   temperature?: number
   topP?: number
   topK?: number
@@ -1029,9 +1033,22 @@ export function createChatParticipantHandler(
     const requestStartedAt = Date.now()
     const settings = configuration.getSettings()
     const requestOptions = getRequestOptions(request)
+    const modelRole = requestOptions.modelRole ?? (requestOptions.mode === 'agent' ? 'agent' : 'chat')
+    const modelSettings = resolveModelSettings(settings, modelRole, requestOptions.modelProfile, {
+      provider: requestOptions.provider,
+      model: requestOptions.model,
+      temperature: requestOptions.temperature,
+      topP: requestOptions.topP,
+      topK: requestOptions.topK,
+      minP: requestOptions.minP,
+      presencePenalty: requestOptions.presencePenalty,
+      repeatPenalty: requestOptions.repeatPenalty,
+      maxContextTokens: requestOptions.maxContextTokens,
+      maxTokens: requestOptions.maxTokens
+    })
     const effectiveSettings = {
       ...settings,
-      maxContextTokens: Math.max(1, Math.floor(requestOptions.maxContextTokens ?? settings.maxContextTokens))
+      maxContextTokens: modelSettings.maxContextTokens
     }
     const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions, detail => response.progress(detail))
 
@@ -1066,8 +1083,8 @@ export function createChatParticipantHandler(
       { role: 'user', content: contextPrompt }
     ]
     const outputTokens = toolsEnabled
-      ? Math.max(requestOptions.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
-      : requestOptions.maxTokens
+      ? Math.max(modelSettings.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
+      : modelSettings.maxTokens
     const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, toolsEnabled)
     let contextCompactionReported = false
     const cancellation = createCancellationSignal(token)
@@ -1108,16 +1125,16 @@ export function createChatParticipantHandler(
         const turn = await streamModelTurn(
           llmFactory,
           {
-            provider: requestOptions.provider,
-            model: requestOptions.model?.trim() || settings.chatModel,
+            provider: modelSettings.provider,
+            model: modelSettings.model,
             messages: redactSensitiveValue(preparedContext.messages),
             generation: {
-              temperature: Math.min(2, Math.max(0, requestOptions.temperature ?? settings.temperature ?? DEFAULT_TEMPERATURE)),
-              topP: Math.min(1, Math.max(0, requestOptions.topP ?? settings.topP)),
-              topK: Math.max(0, Math.floor(requestOptions.topK ?? settings.topK)),
-              minP: Math.min(1, Math.max(0, requestOptions.minP ?? settings.minP)),
-              presencePenalty: Math.min(2, Math.max(-2, requestOptions.presencePenalty ?? settings.presencePenalty)),
-              repeatPenalty: Math.min(3, Math.max(0, requestOptions.repeatPenalty ?? settings.repeatPenalty)),
+              temperature: Math.min(2, Math.max(0, modelSettings.temperature ?? DEFAULT_TEMPERATURE)),
+              topP: Math.min(1, Math.max(0, modelSettings.topP)),
+              topK: Math.max(0, Math.floor(modelSettings.topK)),
+              minP: Math.min(1, Math.max(0, modelSettings.minP)),
+              presencePenalty: Math.min(2, Math.max(-2, modelSettings.presencePenalty)),
+              repeatPenalty: Math.min(3, Math.max(0, modelSettings.repeatPenalty)),
               maxTokens: outputTokens
             },
             signal: cancellation.signal

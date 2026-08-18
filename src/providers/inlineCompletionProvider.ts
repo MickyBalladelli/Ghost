@@ -4,6 +4,7 @@ import { GhostConfig, ghostConfig } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
 import { createOpenAiTransportSettings } from '../services/openAiTransport'
 import { isFimCompatibleProfile, resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
+import { resolveModelSettings } from '../services/modelProfiles'
 
 export type FimCompletionFetcher = (
   baseUrl: string,
@@ -98,12 +99,13 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     token: vscode.CancellationToken
   ): Promise<vscode.InlineCompletionItem[]> {
     const settings = this.configuration.getSettings()
+    const modelSettings = resolveModelSettings(settings, 'autocomplete')
 
     if (!settings.enableInlineCompletions || token.isCancellationRequested) {
       return []
     }
 
-    if (settings.provider === 'openai-compatible' && !isFimCompatibleProfile(settings.openaiProfile)) {
+    if (modelSettings.provider === 'openai-compatible' && !isFimCompatibleProfile(settings.openaiProfile)) {
       return []
     }
 
@@ -123,20 +125,20 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     const cancellation = createCancellationSignal(token)
 
     try {
-      const useOpenAiCompatible = settings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
+      const useOpenAiCompatible = modelSettings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
       const completion = await this.fetchCompletion(
         useOpenAiCompatible ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl,
         {
-          model: settings.autocompleteModel,
+          model: modelSettings.model,
           prefix,
           suffix,
           generation: {
-            temperature: settings.temperature,
-            topP: settings.topP,
-            topK: settings.topK,
-            minP: settings.minP,
-            presencePenalty: settings.presencePenalty,
-            repeatPenalty: settings.repeatPenalty
+            temperature: modelSettings.temperature,
+            topP: modelSettings.topP,
+            topK: modelSettings.topK,
+            minP: modelSettings.minP,
+            presencePenalty: modelSettings.presencePenalty,
+            repeatPenalty: modelSettings.repeatPenalty
           },
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
           ...(useOpenAiCompatible && this.apiKeyProvider?.() ? { apiKey: this.apiKeyProvider() } : {}),

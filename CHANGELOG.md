@@ -5,6 +5,7 @@ All notable changes to this extension are documented here.
 ## 1.1.10 - 2026-08-18
 
 - Show model context/output limits, provider capabilities, sampling support, and ignored settings beside the model selector.
+- Add model aliases, selectable named profiles, and role-specific model/generation settings for chat, agent, vision, and autocomplete.
 
 ## 1.1.8 - 2026-08-18
 

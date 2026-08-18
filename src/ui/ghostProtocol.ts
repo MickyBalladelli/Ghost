@@ -1,5 +1,6 @@
 import type { GhostModelMetadata, GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
 import type { CustomResponseFormat, OpenAiProfileId } from '../services/providerProfiles'
+import type { GhostModelAliases, GhostModelProfiles, GhostModelRole } from '../services/modelProfiles'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
@@ -16,6 +17,7 @@ export type { GhostRequestStatus }
 export type { GhostProgressPhase }
 export type { GhostStopReason }
 export type { GhostModelMetadata }
+export type { GhostModelAliases, GhostModelProfiles, GhostModelRole }
 
 export type GhostToolApprovalDecision = 'once' | 'session' | 'reject'
 
@@ -79,6 +81,8 @@ export interface GhostRequestEvent {
 export interface GhostWebviewRequestOptions {
   provider?: GhostProvider
   model?: string
+  modelProfile?: string
+  modelRole?: GhostModelRole
   temperature?: number
   topP?: number
   topK?: number
@@ -97,6 +101,9 @@ export interface GhostSettingsUpdate {
   provider?: GhostProvider
   chatModel?: string
   autocompleteModel?: string
+  modelProfile?: string
+  modelAliases?: GhostModelAliases
+  modelProfiles?: GhostModelProfiles
   maxContextTokens?: number
   temperature?: number
   topP?: number
@@ -224,6 +231,9 @@ export type GhostExtensionMessage =
         provider: GhostProvider
         chatModel: string
         autocompleteModel: string
+        modelProfile: string
+        modelAliases: GhostModelAliases
+        modelProfiles: GhostModelProfiles
         maxContextTokens: number
         temperature: number
         topP: number
@@ -331,6 +341,8 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
   if (
     (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) ||
     (value.model !== undefined && !isBoundedString(value.model, 512)) ||
+    (value.modelProfile !== undefined && !isBoundedString(value.modelProfile, 256)) ||
+    (value.modelRole !== undefined && !['chat', 'agent', 'vision', 'autocomplete'].includes(value.modelRole as string)) ||
     (value.temperature !== undefined && !isFiniteNumber(value.temperature)) ||
     (value.topP !== undefined && !isFiniteNumber(value.topP)) ||
     (value.topK !== undefined && !isFiniteNumber(value.topK)) ||
@@ -362,6 +374,17 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm', 'custom'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
+    (value.modelProfile === undefined || isBoundedString(value.modelProfile, 256)) &&
+    (value.modelAliases === undefined || (
+      isRecord(value.modelAliases) &&
+      Object.entries(value.modelAliases).length <= 100 &&
+      Object.entries(value.modelAliases).every(([key, item]) => isBoundedString(key, 256) && isBoundedString(item, 512))
+    )) &&
+    (value.modelProfiles === undefined || (
+      isRecord(value.modelProfiles) &&
+      Object.entries(value.modelProfiles).length <= 100 &&
+      Object.values(value.modelProfiles).every(item => isRecord(item))
+    )) &&
     (value.maxContextTokens === undefined || isFiniteNumber(value.maxContextTokens)) &&
     (value.temperature === undefined || isFiniteNumber(value.temperature)) &&
     (value.topP === undefined || isFiniteNumber(value.topP)) &&

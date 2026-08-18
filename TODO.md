@@ -69,7 +69,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add shared timeout, retry, status parsing, rate-limit handling, and normalized provider errors.
 - [x] Cache model discovery and health checks with a manual refresh button. Do not fall back silently to a different model.
 - [x] Show model metadata and capabilities in settings. Explain when Top K, Min P, penalties, vision, tools, or FIM are ignored.
-- [ ] Add model aliases and per-model profiles so chat, agent, vision, and autocomplete can use different settings.
+- [x] Add model aliases and per-model profiles so chat, agent, vision, and autocomplete can use different settings.
 - [ ] Add support for provider-native tool calling and JSON/schema mode before relying on text parsing.
 - [ ] Add grammar/JSON constraints, seed, stop sequences, context window, and max output settings where the provider supports them.
 - [ ] Add an adapter contract test suite using fake providers. Every new LLM adapter must pass the same stream, error, tool, cancellation, and capability tests.

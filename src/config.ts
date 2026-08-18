@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { CustomResponseFormat, OpenAiProfileId } from './services/providerProfiles'
+import type { GhostModelAliases, GhostModelProfiles } from './services/modelProfiles'
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
@@ -64,6 +65,9 @@ export interface GhostSettings {
   openaiTlsKeyFile: string
   chatModel: string
   autocompleteModel: string
+  modelProfile: string
+  modelAliases: GhostModelAliases
+  modelProfiles: GhostModelProfiles
   maxContextTokens: number
   enableInlineCompletions: boolean
   provider: GhostProvider
@@ -112,6 +116,9 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiTlsKeyFile: '',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
+  modelProfile: '',
+  modelAliases: {},
+  modelProfiles: {},
   maxContextTokens: 8192,
   enableInlineCompletions: true,
   provider: 'ollama',
@@ -172,6 +179,9 @@ export class GhostConfig {
       openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
+      modelProfile: configuration.get('modelProfile', DEFAULT_GHOST_SETTINGS.modelProfile),
+      modelAliases: configuration.get('modelAliases', DEFAULT_GHOST_SETTINGS.modelAliases),
+      modelProfiles: configuration.get('modelProfiles', DEFAULT_GHOST_SETTINGS.modelProfiles),
       maxContextTokens: configuration.get('maxContextTokens', DEFAULT_GHOST_SETTINGS.maxContextTokens),
       enableInlineCompletions: configuration.get(
         'enableInlineCompletions',

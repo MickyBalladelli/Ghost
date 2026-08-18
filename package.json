@@ -252,6 +252,47 @@
           "default": "qwen2.5-coder:1.5b",
           "description": "Model used for inline code completions."
         },
+        "ghost.modelProfile": {
+          "type": "string",
+          "default": "",
+          "description": "Active named model profile. Leave empty to use the normal Ghost settings."
+        },
+        "ghost.modelAliases": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Map friendly model aliases to provider model IDs, for example {\"fast\": \"qwen2.5-coder:1.5b\"}."
+        },
+        "ghost.modelProfiles": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": ["ollama", "mlx-vlm", "openai-compatible"]
+              },
+              "model": { "type": "string" },
+              "chatModel": { "type": "string" },
+              "agentModel": { "type": "string" },
+              "visionModel": { "type": "string" },
+              "autocompleteModel": { "type": "string" },
+              "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+              "topP": { "type": "number", "minimum": 0, "maximum": 1 },
+              "topK": { "type": "number", "minimum": 0 },
+              "minP": { "type": "number", "minimum": 0, "maximum": 1 },
+              "presencePenalty": { "type": "number", "minimum": -2, "maximum": 2 },
+              "repeatPenalty": { "type": "number", "minimum": 0, "maximum": 3 },
+              "maxContextTokens": { "type": "integer", "minimum": 1 },
+              "maxTokens": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "description": "Named model profiles. Each profile can select different chat, agent, vision, and autocomplete models plus generation settings."
+        },
         "ghost.maxContextTokens": {
           "type": "integer",
           "default": 8192,

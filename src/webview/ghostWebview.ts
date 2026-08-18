@@ -7,6 +7,23 @@ type CustomResponseFormat = 'openai-sse' | 'json'
 type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
+type ModelRole = 'chat' | 'agent' | 'vision' | 'autocomplete'
+interface ModelProfile {
+  provider?: GhostProvider
+  model?: string
+  chatModel?: string
+  agentModel?: string
+  visionModel?: string
+  autocompleteModel?: string
+  temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
+  maxContextTokens?: number
+  maxTokens?: number
+}
 type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
 type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
 type StopReason = 'failed-tool' | 'invalid-model-response' | 'cancelled' | 'timeout' | 'approval-rejected' | 'context-limit' | 'budget-limit' | 'provider-failure'
@@ -60,6 +77,9 @@ interface ControlSettings {
   networkAccess: 'local' | 'external'
   chatModel: string
   autocompleteModel: string
+  modelProfile: string
+  modelAliases: Record<string, string>
+  modelProfiles: Record<string, ModelProfile>
   maxContextTokens: number
   temperature: number
   topP: number
@@ -336,6 +356,8 @@ interface ModelMetadata {
 interface WebviewRequestOptions {
   provider: GhostProvider
   model: string
+  modelProfile: string
+  modelRole?: ModelRole
   temperature: number
   topP: number
   topK: number
@@ -614,6 +636,9 @@ let controls: ControlSettings = {
   networkAccess: 'local',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
+  modelProfile: '',
+  modelAliases: {},
+  modelProfiles: {},
   maxContextTokens: 8192,
   temperature: 0.3,
   topP: 0.9,
@@ -727,6 +752,8 @@ app.innerHTML = `
       </select>
       <label class="control-label" for="model">Model</label>
       <select id="model" aria-label="Chat model"></select>
+      <label class="control-label" for="model-profile">Profile</label>
+      <select id="model-profile" aria-label="Model profile"></select>
       <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
       <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
@@ -945,6 +972,7 @@ const screenReaderStatusElement = document.getElementById('screen-reader-status'
 const composerCountElement = document.getElementById('composer-count') as HTMLElement
 const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
+const modelProfileElement = document.getElementById('model-profile') as HTMLSelectElement
 const modelCapabilitiesElement = document.getElementById('model-capabilities') as HTMLElement
 const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
@@ -1062,6 +1090,7 @@ const createPersistedState = () => ({
   showReasoning,
   preferences: {
     provider: controls.provider,
+    modelProfile: controls.modelProfile,
     ollamaUrl: controls.ollamaUrl,
     mlxUrl: controls.mlxUrl,
     openaiUrl: controls.openaiUrl,
@@ -1219,6 +1248,10 @@ const sendSettingsUpdate = () => {
         terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
         terminalEnvironmentAsklist: controls.terminalEnvironmentAsklist,
         chatModel: controls.chatModel,
+        autocompleteModel: controls.autocompleteModel,
+        modelProfile: controls.modelProfile,
+        modelAliases: controls.modelAliases,
+        modelProfiles: controls.modelProfiles,
         maxContextTokens: controls.maxContextTokens,
         temperature: controls.temperature,
         topP: controls.topP,
@@ -1449,7 +1482,19 @@ const renderControls = () => {
     option.textContent = model
     modelElement.append(option)
   }
-  modelElement.value = controls.chatModel
+    modelElement.value = controls.chatModel
+  modelProfileElement.textContent = ''
+  const defaultProfileOption = document.createElement('option')
+  defaultProfileOption.value = ''
+  defaultProfileOption.textContent = 'Default'
+  modelProfileElement.append(defaultProfileOption)
+  for (const profileName of Object.keys(controls.modelProfiles).sort()) {
+    const option = document.createElement('option')
+    option.value = profileName
+    option.textContent = profileName
+    modelProfileElement.append(option)
+  }
+  modelProfileElement.value = controls.modelProfile
   renderModelCapabilities(availableModelMetadata.find(metadata => metadata.id === controls.chatModel))
   temperatureElement.value = String(controls.temperature)
   temperatureValueElement.value = controls.temperature.toFixed(1)
@@ -1678,6 +1723,8 @@ const setModalVisibility = (modal: HTMLElement, visible: boolean) => {
 const buildRequestOptions = (): WebviewRequestOptions => ({
   provider: controls.provider,
   model: controls.chatModel,
+  modelProfile: controls.modelProfile,
+  modelRole: controls.mode === 'agent' ? 'agent' : 'chat',
   temperature: controls.temperature,
   topP: controls.topP,
   topK: controls.topK,
@@ -2898,6 +2945,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.autocompleteModel === 'string' && preferences.autocompleteModel.trim()) {
         controls.autocompleteModel = preferences.autocompleteModel
       }
+      if (typeof preferences.modelProfile === 'string') {
+        controls.modelProfile = preferences.modelProfile
+      }
       if (typeof preferences.maxContextTokens === 'number' && Number.isFinite(preferences.maxContextTokens)) {
         controls.maxContextTokens = Math.max(1, Math.floor(preferences.maxContextTokens))
       }
@@ -3618,6 +3668,11 @@ addTerminalEnvironmentElement.addEventListener('click', () => {
 modelElement.addEventListener('change', () => {
   controls.chatModel = modelElement.value
   sendSettingsUpdate()
+})
+modelProfileElement.addEventListener('change', () => {
+  controls.modelProfile = modelProfileElement.value
+  sendSettingsUpdate()
+  saveState()
 })
 
 temperatureElement.addEventListener('input', () => {

@@ -9,6 +9,7 @@ import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, 
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { createProviderAdapter, ModelCapabilityRecord } from '../services/providerAdapter'
+import { resolveModelSettings } from '../services/modelProfiles'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveWorkspacePath } from '../tools/workspacePath'
@@ -293,6 +294,22 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.debugLog('request started', { requestId, conversationId, promptLength: prompt.length })
 
     const cancellation = new vscode.CancellationTokenSource()
+    const settings = getGhostSettings()
+    const modelRole = attachments.some(attachment => attachment.mimeType?.toLowerCase().startsWith('image/'))
+      ? 'vision'
+      : options.modelRole ?? (options.mode === 'agent' ? 'agent' : 'chat')
+    const modelSettings = resolveModelSettings(settings, modelRole, options.modelProfile, {
+      provider: options.provider,
+      model: options.model,
+      temperature: options.temperature,
+      topP: options.topP,
+      topK: options.topK,
+      minP: options.minP,
+      presencePenalty: options.presencePenalty,
+      repeatPenalty: options.repeatPenalty,
+      maxContextTokens: options.maxContextTokens,
+      maxTokens: options.maxTokens
+    })
     const request: GhostRequestState = {
       cancellation,
       conversationId,
@@ -303,7 +320,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       timedOut: false,
-      model: options.model?.trim() || getGhostSettings().chatModel,
+      model: modelSettings.model,
       outputTokens: 0,
       eventLog: []
     }
@@ -418,6 +435,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .join('\n\n')
     const requestOptions: GhostRequestOptions = {
       ...options,
+      modelProfile: options.modelProfile,
+      modelRole,
       additionalContext: [continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
@@ -1775,6 +1794,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         provider: settings.provider,
         chatModel: settings.chatModel,
         autocompleteModel: settings.autocompleteModel,
+        modelProfile: settings.modelProfile,
+        modelAliases: settings.modelAliases,
+        modelProfiles: settings.modelProfiles,
         maxContextTokens: settings.maxContextTokens,
         temperature: settings.temperature,
         topP: settings.topP,
@@ -1941,6 +1963,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.autocompleteModel === 'string' && update.autocompleteModel.trim()) {
       await ghostConfig.update('autocompleteModel', update.autocompleteModel.trim(), target)
+    }
+    if (typeof update.modelProfile === 'string') {
+      await ghostConfig.update('modelProfile', update.modelProfile.trim(), target)
+    }
+    if (update.modelAliases && typeof update.modelAliases === 'object') {
+      await ghostConfig.update('modelAliases', update.modelAliases, target)
+    }
+    if (update.modelProfiles && typeof update.modelProfiles === 'object') {
+      await ghostConfig.update('modelProfiles', update.modelProfiles, target)
     }
     if (typeof update.maxContextTokens === 'number' && Number.isFinite(update.maxContextTokens)) {
       await ghostConfig.update('maxContextTokens', Math.max(1, Math.floor(update.maxContextTokens)), target)
