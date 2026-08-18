@@ -19,6 +19,7 @@ All notable changes to this extension are documented here.
 - Add message search results, bookmarks, conversation duplication/branching, and lazy loading for older messages.
 - Add searchable per-conversation prompt history with configurable retention and keyboard guidance.
 - Autosave composer drafts and show whether local conversation persistence is enabled.
+- Add /test, /review, and /refactor slash commands with workflow-specific prompts.
 
 ## 1.1.16 - 2026-08-18
 

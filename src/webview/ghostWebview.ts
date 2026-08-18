@@ -2994,12 +2994,13 @@ const startNewConversation = () => {
 }
 
 const applySlashCommand = (prompt: string): string | undefined => {
-  const command = /^\/(clear|model|explain|fix|summarize)\b\s*(.*)$/i.exec(prompt)
+  const command = /^\/(clear|model|explain|fix|test|review|refactor|summarize)\b\s*(.*)$/i.exec(prompt)
   if (!command) {
     return prompt
   }
   const name = command[1].toLowerCase()
   const rest = command[2].trim()
+  let resolvedPrompt = rest || prompt
   if (name === 'clear') {
     post('clear')
     const conversation = getActiveConversation()
@@ -3020,12 +3021,21 @@ const applySlashCommand = (prompt: string): string | undefined => {
     controls.mode = 'explain'
   } else if (name === 'fix') {
     controls.mode = 'edit'
+  } else if (name === 'test') {
+    controls.mode = 'agent'
+    resolvedPrompt = rest ? `Run tests for ${rest} and report the results.` : 'Run the relevant tests for the current workspace and report the results.'
+  } else if (name === 'review') {
+    controls.mode = 'explain'
+    resolvedPrompt = rest ? `Review ${rest} for correctness, risks, and missing tests.` : 'Review the current workspace for correctness, risks, and missing tests.'
+  } else if (name === 'refactor') {
+    controls.mode = 'edit'
+    resolvedPrompt = rest ? `Refactor ${rest}, preserve behavior, and explain the changes.` : 'Refactor the current workspace, preserve behavior, and explain the changes.'
   } else if (name === 'summarize') {
-    return rest ? `Summarize this for me:\n\n${rest}` : 'Summarize the current context for me.'
+    resolvedPrompt = rest ? `Summarize this for me:\n\n${rest}` : 'Summarize the current context for me.'
   }
   renderControls()
   sendSettingsUpdate()
-  return rest || prompt
+  return resolvedPrompt
 }
 
 const submitPrompt = (rawPrompt: string) => {
