@@ -43,6 +43,7 @@ All notable changes to this extension are documented here.
 - Add shared typed tool results with status, exit codes, changed files, output bytes, truncation, warnings, and retryability metadata.
 - Group tool, agent, provider, persistence, protocol, and context limits in one shared policy module.
 - Add shared Ghost error codes and error classes across provider, tool, persistence, approval, and UI boundaries.
+- Add Ghost settings schema versioning with activation-time migrations for legacy approval and debug settings.
 
 ## 1.1.17 - 2026-08-18
 

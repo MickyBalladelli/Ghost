@@ -140,7 +140,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add typed result objects for tools: status, exit code, changed files, bytes, truncation, warnings, and retryability.
 - [x] Make constants such as tool rounds, edit limits, output limits, timeouts, and context limits configurable or grouped in one policy module.
 - [x] Define error classes and error codes shared by providers, tools, persistence, approvals, and UI.
-- [ ] Add settings schema versioning and migrations before adding more configuration.
+- [x] Add settings schema versioning and migrations before adding more configuration.
 - [ ] Add dependency injection for providers, filesystem, clock, process runner, storage, and webview messaging so core behavior can be tested without VS Code.
 - [ ] Add `dispose` methods and ownership rules for every long-lived resource.
 

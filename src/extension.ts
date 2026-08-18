@@ -14,6 +14,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const activationStartedAt = Date.now()
   const providerSecrets = new ProviderSecrets(context.secrets)
   await providerSecrets.initialize()
+  await ghostConfig.migrateSettings()
   const providerApiKey = (provider: GhostProvider): string | undefined => providerSecrets.get(provider)
   const helloWorldCommand = vscode.commands.registerCommand('ghost.helloWorld', () => {
     vscode.window.showInformationMessage('Ghost is ready.')

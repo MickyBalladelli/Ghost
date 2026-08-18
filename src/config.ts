@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import type { CustomResponseFormat, OpenAiProfileId } from './services/providerProfiles'
 import type { GhostModelAliases, GhostModelProfiles } from './services/modelProfiles'
+import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION } from './settingsMigrations'
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
@@ -44,6 +45,7 @@ export const DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST = [
 ] as const
 
 export interface GhostSettings {
+  settingsSchemaVersion: number
   ollamaUrl: string
   openaiUrl: string
   openaiProfile: OpenAiProfileId
@@ -103,6 +105,7 @@ export interface GhostSettings {
 export type GhostSetting = keyof GhostSettings
 
 export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
+  settingsSchemaVersion: GHOST_SETTINGS_SCHEMA_VERSION,
   ollamaUrl: 'http://localhost:11434',
   openaiUrl: 'http://localhost:8001/v1',
   openaiProfile: 'generic',
@@ -165,6 +168,49 @@ export type GhostSettingsChangeListener = (
 ) => void
 
 export class GhostConfig {
+  private configuredSchemaVersion(configuration: vscode.WorkspaceConfiguration): number {
+    const inspection = configuration.inspect<number>('settingsSchemaVersion')
+    const configured = inspection?.workspaceFolderValue
+      ?? inspection?.workspaceValue
+      ?? inspection?.globalValue
+    return typeof configured === 'number' && Number.isInteger(configured) && configured >= 0 ? configured : 0
+  }
+
+  private configurationTarget(configuration: vscode.WorkspaceConfiguration, setting: string): vscode.ConfigurationTarget {
+    const inspection = configuration.inspect(setting)
+    if (inspection?.workspaceFolderValue !== undefined) {
+      return vscode.ConfigurationTarget.WorkspaceFolder
+    }
+    if (inspection?.workspaceValue !== undefined) {
+      return vscode.ConfigurationTarget.Workspace
+    }
+    return vscode.ConfigurationTarget.Global
+  }
+
+  async migrateSettings(): Promise<void> {
+    const configuration = vscode.workspace.getConfiguration(GHOST_CONFIGURATION_SECTION)
+    const version = this.configuredSchemaVersion(configuration)
+    const migration = migrateGhostSettings({
+      version,
+      values: {
+        fileEditApproval: configuration.get('fileEditApproval'),
+        autoAcceptScope: configuration.get('autoAcceptScope'),
+        enableDebugLogging: configuration.get('enableDebugLogging'),
+        logLevel: configuration.get('logLevel')
+      }
+    })
+    if (!migration.changed) {
+      return
+    }
+
+    for (const [setting, value] of Object.entries(migration.values)) {
+      if (!sameSettingValue(setting, value, configuration)) {
+        await configuration.update(setting, value, this.configurationTarget(configuration, setting))
+      }
+    }
+    await configuration.update('settingsSchemaVersion', migration.version, this.configurationTarget(configuration, 'settingsSchemaVersion'))
+  }
+
   getSettings(): GhostSettings {
     const configuration = vscode.workspace.getConfiguration(GHOST_CONFIGURATION_SECTION)
 
@@ -174,6 +220,7 @@ export class GhostConfig {
       ? 'always'
       : configuredAutoAcceptScope
     return {
+      settingsSchemaVersion: this.configuredSchemaVersion(configuration),
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOST_SETTINGS.ollamaUrl),
       openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOST_SETTINGS.openaiUrl),
       openaiProfile: configuration.get('openaiProfile', DEFAULT_GHOST_SETTINGS.openaiProfile),
@@ -265,6 +312,10 @@ export class GhostConfig {
       }
     })
   }
+}
+
+function sameSettingValue(setting: string, value: unknown, configuration: vscode.WorkspaceConfiguration): boolean {
+  return JSON.stringify(configuration.get(setting)) === JSON.stringify(value)
 }
 
 export const ghostConfig = new GhostConfig()

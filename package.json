@@ -126,6 +126,12 @@
     "configuration": {
       "title": "Ghost",
       "properties": {
+        "ghost.settingsSchemaVersion": {
+          "type": "integer",
+          "default": 2,
+          "description": "Internal Ghost settings schema version. Do not edit manually.",
+          "markdownDescription": "Internal Ghost settings schema version. Ghost migrates older settings automatically."
+        },
         "ghost.ollamaUrl": {
           "type": "string",
           "default": "http://localhost:11434",
