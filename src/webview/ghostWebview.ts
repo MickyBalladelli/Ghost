@@ -3897,7 +3897,7 @@ const handleConversationAction = (action: string, conversationId: string) => {
   }
 }
 
-const handleExtensionMessage = (message: GhostExtensionMessage) => {
+const processExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'persisted-state') {
     if (Array.isArray(message.state.conversations) && message.state.conversations.length > 0) {
       const conversations = message.state.conversations.map(value => recoverInterruptedConversation(normalizeConversation(value as Partial<Conversation>)))
@@ -4423,6 +4423,52 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     requests.delete(message.requestId)
     updateMessageElement(assistantMessage)
     render(false)
+  }
+}
+
+type StreamDeltaMessage = GhostExtensionMessage & {
+  type: 'text-delta' | 'code-delta'
+  delta: string
+}
+
+const pendingStreamMessages: StreamDeltaMessage[] = []
+let pendingStreamFrame: number | undefined
+
+const flushStreamMessages = (): void => {
+  pendingStreamFrame = undefined
+  if (pendingStreamMessages.length === 0) {
+    return
+  }
+  const messages = pendingStreamMessages.splice(0, pendingStreamMessages.length)
+  const batched: StreamDeltaMessage[] = []
+  for (const message of messages) {
+    const previous = batched.at(-1)
+    if (previous && previous.requestId === message.requestId && previous.conversationId === message.conversationId) {
+      batched[batched.length - 1] = {
+        ...message,
+        delta: `${previous.delta}${message.delta}`
+      }
+    } else {
+      batched.push(message)
+    }
+  }
+  for (const message of batched) {
+    processExtensionMessage(message)
+  }
+}
+
+const handleExtensionMessage = (message: GhostExtensionMessage): void => {
+  if (message.type !== 'text-delta' && message.type !== 'code-delta') {
+    if (pendingStreamFrame !== undefined) {
+      cancelAnimationFrame(pendingStreamFrame)
+      flushStreamMessages()
+    }
+    processExtensionMessage(message)
+    return
+  }
+  pendingStreamMessages.push(message as StreamDeltaMessage)
+  if (pendingStreamFrame === undefined) {
+    pendingStreamFrame = requestAnimationFrame(flushStreamMessages)
   }
 }
 
