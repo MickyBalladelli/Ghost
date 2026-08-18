@@ -39,6 +39,13 @@ import type { GhostRequestStatus, GhostStopReason } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
 import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
 import { compactPersistedState, isStoredRecord, StoredGlobalState, StoredWorkspaceState } from './ghostPersistence'
+import {
+  getFileEditPaths,
+  isConversationStateTool,
+  isFileEditTool,
+  requiresToolApproval,
+  shouldAutoAcceptFileEdit
+} from './ghostApprovalPolicy'
 import { parseTaskPlanMarker } from '../agent/taskPlan'
 import { CompletionRecord, parseCompletionRecordMarker } from '../agent/completionRecord'
 import { awaitCancellable } from '../tools/cancellation'
@@ -868,29 +875,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return choice === 'Continue'
   }
 
-  private requiresToolApproval(toolName: string): boolean {
-    return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction' || toolName === 'ghost_run_terminal_command'
-  }
-
-  private isConversationStateTool(toolName: string): boolean {
-    return toolName === 'ghost_update_task_plan' || toolName === 'ghost_record_completion'
-  }
-
-  private isFileEditTool(toolName: string): boolean {
-    return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction'
-  }
-
-  private getFileEditPaths(call: LocalToolCall): string[] {
-    try {
-      const paths = call.name === 'ghost_apply_transaction'
-        ? parseFileTransaction(call.arguments).edits.map(edit => edit.path)
-        : typeof call.arguments.path === 'string' ? [call.arguments.path] : []
-      return [...new Set(paths.map(filePath => resolveWorkspacePath(filePath).fsPath))]
-    } catch {
-      return []
-    }
-  }
-
   private async getDiffPreview(call: LocalToolCall, approvalContext: Pick<StagedEdit, 'requestId' | 'conversationId' | 'toolCallId'>): Promise<GhostToolDiffPreview | undefined> {
     if (call.name === 'ghost_apply_transaction') {
       try {
@@ -1200,27 +1184,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private shouldAutoAcceptFileEdit(
-    scope: GhostAutoAcceptScope,
-    request: GhostRequestState,
-    call: LocalToolCall
-  ): boolean {
-    if (scope === 'confirm' || request.autoAcceptDisabled) {
-      return false
-    }
-    if (scope === 'one-edit' || scope === 'request' || scope === 'session' || scope === 'workspace' || scope === 'always') {
-      return true
-    }
-    if (call.name === 'ghost_apply_transaction' || typeof call.arguments.path !== 'string') {
-      return false
-    }
-    if (!request.autoAcceptFilePath) {
-      request.autoAcceptFilePath = call.arguments.path
-      return true
-    }
-    return request.autoAcceptFilePath === call.arguments.path
-  }
-
   private async requestToolApproval(
     requestId: string,
     request: GhostRequestState,
@@ -1285,11 +1248,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const allowedTools = settings.toolAllowlist ?? [...GHOST_TOOL_NAMES]
     const askedTools = settings.toolAsklist ?? []
     const deniedTools = settings.toolDenylist ?? []
-    const asksByPolicy = !this.isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || askedTools.includes(call.name))
-    const blockedByPolicy = !this.isConversationStateTool(call.name) && deniedTools.includes(call.name)
-    const isFileEditTool = this.isFileEditTool(call.name)
-    const fileEditPaths = isFileEditTool ? this.getFileEditPaths(call) : []
-    const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
+    const asksByPolicy = !isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || askedTools.includes(call.name))
+    const blockedByPolicy = !isConversationStateTool(call.name) && deniedTools.includes(call.name)
+    const fileEditTool = isFileEditTool(call.name)
+    const fileEditPaths = fileEditTool ? getFileEditPaths(call) : []
+    const unsavedEditorWarning = fileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
     if (unsavedEditorWarning) {
       this.postStreamEvent(requestId, request, {
         type: 'tool-requested',
@@ -1302,14 +1265,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
       return { decision: 'reject', reason: unsavedEditorWarning }
     }
-    const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && !asksByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
-    const requiresApproval = (this.requiresToolApproval(call.name) || asksByPolicy) && !blockedByPolicy && !autoAcceptedFileEdit
+    const autoAcceptDecision = shouldAutoAcceptFileEdit(settings.autoAcceptScope, request.autoAcceptDisabled === true, request.autoAcceptFilePath, call)
+    if (autoAcceptDecision.nextAutoAcceptFilePath) {
+      request.autoAcceptFilePath = autoAcceptDecision.nextAutoAcceptFilePath
+    }
+    const autoAcceptedFileEdit = fileEditTool && !blockedByPolicy && !asksByPolicy && autoAcceptDecision.accepted
+    const requiresApproval = (requiresToolApproval(call.name) || asksByPolicy) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
-    const requestApproved = isFileEditTool && (
+    const requestApproved = fileEditTool && (
       request.approveAllFileEdits === true ||
       (fileEditPaths.length > 0 && fileEditPaths.every(filePath => request.approvedFilePaths?.has(filePath)))
     )
-    const needsInteractiveApproval = requiresApproval && (isFileEditTool
+    const needsInteractiveApproval = requiresApproval && (fileEditTool
       ? !(requestApproved || this.sessionApprovedFileEdits || this.workspaceApprovedFileEdits)
       : !this.sessionApprovedTools.has(call.name))
     const diffPreview = needsInteractiveApproval
@@ -1322,13 +1289,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (request.cancellation.token.isCancellationRequested) {
       return { decision: 'reject', reason: 'The request was cancelled.' }
     }
-    const expectedFiles = isFileEditTool && !blockedByPolicy
+    const expectedFiles = fileEditTool && !blockedByPolicy
       ? await this.getExpectedFileSnapshots(call)
       : undefined
     if (request.cancellation.token.isCancellationRequested) {
       return { decision: 'reject', reason: 'The request was cancelled.' }
     }
-    if (isFileEditTool && !blockedByPolicy && !expectedFiles) {
+    if (fileEditTool && !blockedByPolicy && !expectedFiles) {
       return { decision: 'reject', reason: 'Ghost could not read the file safely. Refresh the file and retry.' }
     }
     const expectedSnapshot = typeof call.arguments.path === 'string' && expectedFiles
@@ -1397,7 +1364,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     request.approveAllFileEdits = true
     for (const pending of [...this.pendingApprovals.values()]) {
-      if (pending.requestId === requestId && pending.conversationId === conversationId && this.isFileEditTool(pending.call.name)) {
+      if (pending.requestId === requestId && pending.conversationId === conversationId && isFileEditTool(pending.call.name)) {
         this.decideToolApproval(requestId, conversationId, pending.toolCallId, { decision: 'request' })
       }
     }
@@ -1417,25 +1384,25 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (approval.decision === 'request' && request) {
       request.approveAllFileEdits = true
     }
-    if (approval.decision === 'file' && request && this.isFileEditTool(pending.call.name)) {
-      const paths = this.getFileEditPaths(pending.call)
+    if (approval.decision === 'file' && request && isFileEditTool(pending.call.name)) {
+      const paths = getFileEditPaths(pending.call)
       if (paths.length === 1) {
         request.approvedFilePaths ??= new Set<string>()
         request.approvedFilePaths.add(paths[0])
       }
     }
-    if (approval.decision === 'workspace' && this.isFileEditTool(pending.call.name)) {
+    if (approval.decision === 'workspace' && isFileEditTool(pending.call.name)) {
       this.workspaceApprovedFileEdits = true
       void this.workspaceState?.update('ghost.workspace.approvedFileEdits', true)
     }
     if (approval.decision === 'session') {
-      if (this.isFileEditTool(pending.call.name)) {
+      if (isFileEditTool(pending.call.name)) {
         this.sessionApprovedFileEdits = true
       } else {
         this.sessionApprovedTools.add(pending.call.name)
       }
     }
-    if (this.isFileEditTool(pending.call.name)) {
+    if (isFileEditTool(pending.call.name)) {
       const staged = this.stagedEdits.get(toolCallId)
       if (staged) {
         if (approval.decision === 'reject') {
@@ -1617,10 +1584,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     pending.call.arguments = argumentsPayload
-    const expectedFiles = this.isFileEditTool(pending.call.name)
+    const expectedFiles = isFileEditTool(pending.call.name)
       ? await this.getExpectedFileSnapshots(pending.call)
       : undefined
-    if (this.isFileEditTool(pending.call.name) && !expectedFiles) {
+    if (isFileEditTool(pending.call.name) && !expectedFiles) {
       pending.resolve({ decision: 'reject', reason: 'Ghost could not read the file safely. Refresh the file and retry.' })
       return
     }

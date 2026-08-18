@@ -31,6 +31,7 @@ All notable changes to this extension are documented here.
 - Extract conversation creation and prompt-history operations into a runtime webview store loaded before the UI.
 - Split webview protocol, settings, history, rendering, tool timeline, composer, and modal helpers into separate runtime modules.
 - Extract persisted-state shapes and bounded storage compaction into a dedicated UI persistence module.
+- Extract tool approval policy, file-edit classification, and auto-accept scope rules into a dedicated module.
 
 ## 1.1.17 - 2026-08-18
 
