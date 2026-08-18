@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.17 - 2026-08-18
+
+- Add a shared fill-in-the-middle provider contract with capability checks and provider endpoint routing.
+- Route supported generation controls through FIM requests for Ollama and OpenAI-compatible providers.
+
 ## 1.1.16 - 2026-08-18
 
 - Preserve valid provider output when local servers return complete message/content fields instead of streaming delta fields.

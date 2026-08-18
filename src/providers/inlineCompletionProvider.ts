@@ -138,7 +138,12 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
             topK: modelSettings.topK,
             minP: modelSettings.minP,
             presencePenalty: modelSettings.presencePenalty,
-            repeatPenalty: modelSettings.repeatPenalty
+            repeatPenalty: modelSettings.repeatPenalty,
+            seed: modelSettings.seed,
+            stop: modelSettings.stopSequences,
+            contextWindow: modelSettings.contextWindow,
+            grammar: modelSettings.grammar,
+            maxTokens: modelSettings.maxTokens
           },
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
           ...(useOpenAiCompatible && this.apiKeyProvider?.() ? { apiKey: this.apiKeyProvider() } : {}),

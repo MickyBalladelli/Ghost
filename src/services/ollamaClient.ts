@@ -18,6 +18,9 @@ import { OpenAiStreamMode, streamOpenAiEvents } from './openAiStream'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
 import { providerHttpError, requestWithRetry } from './providerRequest'
+import type { FimCompletionOptions } from './fim'
+
+export type { FimCompletionOptions } from './fim'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -29,17 +32,6 @@ export interface OllamaChatOptions extends MlxChatOptions {
   stream?: boolean
   mode?: OllamaApiMode
   openAiMode?: OpenAiApiMode
-  apiKey?: string
-  openAiTransport?: OpenAiTransportSettings
-}
-
-export interface FimCompletionOptions {
-  model: string
-  prefix: string
-  suffix: string
-  generation?: GenerationSettings
-  signal?: AbortSignal
-  mode?: OllamaApiMode
   apiKey?: string
   openAiTransport?: OpenAiTransportSettings
 }

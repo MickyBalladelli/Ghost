@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { DEFAULT_MLX_URL, MlxChatOptions, MlxClient, MlxStreamEvent } from './mlxClient'
 import { createProviderAdapter, ProviderAdapter, ProviderClient, ProviderId } from './providerAdapter'
+import type { FimCompletionOptions } from './fim'
 
 export type GhostProvider = ProviderId
 
@@ -75,6 +76,15 @@ export class LlmFactory {
     const resolved = await this.resolve(options.provider)
     const model = await this.selectAvailableModel(resolved.adapter, options.model, options.signal)
     yield* resolved.adapter.streamEvents({ ...options, model })
+  }
+
+  async fetchFimCompletion(options: FimCompletionOptions & { provider?: GhostProvider }): Promise<string> {
+    const resolved = await this.resolve(options.provider)
+    if (!resolved.adapter.capabilities(options.model).supportsFIM) {
+      throw new Error(`Provider ${resolved.provider} does not support fill-in-the-middle completion`)
+    }
+    const model = await this.selectAvailableModel(resolved.adapter, options.model, options.signal)
+    return resolved.adapter.fim({ ...options, model })
   }
 
   resetMlxDetection(): void {

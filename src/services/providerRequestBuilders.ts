@@ -153,6 +153,10 @@ export function buildOllamaFimBody(options: FimWireOptions, prompt: string): Rec
       ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
       ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
       ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
+      ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+      ...(generation.stop?.length ? { stop: generation.stop } : {}),
+      ...(generation.contextWindow === undefined ? {} : { num_ctx: generation.contextWindow }),
+      ...(generation.grammar ? { grammar: generation.grammar } : {}),
       ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
     }
   }
@@ -167,6 +171,8 @@ export function buildOpenAiFimBody(options: FimWireOptions, prompt: string): Rec
     ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
     ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
     ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
+    ...(generation.seed === undefined ? {} : { seed: generation.seed }),
+    ...(generation.stop?.length ? { stop: generation.stop } : {}),
     ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
   }
 }

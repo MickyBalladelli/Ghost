@@ -1,5 +1,6 @@
 import { MlxChatOptions, MlxStreamEvent } from './mlxClient'
 import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
+import type { FimCompletionOptions } from './fim'
 
 export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions'
@@ -61,6 +62,7 @@ export interface ProviderClient {
   listModels?(signal?: AbortSignal): Promise<string[]>
   streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string>
   streamChatEvents?(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
+  fetchFimCompletion?(options: FimCompletionOptions): Promise<string>
 }
 
 export interface ProviderAdapter {
@@ -69,6 +71,7 @@ export interface ProviderAdapter {
   chat(options: MlxChatOptions): Promise<string>
   stream(options: MlxChatOptions): AsyncGenerator<string>
   streamEvents(options: MlxChatOptions): AsyncGenerator<MlxStreamEvent>
+  fim(options: FimCompletionOptions): Promise<string>
   listModels(signal?: AbortSignal): Promise<string[]>
   health(timeoutMs?: number, signal?: AbortSignal): Promise<boolean>
   normalizeError(error: unknown): ProviderError
@@ -106,7 +109,7 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     supportsTools: true,
     supportsJsonMode: true,
     supportsVision: false,
-    supportsFIM: false,
+    supportsFIM: true,
     supportsStreaming: true,
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
   }
@@ -151,9 +154,13 @@ export function normalizeProviderError(provider: ProviderId, error: unknown): Pr
 
 export function createProviderAdapter(provider: ProviderId, client: ProviderClient): ProviderAdapter {
   const capabilityDefaults = CAPABILITIES[provider]
+  const capabilities = {
+    ...capabilityDefaults,
+    supportsFIM: capabilityDefaults.supportsFIM && Boolean(client.fetchFimCompletion)
+  }
   return {
     provider,
-    capabilities: (model = '') => ({ model: model.trim(), provider, ...capabilityDefaults }),
+    capabilities: (model = '') => ({ model: model.trim(), provider, ...capabilities }),
     async chat(options) {
       let result = ''
       try {
@@ -181,6 +188,20 @@ export function createProviderAdapter(provider: ProviderId, client: ProviderClie
         for await (const chunk of client.streamChatCompletion(options)) {
           yield { type: 'text', text: chunk }
         }
+      } catch (error) {
+        throw normalizeProviderError(provider, error)
+      }
+    },
+    async fim(options) {
+      if (!client.fetchFimCompletion) {
+        throw new ProviderError(`Provider ${provider} does not support fill-in-the-middle completion`, {
+          provider,
+          code: 'invalid-request',
+          retryable: false
+        })
+      }
+      try {
+        return await client.fetchFimCompletion(options)
       } catch (error) {
         throw normalizeProviderError(provider, error)
       }
