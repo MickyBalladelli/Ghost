@@ -1,30 +1,41 @@
-type GhostViewStatus = 'ready' | 'offline'
-type NoticeKind = 'error' | 'no-model' | 'info'
-type MessageRole = 'user' | 'assistant'
-type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
-type OpenAiProfile = 'generic' | 'anthropic' | 'gemini' | 'azure-openai' | 'lm-studio' | 'llama-cpp' | 'vllm' | 'litellm' | 'custom'
-type CustomResponseFormat = 'openai-sse' | 'json'
-type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
-type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
-type LogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'
-type ModelRole = 'chat' | 'agent' | 'vision' | 'autocomplete'
-interface ModelProfile {
-  provider?: GhostProvider
-  model?: string
-  chatModel?: string
-  agentModel?: string
-  visionModel?: string
-  autocompleteModel?: string
-  temperature?: number
-  topP?: number
-  topK?: number
-  minP?: number
-  presencePenalty?: number
-  repeatPenalty?: number
-  maxContextTokens?: number
-  maxTokens?: number
-}
+import type {
+  ActiveRequest,
+  Attachment,
+  AutoAcceptScope,
+  ChatMessage,
+  CompletionRecord,
+  ContextData,
+  ContinuationResume,
+  ControlSettings,
+  Conversation,
+  CustomResponseFormat,
+  GhostExtensionMessage,
+  GhostMode,
+  GhostProvider,
+  GhostState,
+  GhostViewStatus,
+  GhostWebviewApi,
+  LogLevel,
+  MessagePart,
+  MessageRole,
+  ModelMetadata,
+  ModelProfile,
+  ModelRole,
+  NoticeKind,
+  OpenAiProfile,
+  ProgressPhase,
+  PromptPreset,
+  RequestEvent,
+  RequestStatus,
+  ResponseLength,
+  RequestSummary,
+  ResponseStats,
+  StopReason,
+  TaskPlan,
+  ToolCall,
+  UiPreferences,
+  WebviewRequestOptions
+} from './ghostWebviewTypes'
 
 const builtInModelProfiles: Record<string, ModelProfile> = {
   coding: { temperature: 0.2, topP: 0.9, topK: 20, minP: 0.05, repeatPenalty: 1.1, maxContextTokens: 16384, maxTokens: 2048 },
@@ -41,102 +52,6 @@ const defaultGenerationSettings = {
   repeatPenalty: 1.05,
   maxContextTokens: 8192,
   responseLength: 'balanced' as ResponseLength
-}
-type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
-type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
-type StopReason = 'failed-tool' | 'invalid-model-response' | 'cancelled' | 'timeout' | 'approval-rejected' | 'context-limit' | 'budget-limit' | 'provider-failure'
-
-interface Attachment {
-  name: string
-  path?: string
-  content?: string
-  mimeType?: string
-}
-
-interface PromptPreset {
-  id: string
-  name: string
-  prompt: string
-  mode: GhostMode
-  temperature: number
-  maxContextTokens: number
-  responseLength: ResponseLength
-}
-
-interface ControlSettings {
-  provider: GhostProvider
-  ollamaUrl: string
-  mlxUrl: string
-  openaiUrl: string
-  openaiProfile: OpenAiProfile
-  openaiApiVersion: string
-  openaiCustomModelsPath: string
-  openaiCustomChatPath: string
-  openaiCustomRequestTemplate: string
-  openaiCustomResponseFormat: CustomResponseFormat
-  openaiApiKeyHeader: string
-  openaiApiKeyPrefix: string
-  openaiOrganizationHeader: string
-  openaiOrganization: string
-  openaiProjectHeader: string
-  openaiProject: string
-  openaiProxy: string
-  openaiNoProxy: string
-  openaiTlsRejectUnauthorized: boolean
-  openaiTlsCaFile: string
-  openaiTlsCertFile: string
-  openaiTlsKeyFile: string
-  toolAllowlist: string[]
-  toolAsklist: string[]
-  toolDenylist: string[]
-  terminalEnvironmentAllowlist: string[]
-  terminalEnvironmentAsklist: string[]
-  enableDebugLogging: boolean
-  logLevel: LogLevel
-  networkAccess: 'local' | 'external'
-  chatModel: string
-  autocompleteModel: string
-  modelProfile: string
-  modelAliases: Record<string, string>
-  modelProfiles: Record<string, ModelProfile>
-  maxContextTokens: number
-  temperature: number
-  topP: number
-  topK: number
-  minP: number
-  presencePenalty: number
-  repeatPenalty: number
-  responseLength: ResponseLength
-  mode: GhostMode
-  fileEditApproval: AutoAcceptScope
-  enableConversationPersistence: boolean
-}
-
-interface UiPreferences {
-  assistantName: string
-  assistantAvatar: string
-  accentColor: string
-  compactLayout: boolean
-  showThinkingDetails: boolean
-  showToolProgress: boolean
-  verboseToolDetails?: boolean
-  showDiagnostics: boolean
-  autoContext: boolean
-  customSystemInstructions: string
-  composerHeight: number
-  promptRows: number
-  promptHistoryLimit: number
-  workspaceRoot: string
-  firstRunSetupComplete: boolean
-  workspaceOnly: boolean
-}
-
-interface ContextData {
-  workspaceName: string
-  folders: string[]
-  activeFile?: { name: string; path: string; languageId: string; hasSelection: boolean }
-  openFiles: string[]
-  tools: string[]
 }
 
 const MAX_FAILED_TOOL_RETRIES = 2
@@ -159,267 +74,6 @@ const toolDescriptions: Record<string, string> = {
 }
 
 const terminalEnvironmentDefaults = ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
-
-interface ChatMessage {
-  id: string
-  role: MessageRole
-  content: string
-  parts: MessagePart[]
-  responseStats?: ResponseStats
-  requestSummary?: RequestSummary
-  status?: 'streaming' | 'error'
-  requestStatus?: RequestStatus
-  stopReason?: StopReason
-  eventLog?: RequestEvent[]
-  requestId?: string
-  bookmarked?: boolean
-  createdAt: number
-  updatedAt: number
-}
-
-interface ResponseStats {
-  elapsedMs: number
-  tokenCount: number
-  tokensPerSecond: number
-  model?: string
-  provider?: GhostProvider
-}
-
-interface RequestSummary {
-  changedFiles: string[]
-  commandCount: number
-  elapsedMs: number
-  model?: string
-  provider?: GhostProvider
-  tokenCount: number
-  status: string
-}
-
-type MessagePart =
-  | { kind: 'text'; text: string }
-  | { kind: 'reasoning' | 'progress'; text: string; phase?: ProgressPhase; elapsedMs?: number; tokenCount?: number; tokensPerSecond?: number; model?: string }
-  | { kind: 'tool'; toolCall: ToolCall }
-  | { kind: 'error'; message: string; recoverable?: boolean }
-  | { kind: 'warning'; message: string }
-
-interface ToolCall {
-  id: string
-  round: number
-  name: string
-  arguments?: string
-  requiresApproval?: boolean
-  approval?: 'pending' | 'approved' | 'rejected'
-  diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
-  status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
-  result?: string
-  startedAt: number
-  completedAt?: number
-  retryCount?: number
-}
-
-interface TaskPlan {
-  steps: Array<{ id: string; title: string; checked: boolean; evidence?: string }>
-  currentStep?: string
-  blockedReason?: string
-  completionEvidence: string[]
-  updatedAt: number
-}
-
-interface CompletionRecord {
-  changedFiles: string[]
-  checksRun: string[]
-  failures: string[]
-  remainingWork: string[]
-  recordedAt: number
-}
-
-interface RequestEvent {
-  timestamp: number
-  elapsedMs: number
-  type: string
-  status: RequestStatus
-  phase?: ProgressPhase
-  detail?: string
-}
-
-interface ContinuationResume {
-  prompt: string
-  lastFailure?: { tool: string; arguments?: Record<string, unknown>; result?: string }
-  filePaths: string[]
-  remainingPlan?: TaskPlan
-}
-
-interface Conversation {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  draft: string
-  promptHistory: string[]
-  taskPlan?: TaskPlan
-  completionRecord?: CompletionRecord
-  activeRequestId?: string
-  createdAt: number
-  updatedAt: number
-}
-
-interface GhostState {
-  schemaVersion: number
-  conversations: Conversation[]
-  activeConversationId: string
-  promptHistory?: string[]
-  presets?: PromptPreset[]
-  showReasoning?: boolean
-  preferences?: Partial<ControlSettings> & Partial<UiPreferences>
-}
-
-type GhostExtensionMessage =
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'state'
-      status: GhostViewStatus
-      detail: string
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'reset' | 'clear'
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'controls-state'
-      settings: Omit<ControlSettings, 'fileEditApproval'> & { autoAcceptScope: AutoAcceptScope }
-      models: string[]
-      modelMetadata?: ModelMetadata[]
-      connection: 'online' | 'offline' | 'unknown'
-      context: Omit<ContextData, 'tools'>
-      tools: string[]
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'persisted-state'
-      state: {
-        schemaVersion: number
-        conversations?: unknown[]
-        activeConversationId?: string
-        promptHistory?: string[]
-        presets?: unknown[]
-        showReasoning?: boolean
-        preferences?: Record<string, unknown>
-      }
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'file-picked'
-      attachments: Attachment[]
-    }
-  | {
-      source: 'ghost-extension'
-      version: 1
-      type: 'request-started' | 'thinking' | 'text-delta' | 'code-delta' | 'tool-requested' | 'tool-result' | 'task-plan' | 'warning' | 'error' | 'request-completed'
-      requestId: string
-      conversationId: string
-      sequence: number
-      state?: RequestStatus
-      phase?: ProgressPhase
-      elapsedMs?: number
-      model?: string
-      provider?: GhostProvider
-      tokenCount?: number
-      tokensPerSecond?: number
-      startedAt?: number
-      detail?: string
-      delta?: string
-      tool?: string
-      toolCallId?: string
-      arguments?: Record<string, unknown>
-      requiresApproval?: boolean
-      diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
-      message?: string
-      resultStatus?: 'completed' | 'rejected' | 'failed'
-      plan?: TaskPlan
-      completionRecord?: CompletionRecord
-      eventLog?: RequestEvent[]
-      status?: 'completed' | 'cancelled' | 'failed'
-      stopReason?: StopReason
-    }
-
-interface GhostWebviewApi {
-  postMessage(message: unknown): void
-  getState<T>(): T | undefined
-  setState<T>(state: T): void
-}
-
-interface ActiveRequest {
-  requestId: string
-  conversationId: string
-  assistantMessageId: string
-  lastSequence: number
-  status: RequestStatus
-  attempt: number
-  startedAt: number
-  model: string
-  provider?: GhostProvider
-  phase: ProgressPhase
-  latestDetail: string
-  tokenCount: number
-  tokensPerSecond?: number
-  stopReason?: StopReason
-  autoAcceptDisabled?: boolean
-}
-
-interface ModelMetadata {
-  id: string
-  label: string
-  provider: GhostProvider
-  contextWindow?: number
-  outputLimit?: number
-  nativeApi?: string
-  supportsTools?: boolean
-  supportsJsonMode?: boolean
-  supportsVision?: boolean
-  supportsFIM?: boolean
-  supportsStreaming?: boolean
-  supportsSampling?: {
-    temperature: boolean
-    topP: boolean
-    topK: boolean
-    minP: boolean
-    presencePenalty: boolean
-    repeatPenalty: boolean
-  }
-  capabilities: string[]
-}
-
-interface WebviewRequestOptions {
-  provider: GhostProvider
-  model: string
-  modelProfile: string
-  modelRole?: ModelRole
-  temperature: number
-  topP: number
-  topK: number
-  minP: number
-  presencePenalty: number
-  repeatPenalty: number
-  maxContextTokens: number
-  maxTokens?: number
-  mode: GhostMode
-  showReasoning: boolean
-  customSystemInstructions: string
-  workspaceRoot?: string
-  context: {
-    workspace: boolean
-    folders: boolean
-    activeFile: boolean
-    selection: boolean
-    openFiles: boolean
-    tools: boolean
-  }
-}
 
 declare function acquireVsCodeApi(): GhostWebviewApi
 

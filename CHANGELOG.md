@@ -27,6 +27,7 @@ All notable changes to this extension are documented here.
 - Record local request timing counters for context, provider wait, first token, tools, approvals, and verification when debug logging is enabled.
 - Add off-by-default local log levels, secret redaction before writing, and Command Palette actions to open or clear Ghost Logs.
 - Profile activation time locally and lazy-load provider clients and model diagnostics until their commands are used.
+- Move shared webview state and protocol types into a dedicated module to make the webview split incremental and behavior-neutral.
 
 ## 1.1.17 - 2026-08-18
 
