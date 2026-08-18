@@ -233,6 +233,7 @@ type GhostExtensionMessage =
       type: 'controls-state'
       settings: Omit<ControlSettings, 'fileEditApproval'> & { autoAcceptScope: AutoAcceptScope }
       models: string[]
+      modelMetadata?: ModelMetadata[]
       connection: 'online' | 'offline' | 'unknown'
       context: Omit<ContextData, 'tools'>
       tools: string[]
@@ -314,6 +315,21 @@ interface ModelMetadata {
   label: string
   provider: GhostProvider
   contextWindow?: number
+  outputLimit?: number
+  nativeApi?: string
+  supportsTools?: boolean
+  supportsJsonMode?: boolean
+  supportsVision?: boolean
+  supportsFIM?: boolean
+  supportsStreaming?: boolean
+  supportsSampling?: {
+    temperature: boolean
+    topP: boolean
+    topK: boolean
+    minP: boolean
+    presencePenalty: boolean
+    repeatPenalty: boolean
+  }
   capabilities: string[]
 }
 
@@ -711,6 +727,7 @@ app.innerHTML = `
       </select>
       <label class="control-label" for="model">Model</label>
       <select id="model" aria-label="Chat model"></select>
+      <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
       <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
     </section>
@@ -928,6 +945,7 @@ const screenReaderStatusElement = document.getElementById('screen-reader-status'
 const composerCountElement = document.getElementById('composer-count') as HTMLElement
 const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
+const modelCapabilitiesElement = document.getElementById('model-capabilities') as HTMLElement
 const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
 const attachmentListElement = document.getElementById('attachment-list') as HTMLElement
@@ -1381,6 +1399,47 @@ const renderPermissionControls = (): void => {
   terminalEnvironmentPermissionsSummaryElement.textContent = `${environmentAllowCount} passed · ${environmentAskCount} after approval · ${environmentDenyCount} blocked`
 }
 
+const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
+  if (!metadata) {
+    modelCapabilitiesElement.textContent = 'Model capabilities are not available yet. Refresh models to check the provider.'
+    modelCapabilitiesElement.title = ''
+    return
+  }
+
+  const formatLimit = (value: number | undefined): string => {
+    if (value === undefined) return 'unknown'
+    return value >= 1024 ? `${Math.round(value / 1024)}k` : String(value)
+  }
+  const sampling = metadata.supportsSampling
+  const samplingLabels: Array<[boolean | undefined, string]> = [
+    [sampling?.temperature, 'temperature'],
+    [sampling?.topP, 'top P'],
+    [sampling?.topK, 'top K'],
+    [sampling?.minP, 'min P'],
+    [sampling?.presencePenalty, 'presence penalty'],
+    [sampling?.repeatPenalty, 'repeat penalty']
+  ]
+  const supportedSampling = samplingLabels.filter(([supported]) => supported === true).map(([, label]) => label)
+  const ignoredSettings = samplingLabels.filter(([supported]) => supported === false).map(([, label]) => label)
+  const features = [
+    metadata.supportsStreaming ? 'streaming' : 'no streaming',
+    metadata.supportsVision ? 'vision' : 'no vision',
+    metadata.supportsTools ? 'native tools' : 'native tools unavailable',
+    metadata.supportsJsonMode ? 'JSON mode' : 'JSON mode unavailable',
+    metadata.supportsFIM ? 'FIM' : 'FIM unavailable'
+  ]
+  const summary = [
+    `${metadata.provider} · ${metadata.nativeApi ?? 'unknown API'}`,
+    `${formatLimit(metadata.contextWindow)} context`,
+    `${formatLimit(metadata.outputLimit)} output`,
+    ...features,
+    supportedSampling.length > 0 ? `sampling: ${supportedSampling.join(', ')}` : '',
+    ignoredSettings.length > 0 ? `ignored: ${ignoredSettings.join(', ')}` : ''
+  ].filter(Boolean).join(' · ')
+  modelCapabilitiesElement.textContent = summary
+  modelCapabilitiesElement.title = summary
+}
+
 const renderControls = () => {
   providerElement.value = controls.provider
   modelElement.textContent = ''
@@ -1391,6 +1450,7 @@ const renderControls = () => {
     modelElement.append(option)
   }
   modelElement.value = controls.chatModel
+  renderModelCapabilities(availableModelMetadata.find(metadata => metadata.id === controls.chatModel))
   temperatureElement.value = String(controls.temperature)
   temperatureValueElement.value = controls.temperature.toFixed(1)
   topPElement.value = String(controls.topP)
@@ -3028,7 +3088,11 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       fileEditApproval: message.settings.autoAcceptScope
     }
     availableModels = message.models
-    availableModelMetadata = message.models.map(model => ({
+    availableModelMetadata = message.modelMetadata?.filter(metadata => metadata && typeof metadata.id === 'string').map(metadata => ({
+      ...metadata,
+      provider: metadata.provider as GhostProvider,
+      capabilities: Array.isArray(metadata.capabilities) ? metadata.capabilities : []
+    })) ?? message.models.map(model => ({
       id: model,
       label: model,
       provider: controls.provider,
@@ -3326,6 +3390,7 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
       message.settings !== undefined &&
       typeof message.settings === 'object' &&
       Array.isArray(message.models) &&
+      (message.modelMetadata === undefined || Array.isArray(message.modelMetadata)) &&
       (message.connection === 'online' || message.connection === 'offline' || message.connection === 'unknown')
     )
   }

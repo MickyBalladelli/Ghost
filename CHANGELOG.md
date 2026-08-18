@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.10 - 2026-08-18
+
+- Show model context/output limits, provider capabilities, sampling support, and ignored settings beside the model selector.
+
 ## 1.1.8 - 2026-08-18
 
 - Cache provider health and model discovery for 30 seconds.

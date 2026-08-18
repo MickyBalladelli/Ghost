@@ -8,6 +8,7 @@ import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider, GhostSettings } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
+import { createProviderAdapter, ModelCapabilityRecord } from '../services/providerAdapter'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveWorkspacePath } from '../tools/workspacePath'
@@ -22,6 +23,7 @@ import {
   GhostAttachment,
   GhostContinuation,
   GhostExtensionMessage,
+  GhostModelMetadata,
   GhostPersistedState,
   GhostRequestEvent,
   GhostSettingsUpdate,
@@ -116,11 +118,37 @@ const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
 interface ProviderStatus {
   connection: 'online' | 'offline'
   models: string[]
+  modelMetadata: ModelCapabilityRecord[]
 }
 
 interface ProviderStatusCache extends ProviderStatus {
   key: string
   checkedAt: number
+}
+
+function toGhostModelMetadata(capability: ModelCapabilityRecord): GhostModelMetadata {
+  const capabilities = [
+    capability.supportsStreaming ? 'streaming' : '',
+    capability.supportsVision ? 'vision' : '',
+    capability.supportsTools ? 'native tools' : '',
+    capability.supportsJsonMode ? 'JSON mode' : '',
+    capability.supportsFIM ? 'FIM' : ''
+  ].filter(Boolean)
+  return {
+    id: capability.model,
+    label: capability.model,
+    provider: capability.provider,
+    contextWindow: capability.contextWindow,
+    outputLimit: capability.outputLimit,
+    nativeApi: capability.nativeApi,
+    supportsTools: capability.supportsTools,
+    supportsJsonMode: capability.supportsJsonMode,
+    supportsVision: capability.supportsVision,
+    supportsFIM: capability.supportsFIM,
+    supportsStreaming: capability.supportsStreaming,
+    supportsSampling: capability.supportsSampling,
+    capabilities
+  }
 }
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -1662,9 +1690,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
         : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
+    const adapter = createProviderAdapter(settings.provider, client)
     const online = await client.checkHealth(3000)
     if (!online) {
-      return { connection: 'offline', models: [] }
+      return { connection: 'offline', models: [], modelMetadata: [adapter.capabilities(settings.chatModel)] }
     }
 
     let models: string[] = []
@@ -1675,9 +1704,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
       }
     }
+    const normalizedModels = [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
+    const metadataModels = [...new Set([...normalizedModels, settings.chatModel])]
     return {
       connection: 'online',
-      models: [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
+      models: normalizedModels,
+      modelMetadata: metadataModels.map(model => adapter.capabilities(model))
     }
   }
 
@@ -1693,7 +1725,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     const promise: Promise<ProviderStatus> = this.readProviderStatus(settings).catch(error => {
       this.debugLog('provider health check failed', error instanceof Error ? error.message : String(error))
-      return { connection: 'offline' as const, models: [] }
+      return { connection: 'offline' as const, models: [], modelMetadata: [] }
     })
     this.providerStatusRequest = { key, promise }
     try {
@@ -1720,6 +1752,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     if (models.length === 0) {
       models = [settings.chatModel]
     }
+    const modelMetadata = providerStatus.modelMetadata.map(toGhostModelMetadata)
 
     const editor = vscode.window.activeTextEditor
     const activeFile = editor
@@ -1783,6 +1816,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
+      modelMetadata,
       connection,
       context: {
         workspaceName: vscode.workspace.name ?? 'Untitled workspace',
@@ -2412,6 +2446,16 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         max-width: 150px;
         min-width: 0;
         padding: 3px 5px;
+      }
+
+      .model-capabilities {
+        color: var(--vscode-descriptionForeground);
+        flex-basis: 100%;
+        font-size: 0.72em;
+        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .connection-indicator {

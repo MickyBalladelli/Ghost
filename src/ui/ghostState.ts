@@ -110,6 +110,21 @@ export interface GhostModelMetadata {
   label: string
   provider: string
   contextWindow?: number
+  outputLimit?: number
+  nativeApi?: string
+  supportsTools?: boolean
+  supportsJsonMode?: boolean
+  supportsVision?: boolean
+  supportsFIM?: boolean
+  supportsStreaming?: boolean
+  supportsSampling?: {
+    temperature: boolean
+    topP: boolean
+    topK: boolean
+    minP: boolean
+    presencePenalty: boolean
+    repeatPenalty: boolean
+  }
   capabilities?: string[]
 }
 

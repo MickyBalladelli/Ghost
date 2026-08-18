@@ -1,4 +1,4 @@
-import type { GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
+import type { GhostModelMetadata, GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
 import type { CustomResponseFormat, OpenAiProfileId } from '../services/providerProfiles'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
@@ -15,6 +15,7 @@ export type GhostContextKey = 'workspace' | 'folders' | 'activeFile' | 'selectio
 export type { GhostRequestStatus }
 export type { GhostProgressPhase }
 export type { GhostStopReason }
+export type { GhostModelMetadata }
 
 export type GhostToolApprovalDecision = 'once' | 'session' | 'reject'
 
@@ -264,6 +265,7 @@ export type GhostExtensionMessage =
         networkAccess: 'local' | 'external'
       }
       models: string[]
+      modelMetadata?: GhostModelMetadata[]
       connection: 'online' | 'offline' | 'unknown'
       context: {
         workspaceName: string
