@@ -1755,11 +1755,23 @@ const addAttachment = (attachment: Attachment) => {
 }
 
 const readDroppedFile = async (file: File) => {
-  if (file.size > 1024 * 1024) {
-    setNotice('error', `${file.name} is larger than 1 MB.`)
+  const isImage = file.type.toLowerCase().startsWith('image/')
+  const maximumSize = isImage ? 700 * 1024 : 1024 * 1024
+  if (file.size > maximumSize) {
+    setNotice('error', `${file.name} is larger than ${isImage ? '700 KB' : '1 MB'}.`)
     return
   }
-  const content = await file.text()
+  let content: string
+  if (isImage) {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    let binary = ''
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+    }
+    content = `data:${file.type};base64,${btoa(binary)}`
+  } else {
+    content = await file.text()
+  }
   addAttachment({ name: file.name, content, mimeType: file.type })
 }
 

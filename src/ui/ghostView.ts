@@ -6,7 +6,7 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider, GhostSettings } from '../config'
-import { MlxClient } from '../services/mlxClient'
+import { MlxClient, MlxVisionImage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { createProviderAdapter, ModelCapabilityRecord } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
@@ -421,7 +421,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       content: attachment.content?.slice(0, 1024 * 1024)
     }))
     const workspaceReferences = safeAttachments.flatMap(attachment => {
-      if (!attachment.path) {
+      if (!attachment.path || attachment.mimeType?.toLowerCase().startsWith('image/')) {
         return []
       }
       const uri = vscode.Uri.file(attachment.path)
@@ -430,13 +430,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         : []
     })
     const droppedContext = safeAttachments
-      .filter(attachment => attachment.content)
+      .filter(attachment => attachment.content && !attachment.mimeType?.toLowerCase().startsWith('image/'))
       .map(attachment => `Dropped attachment: ${attachment.name}\n\n${attachment.content}`)
       .join('\n\n')
     const requestOptions: GhostRequestOptions = {
       ...options,
       modelProfile: options.modelProfile,
       modelRole,
+      images: safeAttachments.flatMap<MlxVisionImage>(attachment => {
+        if (!attachment.mimeType?.toLowerCase().startsWith('image/')) return []
+        if (attachment.path) return [{ path: attachment.path, mimeType: attachment.mimeType }]
+        if (attachment.content) return [{ data: attachment.content, mimeType: attachment.mimeType }]
+        return []
+      }),
       additionalContext: [continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),

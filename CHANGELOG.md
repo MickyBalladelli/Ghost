@@ -7,6 +7,7 @@ All notable changes to this extension are documented here.
 - Add a shared fake-provider contract suite covering text streams, native tool events, fallback streams, errors, cancellation, and capabilities.
 - Add provider-aware grammar, seed, stop sequence, context window, and output-token settings.
 - Expose the new generation values to model profiles and custom HTTP request templates.
+- Route image attachments through capability-checked multimodal chat messages for vision-capable providers.
 
 ## 1.1.15 - 2026-08-18
 

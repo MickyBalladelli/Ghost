@@ -73,7 +73,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add support for provider-native tool calling and JSON/schema mode before relying on text parsing.
 - [x] Add grammar/JSON constraints, seed, stop sequences, context window, and max output settings where the provider supports them.
 - [x] Add an adapter contract test suite using fake providers. Every new LLM adapter must pass the same stream, error, tool, cancellation, and capability tests.
-- [ ] Keep image messages behind a capability check and unify MLX/VLM image handling with the generic chat path.
+- [x] Keep image messages behind a capability check and unify MLX/VLM image handling with the generic chat path.
 - [ ] Generalize FIM beyond Ollama with an explicit `supportsFIM` capability and endpoint mapping.
 
 ## P1 — user experience

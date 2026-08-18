@@ -5,7 +5,7 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 import { GhostConfig, GhostProvider, ghostConfig } from '../config'
 import { LlmFactory } from '../services/llmFactory'
-import { MlxClient, MlxMessage, MlxResponseFormat, MlxStreamEvent } from '../services/mlxClient'
+import { createVisionMessage, MlxClient, MlxMessage, MlxResponseFormat, MlxStreamEvent, MlxVisionImage } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
 import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
@@ -562,6 +562,7 @@ export interface GhostRequestOptions {
   customSystemInstructions?: string
   jsonMode?: boolean
   responseFormat?: MlxResponseFormat
+  images?: MlxVisionImage[]
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
   confirmBudgetContinue?: (reason: string) => Promise<boolean>
@@ -1119,6 +1120,17 @@ export function createChatParticipantHandler(
       ...settings,
       maxContextTokens: modelSettings.maxContextTokens
     }
+    const images = requestOptions.images ?? []
+    if (images.length > 0) {
+      const resolved = await llmFactory.resolve(modelSettings.provider)
+      const capability = resolved.adapter.capabilities(modelSettings.model)
+      if (!capability.supportsVision) {
+        const message = `The selected ${modelSettings.provider} model does not support image input. Remove the image attachment or choose a vision-capable model.`
+        requestOptions.onStop?.('invalid-model-response', message)
+        response.markdown(message)
+        return
+      }
+    }
     const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, requestOptions, detail => response.progress(detail))
 
     if (token.isCancellationRequested) {
@@ -1148,12 +1160,15 @@ export function createChatParticipantHandler(
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
       : baseSystemPrompt
+    const userMessage = images.length > 0
+      ? await createVisionMessage(contextPrompt, images)
+      : { role: 'user' as const, content: contextPrompt }
     const messages: MlxMessage[] = [
       {
         role: 'system',
         content: systemPrompt
       },
-      { role: 'user', content: contextPrompt }
+      userMessage
     ]
     const outputTokens = toolsEnabled
       ? Math.max(modelSettings.maxTokens ?? 0, MIN_TOOL_CALL_TOKENS)
