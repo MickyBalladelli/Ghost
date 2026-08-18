@@ -2331,6 +2331,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const settingsStoreUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewSettingsStore.js'))
     const historyStoreUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewHistory.js'))
     const renderingUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewRendering.js'))
+    const shellUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewShell.js'))
     const toolTimelineUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewToolTimeline.js'))
     const composerUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewComposer.js'))
     const modalsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'out', 'webview', 'ghostWebviewModals.js'))
@@ -4251,6 +4252,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     <script nonce="${nonce}" src="${settingsStoreUri}"></script>
     <script nonce="${nonce}" src="${historyStoreUri}"></script>
     <script nonce="${nonce}" src="${renderingUri}"></script>
+    <script nonce="${nonce}" src="${shellUri}"></script>
     <script nonce="${nonce}" src="${toolTimelineUri}"></script>
     <script nonce="${nonce}" src="${composerUri}"></script>
     <script nonce="${nonce}" src="${modalsUri}"></script>
