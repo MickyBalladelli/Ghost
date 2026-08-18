@@ -4,10 +4,15 @@ import { TextDecoder } from 'node:util'
 import {
   MlxChatOptions,
   MlxMessage,
-  MlxMessageContent,
   streamSseTokens
 } from './mlxClient'
-import { GenerationSettings, normalizeGenerationSettings } from './generationSettings'
+import { GenerationSettings } from './generationSettings'
+import {
+  buildOllamaChatBody,
+  buildOllamaFimBody,
+  buildOpenAiChatBody,
+  buildOpenAiFimBody
+} from './providerRequestBuilders'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -87,60 +92,6 @@ function addSystemPrompt(messages: MlxMessage[], systemPrompt?: string): MlxMess
   }
 
   return [{ role: 'system', content: systemPrompt }, ...messages]
-}
-
-function dataUrlToBase64(url: string): string | undefined {
-  if (!url.startsWith('data:')) {
-    return undefined
-  }
-
-  const separator = url.indexOf(',')
-
-  if (separator < 0) {
-    return undefined
-  }
-
-  return url.slice(separator + 1)
-}
-
-function textFromContent(content: MlxMessageContent): string {
-  if (typeof content === 'string') {
-    return content
-  }
-
-  return content
-    .filter(part => part.type === 'text')
-    .map(part => part.text)
-    .join('')
-}
-
-function imagesFromContent(content: MlxMessageContent): string[] {
-  if (typeof content === 'string') {
-    return []
-  }
-
-  return content
-    .filter(part => part.type === 'image_url')
-    .flatMap(part => {
-      const image = dataUrlToBase64(part.image_url.url)
-      return image ? [image] : []
-    })
-}
-
-function toOllamaMessages(messages: MlxMessage[]): Array<{ role: string; content: string; images?: string[] }> {
-  return messages.map(message => {
-    const images = imagesFromContent(message.content)
-    const nativeMessage: { role: string; content: string; images?: string[] } = {
-      role: message.role,
-      content: textFromContent(message.content)
-    }
-
-    if (images.length > 0) {
-      nativeMessage.images = images
-    }
-
-    return nativeMessage
-  })
 }
 
 function isFallbackStatus(status: number): boolean {
@@ -417,26 +368,12 @@ export class OllamaClient {
     messages: MlxMessage[],
     stream: boolean
   ): RequestInit {
-    const generation = normalizeGenerationSettings(options.generation)
     if (kind === 'ollama') {
       return {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...this.authorizationHeaders(options.apiKey) },
         signal: options.signal,
-        body: JSON.stringify({
-          model: options.model,
-          messages: toOllamaMessages(messages),
-          stream,
-          options: {
-            ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
-            ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
-            ...(generation.topK === undefined ? {} : { top_k: generation.topK }),
-            ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
-            ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
-            ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
-            ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
-          }
-        })
+        body: JSON.stringify(buildOllamaChatBody(options, messages, stream))
       }
     }
 
@@ -448,15 +385,7 @@ export class OllamaClient {
         ...this.authorizationHeaders(options.apiKey)
       },
       signal: options.signal,
-      body: JSON.stringify({
-        model: options.model,
-        messages,
-        stream,
-        ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
-        ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
-        ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
-        ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
-      })
+      body: JSON.stringify(buildOpenAiChatBody(options, messages, stream))
     }
   }
 
@@ -479,26 +408,12 @@ export class OllamaClient {
     options: FimCompletionOptions,
     prompt: string
   ): RequestInit {
-    const generation = normalizeGenerationSettings(options.generation)
     if (kind === 'ollama') {
       return {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...this.authorizationHeaders(options.apiKey) },
         signal: options.signal,
-        body: JSON.stringify({
-          model: options.model,
-          prompt,
-          stream: false,
-          options: {
-            ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
-            ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
-            ...(generation.topK === undefined ? {} : { top_k: generation.topK }),
-            ...(generation.minP === undefined ? {} : { min_p: generation.minP }),
-            ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
-            ...(generation.repeatPenalty === undefined ? {} : { repeat_penalty: generation.repeatPenalty }),
-            ...(generation.maxTokens === undefined ? {} : { num_predict: generation.maxTokens })
-          }
-        })
+        body: JSON.stringify(buildOllamaFimBody(options, prompt))
       }
     }
 
@@ -510,15 +425,7 @@ export class OllamaClient {
         ...this.authorizationHeaders(options.apiKey)
       },
       signal: options.signal,
-      body: JSON.stringify({
-        model: options.model,
-        prompt,
-        stream: false,
-        ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
-        ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
-        ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
-        ...(generation.maxTokens === undefined ? {} : { max_tokens: generation.maxTokens })
-      })
+      body: JSON.stringify(buildOpenAiFimBody(options, prompt))
     }
   }
 }

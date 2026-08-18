@@ -12,6 +12,7 @@ All notable changes to this extension are documented here.
 - Added a shared provider adapter contract for chat, streaming, model discovery, health, capabilities, cancellation, and normalized errors.
 - Added model capability records covering context/output limits, tools, JSON mode, vision, FIM, streaming, sampling, and native API.
 - Separated shared generation settings from provider-specific request field names for chat and FIM requests.
+- Moved MLX, Ollama, OpenAI-compatible, and FIM payload construction into independently testable provider builders.
 
 ## 1.0.92 - 2026-08-18
 

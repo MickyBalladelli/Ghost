@@ -5,6 +5,13 @@ import fetch, { Response } from 'node-fetch'
 
 import { MlxClient, streamSseTokens } from '../../services/mlxClient'
 import { OllamaClient } from '../../services/ollamaClient'
+import {
+  buildMlxChatBody,
+  buildOllamaChatBody,
+  buildOllamaFimBody,
+  buildOpenAiChatBody,
+  buildOpenAiFimBody
+} from '../../services/providerRequestBuilders'
 
 async function collect(stream: AsyncIterable<string>): Promise<string[]> {
   const chunks: string[] = []
@@ -17,6 +24,78 @@ async function collect(stream: AsyncIterable<string>): Promise<string[]> {
 }
 
 suite('Provider resilience', () => {
+  test('builds each provider request body independently', () => {
+    const options = {
+      model: 'local-model',
+      messages: [{ role: 'user' as const, content: 'hello' }],
+      generation: {
+        temperature: 0.2,
+        topP: 0.8,
+        topK: 12,
+        minP: 0.05,
+        presencePenalty: 0.1,
+        repeatPenalty: 1.05,
+        maxTokens: 256
+      }
+    }
+
+    assert.deepEqual(buildMlxChatBody(options), {
+      model: 'local-model',
+      messages: options.messages,
+      temperature: 0.2,
+      top_p: 0.8,
+      presence_penalty: 0.1,
+      max_tokens: 256,
+      stream: true
+    })
+    assert.deepEqual(buildOllamaChatBody(options, options.messages, true), {
+      model: 'local-model',
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
+      options: {
+        temperature: 0.2,
+        top_p: 0.8,
+        top_k: 12,
+        min_p: 0.05,
+        presence_penalty: 0.1,
+        repeat_penalty: 1.05,
+        num_predict: 256
+      }
+    })
+    assert.deepEqual(buildOpenAiChatBody(options, options.messages, true), {
+      model: 'local-model',
+      messages: options.messages,
+      stream: true,
+      temperature: 0.2,
+      top_p: 0.8,
+      presence_penalty: 0.1,
+      max_tokens: 256
+    })
+    assert.deepEqual(buildOllamaFimBody(options, '<PRE>prefix<SUF>suffix<MID>'), {
+      model: 'local-model',
+      prompt: '<PRE>prefix<SUF>suffix<MID>',
+      stream: false,
+      options: {
+        temperature: 0.2,
+        top_p: 0.8,
+        top_k: 12,
+        min_p: 0.05,
+        presence_penalty: 0.1,
+        repeat_penalty: 1.05,
+        num_predict: 256
+      }
+    })
+    assert.deepEqual(buildOpenAiFimBody(options, '<PRE>prefix<SUF>suffix<MID>'), {
+      model: 'local-model',
+      prompt: '<PRE>prefix<SUF>suffix<MID>',
+      stream: false,
+      temperature: 0.2,
+      top_p: 0.8,
+      presence_penalty: 0.1,
+      max_tokens: 256
+    })
+  })
+
   test('uses the native Ollama chat endpoint for the Ollama provider', async () => {
     const requests: string[] = []
     const request = (async (url: string) => {

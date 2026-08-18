@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { TextDecoder } from 'node:util'
 import fetch, { type RequestInit, type Response } from 'node-fetch'
-import { GenerationSettings, normalizeGenerationSettings } from './generationSettings'
+import { GenerationSettings } from './generationSettings'
+import { buildMlxChatBody } from './providerRequestBuilders'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
@@ -269,16 +270,7 @@ export class MlxClient {
   }
 
   async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
-    const generation = normalizeGenerationSettings(options.generation)
-    const body = JSON.stringify({
-      model: options.model,
-      messages: options.messages,
-      temperature: generation.temperature,
-      ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
-      ...(generation.presencePenalty === undefined ? {} : { presence_penalty: generation.presencePenalty }),
-      max_tokens: generation.maxTokens,
-      stream: true
-    })
+    const body = JSON.stringify(buildMlxChatBody(options))
     const requestOptions: RequestInit = {
       method: 'POST',
       headers: {
