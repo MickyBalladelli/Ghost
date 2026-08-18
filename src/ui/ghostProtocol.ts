@@ -19,7 +19,7 @@ export type { GhostStopReason }
 export type { GhostModelMetadata }
 export type { GhostModelAliases, GhostModelProfiles, GhostModelRole }
 
-export type GhostToolApprovalDecision = 'once' | 'session' | 'reject'
+export type GhostToolApprovalDecision = 'once' | 'file' | 'request' | 'session' | 'workspace' | 'reject'
 
 export interface GhostToolArguments {
   [key: string]: unknown
@@ -180,6 +180,7 @@ export type GhostWebviewMessage =
     })
   | (GhostRequestEnvelope & { type: 'cancel' })
   | (GhostRequestEnvelope & { type: 'retry-tool'; toolCallId: string; tool: string; arguments: GhostToolArguments })
+  | (GhostRequestEnvelope & { type: 'approve-all-files' })
   | (GhostRequestEnvelope & { type: 'continue'; resume: GhostContinuation; options?: GhostWebviewRequestOptions })
   | (GhostRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
   | (GhostRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
@@ -467,7 +468,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
       (value.attachments === undefined || (Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)))
     )
   }
-  if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate') {
+  if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate' || value.type === 'approve-all-files') {
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
   }
   if (value.type === 'retry-tool') {
@@ -490,7 +491,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return true
   }
   if (value.type === 'approve-tool') {
-    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && (value.decision === 'once' || value.decision === 'session') && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && ['once', 'file', 'request', 'session', 'workspace'].includes(value.decision as string) && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
   }
   if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0

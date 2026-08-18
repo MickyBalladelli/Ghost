@@ -570,7 +570,7 @@ export interface GhostRequestOptions {
 }
 
 export interface GhostToolApproval {
-  decision: 'once' | 'session' | 'reject'
+  decision: 'once' | 'file' | 'request' | 'session' | 'workspace' | 'reject'
   arguments?: Record<string, unknown>
   expectedContent?: string
   expectedFileExists?: boolean

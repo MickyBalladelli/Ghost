@@ -61,6 +61,8 @@ interface GhostRequestState {
   eventLog: GhostRequestEvent[]
   completionRecord?: CompletionRecord
   autoAcceptFilePath?: string
+  approvedFilePaths?: Set<string>
+  approveAllFileEdits?: boolean
   pendingTool?: { toolCallId: string; name: string }
 }
 
@@ -168,6 +170,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly failedToolRetries = new Map<string, FailedToolRetry>()
   private readonly sessionApprovedTools = new Set<string>()
   private sessionApprovedFileEdits = false
+  private workspaceApprovedFileEdits = false
   private readonly globalState?: vscode.Memento
   private readonly workspaceState?: vscode.Memento
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
@@ -196,6 +199,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   ) {
     this.globalState = options.globalState
     this.workspaceState = options.workspaceState
+    this.workspaceApprovedFileEdits = this.workspaceState?.get<boolean>('ghost.workspace.approvedFileEdits') === true
     this.providerApiKey = options.providerApiKey
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
@@ -814,6 +818,17 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction'
   }
 
+  private getFileEditPaths(call: LocalToolCall): string[] {
+    try {
+      const paths = call.name === 'ghost_apply_transaction'
+        ? parseFileTransaction(call.arguments).edits.map(edit => edit.path)
+        : typeof call.arguments.path === 'string' ? [call.arguments.path] : []
+      return [...new Set(paths.map(filePath => resolveWorkspacePath(filePath).fsPath))]
+    } catch {
+      return []
+    }
+  }
+
   private async getDiffPreview(call: LocalToolCall, approvalContext: Pick<StagedEdit, 'requestId' | 'conversationId' | 'toolCallId'>): Promise<GhostToolDiffPreview | undefined> {
     if (call.name === 'ghost_apply_transaction') {
       try {
@@ -1211,6 +1226,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const asksByPolicy = !this.isConversationStateTool(call.name) && (!allowedTools.includes(call.name) || askedTools.includes(call.name))
     const blockedByPolicy = !this.isConversationStateTool(call.name) && deniedTools.includes(call.name)
     const isFileEditTool = this.isFileEditTool(call.name)
+    const fileEditPaths = isFileEditTool ? this.getFileEditPaths(call) : []
     const unsavedEditorWarning = isFileEditTool && !blockedByPolicy ? this.getUnsavedEditorWarning(call) : undefined
     if (unsavedEditorWarning) {
       this.postStreamEvent(requestId, request, {
@@ -1227,8 +1243,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const autoAcceptedFileEdit = isFileEditTool && !blockedByPolicy && !asksByPolicy && this.shouldAutoAcceptFileEdit(settings.autoAcceptScope, request, call)
     const requiresApproval = (this.requiresToolApproval(call.name) || asksByPolicy) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
+    const requestApproved = isFileEditTool && (
+      request.approveAllFileEdits === true ||
+      (fileEditPaths.length > 0 && fileEditPaths.every(filePath => request.approvedFilePaths?.has(filePath)))
+    )
     const needsInteractiveApproval = requiresApproval && (isFileEditTool
-      ? !this.sessionApprovedFileEdits
+      ? !(requestApproved || this.sessionApprovedFileEdits || this.workspaceApprovedFileEdits)
       : !this.sessionApprovedTools.has(call.name))
     const diffPreview = needsInteractiveApproval
       ? await this.getDiffPreview(call, {
@@ -1308,6 +1328,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
+  private approveAllPendingFiles(requestId: string, conversationId: string): void {
+    const request = this.requests.get(requestId)
+    if (!request || request.conversationId !== conversationId) {
+      return
+    }
+    request.approveAllFileEdits = true
+    for (const pending of [...this.pendingApprovals.values()]) {
+      if (pending.requestId === requestId && pending.conversationId === conversationId && this.isFileEditTool(pending.call.name)) {
+        this.decideToolApproval(requestId, conversationId, pending.toolCallId, { decision: 'request' })
+      }
+    }
+  }
+
   private decideToolApproval(
     requestId: string,
     conversationId: string,
@@ -1317,6 +1350,21 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const pending = this.pendingApprovals.get(toolCallId)
     if (!pending || pending.requestId !== requestId || pending.conversationId !== conversationId) {
       return
+    }
+    const request = this.requests.get(requestId)
+    if (approval.decision === 'request' && request) {
+      request.approveAllFileEdits = true
+    }
+    if (approval.decision === 'file' && request && this.isFileEditTool(pending.call.name)) {
+      const paths = this.getFileEditPaths(pending.call)
+      if (paths.length === 1) {
+        request.approvedFilePaths ??= new Set<string>()
+        request.approvedFilePaths.add(paths[0])
+      }
+    }
+    if (approval.decision === 'workspace' && this.isFileEditTool(pending.call.name)) {
+      this.workspaceApprovedFileEdits = true
+      void this.workspaceState?.update('ghost.workspace.approvedFileEdits', true)
     }
     if (approval.decision === 'session') {
       if (this.isFileEditTool(pending.call.name)) {
@@ -2171,6 +2219,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           name: message.tool as LocalToolName,
           arguments: message.arguments
         })
+        return
+      case 'approve-all-files':
+        this.approveAllPendingFiles(message.requestId, message.conversationId)
         return
       case 'approve-tool':
         this.decideToolApproval(message.requestId, message.conversationId, message.toolCallId, {
@@ -3318,6 +3369,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         color: var(--vscode-descriptionForeground);
         font-size: 0.85em;
         padding: 4px 7px;
+      }
+
+      .pending-file-approval {
+        align-items: center;
+        background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+        border: 1px solid var(--vscode-charts-yellow, #cca700);
+        border-radius: 4px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+        padding: 6px 8px;
+      }
+
+      .pending-file-approval button {
+        font-size: 0.85em;
+        padding: 3px 7px;
       }
 
       .tool-progress {

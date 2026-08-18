@@ -2479,8 +2479,16 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const resultBlock = uiPreferences.showToolProgress && part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
+    const approvalFilePaths = part.toolCall.diffPreview?.files?.length
+      ? part.toolCall.diffPreview.files
+      : (() => {
+        const path = parseToolArguments(part.toolCall).path
+        return typeof path === 'string' && path.trim() ? [path.trim()] : []
+      })()
+    const fileEditApproval = ['ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction'].includes(part.toolCall.name)
+    const fileScopeAvailable = fileEditApproval && approvalFilePaths.length === 1
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
-      ? `<div class="tool-approval-actions"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">${part.toolCall.name === 'ghost_write_file' || part.toolCall.name === 'ghost_apply_edit' || part.toolCall.name === 'ghost_apply_transaction' ? 'Apply to all files' : 'Approve for session'}</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+      ? `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool call once">Approve now</button>${fileScopeAvailable ? `<button type="button" data-tool-action="approve-file" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve edits to ${escapeAttribute(approvalFilePaths[0])} for this request">Approve this file</button>` : ''}${fileEditApproval ? `<button type="button" data-tool-action="approve-request" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve all file edits for this request">Approve request</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve all file edits for this session">Approve session</button><button type="button" data-tool-action="approve-workspace" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve file edits in this workspace">Approve workspace</button>` : `<button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool for the session">Approve for session</button>`}<button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
     const selectedHunkAction = part.toolCall.status === 'requested' && part.toolCall.diffPreview?.hunks?.length
       ? `<button type="button" data-tool-action="approve-selected" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Apply selected hunks</button>`
@@ -2540,9 +2548,13 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const animatedGroup = requestActive && Boolean(activeTool)
     return `<details class="tool-timeline ${groupStatusClass}"${animatedGroup ? ' open' : ''}><summary class="message-progress tool-progress ${groupStatusClass}"><span class="tool-status-icon" aria-hidden="true">${groupStatusIcon}</span><strong>${animatedGroup ? animatedStatusLabel(groupLabel) : escapeHtml(groupLabel)}</strong></summary><div class="tool-timeline-items">${group.map(renderToolCallProgress).join('')}</div></details>`
   }).join('')
+  const pendingFileApprovals = toolParts.filter(part => part.toolCall.requiresApproval && part.toolCall.status === 'requested' && ['ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction'].includes(part.toolCall.name)).length
+  const renderedPendingFileApproval = pendingFileApprovals > 0
+    ? `<div class="pending-file-approval" role="region" aria-label="Pending file approvals"><span>${pendingFileApprovals} pending file approval${pendingFileApprovals === 1 ? '' : 's'}</span><button type="button" data-action="approve-all-files" data-message-id="${escapeAttribute(message.id)}" aria-label="Approve all pending file edits">Approve all pending files</button></div>`
+    : ''
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
-  return `<div class="message-part-summary">${renderRequestEventLog(message)}${renderedProgress}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
+  return `<div class="message-part-summary">${renderRequestEventLog(message)}${renderedProgress}${renderedPendingFileApproval}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
 }
 
 const stateCard = (): string => {
@@ -3155,7 +3167,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     }
     return
   }
-  if (action === 'approve' || action === 'approve-session' || action === 'approve-selected') {
+  if (action === 'approve' || action === 'approve-file' || action === 'approve-request' || action === 'approve-session' || action === 'approve-workspace' || action === 'approve-selected') {
     found.toolCall.approval = 'approved'
     found.toolCall.status = 'running'
     const selectedHunkIndexes = action === 'approve-selected'
@@ -3168,7 +3180,15 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
       requestId,
       conversationId,
       toolCallId,
-      decision: action === 'approve-session' ? 'session' : 'once',
+      decision: action === 'approve-file'
+        ? 'file'
+        : action === 'approve-request'
+          ? 'request'
+          : action === 'approve-session'
+            ? 'session'
+            : action === 'approve-workspace'
+              ? 'workspace'
+              : 'once',
       ...(selectedHunkIndexes ? { selectedHunkIndexes } : {})
     })
   } else if (action === 'reject') {
@@ -3176,7 +3196,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     found.toolCall.status = 'rejected'
     post('reject-tool', { requestId, conversationId, toolCallId })
   }
-  const shouldFocusNextApproval = action === 'approve' || action === 'approve-session' || action === 'approve-selected' || action === 'reject'
+  const shouldFocusNextApproval = action === 'approve' || action === 'approve-file' || action === 'approve-request' || action === 'approve-session' || action === 'approve-workspace' || action === 'approve-selected' || action === 'reject'
   renderMessages(false)
   if (shouldFocusNextApproval) {
     focusNextApprovalCard(toolCallId)
@@ -3201,6 +3221,10 @@ const handleMessageAction = (action: string, messageId: string) => {
     const requestId = message.requestId ?? activeRequest?.requestId
     if (requestId) {
       post('cancel', { requestId, conversationId: conversation.id })
+    }
+  } else if (action === 'approve-all-files') {
+    if (message.requestId) {
+      post('approve-all-files', { requestId: message.requestId, conversationId: conversation.id })
     }
   } else if (action === 'continue') {
     continueConversation(messageId)
