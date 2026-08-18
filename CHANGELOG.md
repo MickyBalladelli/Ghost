@@ -19,6 +19,7 @@ All notable changes to this extension are documented here.
 - Abort obsolete inline provider calls and same-conversation agent requests when newer prompts or settings replace them.
 - Tune inline completions with adaptive debounce, minimum prefix checks, bounded suffix context, and a separate timeout setting.
 - Batch adjacent webview response chunks per animation frame before updating message markup.
+- Keep conversation rendering bounded to a recent message window and lazily render older Markdown/code as it enters view.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18

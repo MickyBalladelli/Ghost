@@ -749,7 +749,9 @@ let historyIndex = -1
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
 let progressTimer: number | undefined
-let visibleMessageCount = 200
+const MESSAGE_RENDER_WINDOW = 200
+const HOT_MESSAGE_COUNT = 40
+let visibleMessageCount = MESSAGE_RENDER_WINDOW
 let firstRunSetupOpened = false
 
 const formatElapsed = (milliseconds: number): string => {
@@ -2732,7 +2734,7 @@ const renderRequestActionCard = (message: ChatMessage): string => {
   return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</div><div class="request-action-card-actions">${actions}</div></section>`
 }
 
-const createMessageElement = (message: ChatMessage): HTMLElement => {
+const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTMLElement => {
   const article = document.createElement('article')
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
   article.dataset.messageId = message.id
@@ -2749,10 +2751,14 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     message.status === 'streaming' ||
     ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
   )
+  const shouldDeferMarkdown = deferMarkdown && message.content.length > 500
+  const messageBody = shouldDeferMarkdown
+    ? '<p>Older message will render when visible.</p>'
+    : renderMarkdown(message.content, showThinkingPlaceholder)
   replaceMarkup(article, `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     ${partSummary}
-    <div class="message-body">${renderMarkdown(message.content, showThinkingPlaceholder)}</div>
+    <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
     ${responseStats}
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
@@ -3116,7 +3122,7 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   }
   const body = element.querySelector<HTMLElement>('.message-body')
   const status = element.querySelector<HTMLElement>('.message-state')
-  if (body) {
+  if (body && body.dataset.deferredMarkdown !== 'true') {
     const showThinkingPlaceholder = message.role === 'assistant' && (
       message.status === 'streaming' ||
       ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
@@ -3164,6 +3170,41 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   element.classList.toggle('error', message.status === 'error')
   addMessageCopyControls(element, message)
   ensureAnimatedStatusLabels()
+}
+
+const lazyMessageObserver = typeof IntersectionObserver === 'undefined'
+  ? undefined
+  : new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) {
+        continue
+      }
+      const element = entry.target as HTMLElement
+      const body = element.querySelector<HTMLElement>('.message-body')
+      const messageId = element.dataset.messageId
+      const message = messageId ? findMessage(getActiveConversation(), messageId) : undefined
+      if (!body || !message || body.dataset.deferredMarkdown !== 'true') {
+        lazyMessageObserver?.unobserve(element)
+        continue
+      }
+      delete body.dataset.deferredMarkdown
+      const showThinkingPlaceholder = message.role === 'assistant' && (
+        message.status === 'streaming' ||
+        ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+      )
+      body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
+      lazyMessageObserver?.unobserve(element)
+    }
+  }, { root: messagesElement, rootMargin: '600px 0px' })
+
+const observeDeferredMessages = (): void => {
+  lazyMessageObserver?.disconnect()
+  if (!lazyMessageObserver) {
+    return
+  }
+  for (const element of Array.from(messagesElement.querySelectorAll<HTMLElement>('[data-deferred-markdown="true"]'))) {
+    lazyMessageObserver.observe(element)
+  }
 }
 
 const scrollMessages = (force: boolean) => {
@@ -3267,17 +3308,19 @@ const renderMessages = (forceScroll: boolean) => {
       older.dataset.loadOlder = 'true'
       fragment.append(older)
     }
-    for (const message of conversation.messages.slice(firstVisibleIndex)) {
+    for (const [offset, message] of conversation.messages.slice(firstVisibleIndex).entries()) {
       const existing = existingMessages.get(message.id)
       if (existing) {
         updateMessageElement(message, existing)
         fragment.append(existing)
       } else {
-        fragment.append(createMessageElement(message))
+        const messageIndex = firstVisibleIndex + offset
+        fragment.append(createMessageElement(message, messageIndex < conversation.messages.length - HOT_MESSAGE_COUNT))
       }
     }
   }
   messagesElement.replaceChildren(fragment)
+  observeDeferredMessages()
   if (!forceScroll && !userIsAtBottom) {
     requestAnimationFrame(() => {
       messagesElement.scrollTop = previousScrollTop

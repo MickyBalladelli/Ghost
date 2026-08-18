@@ -111,7 +111,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Cancel obsolete inline requests and agent requests immediately when the document, prompt, provider, or request changes.
 - [x] Add adaptive inline debounce, minimum prefix length, suffix limits, and separate completion timeout/model settings.
 - [x] Batch webview stream updates with `requestAnimationFrame`; do not rebuild the entire message DOM for each token or event.
-- [ ] Virtualize long conversations and keep old markdown/code rendering lazy.
+- [x] Virtualize long conversations and keep old markdown/code rendering lazy.
 - [ ] Stream terminal output into a bounded ring buffer. Prefer a structured tail plus exit metadata over accumulating 200,000 characters first.
 - [ ] Bound persistence size and write incrementally. Compress or archive old conversations and handle storage failures visibly.
 - [ ] Dispose render targets, event listeners, timers, child processes, and provider streams on request completion and extension deactivation.
