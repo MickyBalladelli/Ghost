@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.16 - 2026-08-18
 
+- Preserve valid provider output when local servers return complete message/content fields instead of streaming delta fields.
 - Add a shared fake-provider contract suite covering text streams, native tool events, fallback streams, errors, cancellation, and capabilities.
 - Add provider-aware grammar, seed, stop sequence, context window, and output-token settings.
 - Expose the new generation values to model profiles and custom HTTP request templates.

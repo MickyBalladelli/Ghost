@@ -38,13 +38,18 @@ function nestedRecord(value: unknown, key: string): Record<string, unknown> | un
 
 function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): string | undefined {
   if (mode === 'responses') {
-    return typeof payload.delta === 'string' && payload.type === 'response.output_text.delta' ? payload.delta : undefined
+    if (typeof payload.delta === 'string' && payload.type === 'response.output_text.delta') return payload.delta
+    if (typeof payload.text === 'string' && payload.type === 'response.output_text.done') return payload.text
+    return undefined
   }
   const choice = Array.isArray(payload.choices) && payload.choices[0] && typeof payload.choices[0] === 'object'
     ? payload.choices[0] as Record<string, unknown>
     : undefined
   const delta = nestedRecord(choice, 'delta')
-  return typeof delta?.content === 'string' ? delta.content : undefined
+  if (typeof delta?.content === 'string') return delta.content
+  const message = nestedRecord(choice, 'message')
+  if (typeof message?.content === 'string') return message.content
+  return typeof choice?.text === 'string' ? choice.text : undefined
 }
 
 function functionDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): { name?: string; arguments?: string; done: boolean } | undefined {
@@ -68,8 +73,9 @@ function functionDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode)
     ? payload.choices[0] as Record<string, unknown>
     : undefined
   const delta = nestedRecord(choices, 'delta')
-  const calls = Array.isArray(delta?.tool_calls) && delta.tool_calls[0] && typeof delta.tool_calls[0] === 'object'
-    ? delta.tool_calls[0] as Record<string, unknown>
+  const source = delta ?? choices
+  const calls = Array.isArray(source?.tool_calls) && source.tool_calls[0] && typeof source.tool_calls[0] === 'object'
+    ? source.tool_calls[0] as Record<string, unknown>
     : undefined
   const functionValue = nestedRecord(calls, 'function')
   if (functionValue) {

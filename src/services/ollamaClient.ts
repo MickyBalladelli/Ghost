@@ -74,7 +74,9 @@ interface OpenAiResponsesResponse {
 
 interface OllamaCompletionResponse {
   response?: string | null
-  message?: { content?: string | null; tool_calls?: Array<{ function?: { name?: string; arguments?: string | Record<string, unknown> } }> }
+  text?: string | null
+  content?: string | null
+  message?: { content?: string | null; tool_calls?: Array<{ function?: { name?: string; arguments?: string | Record<string, unknown> } }> } | string
 }
 
 interface OllamaStreamChunk extends OllamaCompletionResponse {
@@ -136,17 +138,21 @@ function extractOpenAiResponsesText(payload: OpenAiResponsesResponse): string {
 }
 
 function extractOllamaText(payload: OllamaCompletionResponse): string {
-  return payload.response ?? payload.message?.content ?? ''
+  if (typeof payload.response === 'string') return payload.response
+  if (typeof payload.text === 'string') return payload.text
+  if (typeof payload.content === 'string') return payload.content
+  return typeof payload.message === 'string' ? payload.message : payload.message?.content ?? ''
 }
 
 function extractOllamaToolCall(payload: OllamaCompletionResponse): MlxStreamEvent | undefined {
-  const tool = payload.message?.tool_calls?.[0]?.function
+  if (!payload.message || typeof payload.message === 'string') return undefined
+  const tool = payload.message.tool_calls?.[0]?.function
   if (!tool?.name) return undefined
   return {
     type: 'tool-call',
     name: tool.name,
     arguments: typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments ?? {}),
-    done: payload.message?.tool_calls !== undefined
+    done: payload.message.tool_calls !== undefined
   }
 }
 
