@@ -92,6 +92,29 @@ export function buildOpenAiChatBody(options: ChatWireOptions, messages: MlxMessa
   }
 }
 
+function toOpenAiResponsesInput(messages: MlxMessage[]): Array<{ role: string; content: Array<Record<string, unknown>> }> {
+  return messages.map(message => ({
+    role: message.role,
+    content: typeof message.content === 'string'
+      ? [{ type: message.role === 'assistant' ? 'output_text' : 'input_text', text: message.content }]
+      : message.content.map(part => part.type === 'text'
+        ? { type: message.role === 'assistant' ? 'output_text' : 'input_text', text: part.text }
+        : { type: 'input_image', image_url: part.image_url.url, ...(part.image_url.detail ? { detail: part.image_url.detail } : {}) })
+  }))
+}
+
+export function buildOpenAiResponsesBody(options: ChatWireOptions, messages: MlxMessage[]): Record<string, unknown> {
+  const generation = normalizeGenerationSettings(options.generation)
+  return {
+    model: options.model,
+    input: toOpenAiResponsesInput(messages),
+    stream: true,
+    ...(generation.temperature === undefined ? {} : { temperature: generation.temperature }),
+    ...(generation.topP === undefined ? {} : { top_p: generation.topP }),
+    ...(generation.maxTokens === undefined ? {} : { max_output_tokens: generation.maxTokens })
+  }
+}
+
 export function buildOllamaFimBody(options: FimWireOptions, prompt: string): Record<string, unknown> {
   const generation = normalizeGenerationSettings(options.generation)
   return {

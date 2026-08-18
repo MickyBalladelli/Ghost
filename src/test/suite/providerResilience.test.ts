@@ -120,6 +120,29 @@ suite('Provider resilience', () => {
     assert.deepEqual(requests, ['http://127.0.0.1:8001/v1/chat/completions'])
   })
 
+  test('falls back to the OpenAI Responses endpoint', async () => {
+    const requests: string[] = []
+    const request = (async (url: string) => {
+      requests.push(url)
+      if (url.endsWith('/chat/completions')) return new Response('not found', { status: 404 })
+      return new Response('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"done"}\n\nevent: response.completed\ndata: {}\n\n', { status: 200 })
+    }) as unknown as typeof fetch
+    const client = new OllamaClient('http://127.0.0.1:8001/v1', 'openai-compatible', request)
+
+    assert.deepEqual(await collect(client.streamChatCompletion({ model: 'local-model', messages: [] })), ['done'])
+    assert.deepEqual(requests, [
+      'http://127.0.0.1:8001/v1/chat/completions',
+      'http://127.0.0.1:8001/v1/responses'
+    ])
+  })
+
+  test('assembles streamed OpenAI tool-call deltas into one local tool call', async () => {
+    const request = (async () => new Response('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"ghost_read_file","arguments":"{\\"path\\":\\"TODO.md\\"}"}}]}}]}\n\ndata: [DONE]\n\n', { status: 200 })) as unknown as typeof fetch
+    const client = new OllamaClient('http://127.0.0.1:8001/v1', 'openai-compatible', request)
+
+    assert.equal((await collect(client.streamChatCompletion({ model: 'local-model', messages: [] }))).join(''), '{"tool":"ghost_read_file","arguments":{"path":"TODO.md"}}')
+  })
+
   test('uses the configured endpoint and falls back between compatible APIs', async () => {
     const requests: string[] = []
     const request = (async (url: string) => {

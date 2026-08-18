@@ -13,6 +13,7 @@ All notable changes to this extension are documented here.
 - Added model capability records covering context/output limits, tools, JSON mode, vision, FIM, streaming, sampling, and native API.
 - Separated shared generation settings from provider-specific request field names for chat and FIM requests.
 - Moved MLX, Ollama, OpenAI-compatible, and FIM payload construction into independently testable provider builders.
+- Added OpenAI Responses API fallback and streamed function-call argument assembly alongside chat completions.
 
 ## 1.0.92 - 2026-08-18
 

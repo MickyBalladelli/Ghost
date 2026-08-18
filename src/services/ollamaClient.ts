@@ -4,24 +4,27 @@ import { TextDecoder } from 'node:util'
 import {
   MlxChatOptions,
   MlxMessage,
-  streamSseTokens
 } from './mlxClient'
 import { GenerationSettings } from './generationSettings'
 import {
   buildOllamaChatBody,
   buildOllamaFimBody,
   buildOpenAiChatBody,
-  buildOpenAiFimBody
+  buildOpenAiFimBody,
+  buildOpenAiResponsesBody
 } from './providerRequestBuilders'
+import { OpenAiStreamMode, streamOpenAiTokens } from './openAiStream'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
 export type OllamaApiMode = 'auto' | 'ollama' | 'openai-compatible'
+export type OpenAiApiMode = 'auto' | 'chat-completions' | 'responses'
 
 export interface OllamaChatOptions extends MlxChatOptions {
   systemPrompt?: string
   stream?: boolean
   mode?: OllamaApiMode
+  openAiMode?: OpenAiApiMode
   apiKey?: string
 }
 
@@ -46,7 +49,20 @@ interface OllamaModelsResponse {
 interface OpenAiCompletionResponse {
   choices?: Array<{
     text?: string | null
-    message?: { content?: string | null }
+    message?: {
+      content?: string | null
+      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>
+    }
+  }>
+}
+
+interface OpenAiResponsesResponse {
+  output_text?: string
+  output?: Array<{
+    type?: string
+    name?: string
+    arguments?: string
+    content?: Array<{ type?: string; text?: string }>
   }>
 }
 
@@ -106,7 +122,20 @@ async function httpError(response: Response): Promise<Error> {
 
 function extractOpenAiText(payload: OpenAiCompletionResponse): string {
   const choice = payload.choices?.[0]
+  const tool = choice?.message?.tool_calls?.[0]?.function
+  if (tool?.name) {
+    return `{"tool":${JSON.stringify(tool.name)},"arguments":${tool.arguments?.trim() || '{}'}}`
+  }
   return choice?.text ?? choice?.message?.content ?? ''
+}
+
+function extractOpenAiResponsesText(payload: OpenAiResponsesResponse): string {
+  const functionCall = payload.output?.find(item => item.type === 'function_call')
+  if (functionCall?.name) {
+    return `{"tool":${JSON.stringify(functionCall.name)},"arguments":${functionCall.arguments?.trim() || '{}'}}`
+  }
+  if (payload.output_text) return payload.output_text
+  return payload.output?.flatMap(item => item.content ?? []).find(item => item.type === 'output_text')?.text ?? ''
 }
 
 function extractOllamaText(payload: OllamaCompletionResponse): string {
@@ -249,7 +278,7 @@ export class OllamaClient {
     const messages = addSystemPrompt(options.messages, options.systemPrompt)
     const stream = options.stream ?? true
     const mode = options.mode ?? this.mode
-    const attempts = this.getChatAttempts(mode)
+    const attempts = this.getChatAttempts(mode, options.openAiMode ?? 'auto')
     let lastError: Error | undefined
 
     for (const attempt of attempts) {
@@ -269,7 +298,9 @@ export class OllamaClient {
         const payload = await response.json()
         const text = attempt.kind === 'ollama'
           ? extractOllamaText(payload as OllamaCompletionResponse)
-          : extractOpenAiText(payload as OpenAiCompletionResponse)
+          : attempt.kind === 'openai-responses'
+            ? extractOpenAiResponsesText(payload as OpenAiResponsesResponse)
+            : extractOpenAiText(payload as OpenAiCompletionResponse)
 
         if (text) {
           yield text
@@ -285,7 +316,8 @@ export class OllamaClient {
       if (attempt.kind === 'ollama') {
         yield* streamOllamaJson(response.body)
       } else {
-        yield* streamSseTokens(response.body)
+        const streamMode: OpenAiStreamMode = attempt.kind === 'openai-responses' ? 'responses' : 'chat-completions'
+        yield* streamOpenAiTokens(response.body, streamMode)
       }
 
       return
@@ -348,22 +380,28 @@ export class OllamaClient {
     return this.getHealthEndpoints()
   }
 
-  private getChatAttempts(mode: OllamaApiMode): Array<{ kind: 'ollama' | 'openai'; endpoint: string }> {
+  private getChatAttempts(mode: OllamaApiMode, openAiMode: OpenAiApiMode): Array<{ kind: 'ollama' | 'openai-chat' | 'openai-responses'; endpoint: string }> {
     if (mode === 'ollama') {
       return [{ kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/chat` }]
     }
 
-    const openAiAttempt = { kind: 'openai' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/chat/completions` }
+    const chatAttempt = { kind: 'openai-chat' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/chat/completions` }
+    const responsesAttempt = { kind: 'openai-responses' as const, endpoint: `${getOpenAiBaseUrl(this.baseUrl)}/responses` }
+    const openAiAttempts = openAiMode === 'responses'
+      ? [responsesAttempt]
+      : openAiMode === 'chat-completions'
+        ? [chatAttempt]
+        : [chatAttempt, responsesAttempt]
 
     if (mode === 'openai-compatible' || isExplicitOpenAiUrl(this.baseUrl)) {
-      return [openAiAttempt]
+      return openAiAttempts
     }
 
-    return [openAiAttempt, { kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/chat` }]
+    return [...openAiAttempts, { kind: 'ollama', endpoint: `${getOllamaBaseUrl(this.baseUrl)}/api/chat` }]
   }
 
   private getChatRequest(
-    kind: 'ollama' | 'openai',
+    kind: 'ollama' | 'openai-chat' | 'openai-responses',
     options: OllamaChatOptions,
     messages: MlxMessage[],
     stream: boolean
@@ -374,6 +412,19 @@ export class OllamaClient {
         headers: { 'content-type': 'application/json', ...this.authorizationHeaders(options.apiKey) },
         signal: options.signal,
         body: JSON.stringify(buildOllamaChatBody(options, messages, stream))
+      }
+    }
+
+    if (kind === 'openai-responses') {
+      return {
+        method: 'POST',
+        headers: {
+          accept: stream ? 'text/event-stream' : 'application/json',
+          'content-type': 'application/json',
+          ...this.authorizationHeaders(options.apiKey)
+        },
+        signal: options.signal,
+        body: JSON.stringify(buildOpenAiResponsesBody(options, messages))
       }
     }
 
