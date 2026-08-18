@@ -35,6 +35,7 @@ All notable changes to this extension are documented here.
 - Extract provider cache-key and model-capability state helpers into a dedicated module.
 - Split Ghost view request registry, import/export helpers, and webview lifecycle state into dedicated modules.
 - Share the extension-message protocol type with the webview and remove its duplicated local message union.
+- Centralize file mutation validation, change creation, conflict checks, atomic writes, and readback verification for all file tools.
 
 ## 1.1.17 - 2026-08-18
 

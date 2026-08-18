@@ -5,9 +5,8 @@ import { TextDecoder } from 'node:util'
 import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
-import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
-import { atomicWriteFile } from './atomicFile'
-import { readWorkspaceFile, verifyWorkspaceFile } from './workspaceFile'
+import { parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
+import { assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEditChange, createWorkspaceFileChange, readFileMutation } from './fileMutationWorkflow'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
 
@@ -507,10 +506,10 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
-    const uri = resolveWorkspacePath(options.input.path)
-    const current = await readWorkspaceFile(uri, token)
-    await atomicWriteFile(uri, Buffer.from(options.input.content, 'utf8'), current, token)
-    await verifyWorkspaceFile(uri, { exists: true, content: options.input.content }, token)
+    assertFileMutationAllowed([options.input.path])
+    const { uri, snapshot: current } = await readFileMutation(options.input.path, token)
+    const change = createWorkspaceFileChange(current, options.input.content)
+    await applyWorkspaceFileChange(uri, change, current, token)
 
     return textResult(`Wrote ${options.input.content.length} characters to ${uri.fsPath}\nVerification: passed (readback matched).`)
   }
@@ -533,18 +532,13 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
-    const uri = resolveWorkspacePath(edit.path)
-    const current = decodeText(await readCachedWorkspaceFile(uri))
-    assertNotCancelled(token)
-    if (edit.expectedContent !== undefined && current !== edit.expectedContent) {
-      throw new Error('Edit expected different file content')
-    }
-    const updated = applyGhostEdit(current, edit)
-    if (updated === current) {
+    assertFileMutationAllowed([edit.path])
+    const { uri, snapshot: current } = await readFileMutation(edit.path, token)
+    const change = createWorkspaceEditChange(current, edit)
+    if (!change.changed) {
       return textResult(`${summarizeGhostEdit(edit)}\nNo changes needed.`)
     }
-    await atomicWriteFile(uri, Buffer.from(updated, 'utf8'), { exists: true, content: current }, token)
-    await verifyWorkspaceFile(uri, { exists: true, content: updated }, token)
+    await applyWorkspaceFileChange(uri, change, current, token)
     return textResult(`${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`)
   }
 
@@ -567,6 +561,7 @@ export class ApplyTransactionTool implements vscode.LanguageModelTool<FileTransa
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
     const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
+    assertFileMutationAllowed(transaction.edits.map(edit => edit.path))
     const applied = await applyFileTransaction(transaction, undefined, token)
     return textResult(`${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`)
   }

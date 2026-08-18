@@ -14,10 +14,9 @@ import { GitContextInput, GitContextTool } from './gitContextTool'
 import { TaskPlanInput, TaskPlanTool } from '../agent/taskPlan'
 import { CompletionRecordInput, CompletionRecordTool } from '../agent/completionRecord'
 import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, RunTerminalCommandTool } from './terminalTools'
-import { applyGhostEdit, parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
-import { resolveWorkspacePath } from './workspacePath'
-import { atomicWriteFile } from './atomicFile'
-import { assertNoUnsavedEditorChanges, readWorkspaceFile, sameWorkspaceFile, verifyWorkspaceFile, WorkspaceFileSnapshot } from './workspaceFile'
+import { parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
+import { assertExpectedWorkspaceSnapshot, assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEditChange, createWorkspaceFileChange, expectedWorkspaceSnapshot, readFileMutation } from './fileMutationWorkflow'
+import { WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { awaitCancellable } from './cancellation'
 import { validateLocalToolCall } from '../agent/toolSchema'
@@ -65,23 +64,7 @@ function resultText(result: vscode.LanguageModelToolResult): string {
 }
 
 async function readCurrentFile(filePath: string, token: vscode.CancellationToken): Promise<WorkspaceFileSnapshot> {
-  return readWorkspaceFile(resolveWorkspacePath(filePath), token)
-}
-
-function expectedSnapshot(options: { expectedContent?: string; expectedFileExists?: boolean }): WorkspaceFileSnapshot | undefined {
-  if (options.expectedContent === undefined && options.expectedFileExists === undefined) {
-    return undefined
-  }
-  return {
-    exists: options.expectedFileExists ?? true,
-    content: options.expectedContent ?? ''
-  }
-}
-
-function assertCurrentSnapshot(current: WorkspaceFileSnapshot, expected: WorkspaceFileSnapshot | undefined): void {
-  if (expected && !sameWorkspaceFile(current, expected)) {
-    throw new Error('File changed externally. Refresh and rebase the edit before retrying.')
-  }
+  return (await readFileMutation(filePath, token)).snapshot
 }
 
 async function confirmAction(title: string, message: string, token: vscode.CancellationToken): Promise<boolean> {
@@ -193,7 +176,7 @@ export class LocalToolExecutor {
           path: requiredString(call.arguments, 'path'),
           content: typeof call.arguments.content === 'string' ? call.arguments.content : ''
         }
-        assertNoUnsavedEditorChanges([resolveWorkspacePath(input.path)])
+        assertFileMutationAllowed([input.path])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to write a file?',
           `Replace the complete contents of ${input.path}?`,
@@ -212,20 +195,20 @@ export class LocalToolExecutor {
           return `${input.path}: file already updated.\nApplied successfully.\nVerification: passed (accepted content read back).`
         }
 
-        const expected = expectedSnapshot(options)
-        const current = await readCurrentFile(input.path, token)
-        assertCurrentSnapshot(current, expected)
-        if (current.content === input.content && current.exists) {
+        const expected = expectedWorkspaceSnapshot(options)
+        const { uri, snapshot: current } = await readFileMutation(input.path, token)
+        assertExpectedWorkspaceSnapshot(current, expected)
+        const change = createWorkspaceFileChange(current, input.content)
+        if (!change.changed) {
           return `${input.path}: no changes needed.`
         }
 
-        await atomicWriteFile(resolveWorkspacePath(input.path), Buffer.from(input.content, 'utf8'), expected ?? current, token)
-        await verifyWorkspaceFile(resolveWorkspacePath(input.path), { exists: true, content: input.content }, token)
+        await applyWorkspaceFileChange(uri, change, expected ?? current, token)
         return `${input.path}: wrote ${input.content.length} characters.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_edit': {
         const edit = parseGhostEdit(call.arguments)
-        assertNoUnsavedEditorChanges([resolveWorkspacePath(edit.path)])
+        assertFileMutationAllowed([edit.path])
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply an edit?',
           summarizeGhostEdit(edit),
@@ -243,24 +226,20 @@ export class LocalToolExecutor {
           return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (accepted content read back).`
         }
 
-        const expected = expectedSnapshot(options)
-        const current = await readCurrentFile(edit.path, token)
-        assertCurrentSnapshot(current, expected)
-        if (edit.expectedContent !== undefined && current.content !== edit.expectedContent) {
-          throw new Error('Edit expected different file content')
-        }
+        const expected = expectedWorkspaceSnapshot(options)
+        const { uri, snapshot: current } = await readFileMutation(edit.path, token)
+        assertExpectedWorkspaceSnapshot(current, expected)
         const selectedHunks = options.selectedHunkIndexes ? new Set(options.selectedHunkIndexes) : undefined
-        const updated = applyGhostEdit(current.content, edit, selectedHunks)
-        if (updated === current.content) {
+        const change = createWorkspaceEditChange(current, edit, selectedHunks)
+        if (!change.changed) {
           return `${summarizeGhostEdit(edit)}\nNo changes needed.`
         }
-        await atomicWriteFile(resolveWorkspacePath(edit.path), Buffer.from(updated, 'utf8'), expected ?? current, token)
-        await verifyWorkspaceFile(resolveWorkspacePath(edit.path), { exists: true, content: updated }, token)
+        await applyWorkspaceFileChange(uri, change, expected ?? current, token)
         return `${summarizeGhostEdit(edit)}\nApplied successfully.\nVerification: passed (readback matched).`
       }
       case 'ghost_apply_transaction': {
         const transactionInput: FileTransactionInput = parseFileTransaction(call.arguments)
-        assertNoUnsavedEditorChanges(transactionInput.edits.map(edit => resolveWorkspacePath(edit.path)))
+        assertFileMutationAllowed(transactionInput.edits.map(edit => edit.path))
         const allowed = options.approved ?? await confirmAction(
           'Allow Ghost to apply a file transaction?',
           `Apply and verify ${transactionInput.edits.length} files together?`,
