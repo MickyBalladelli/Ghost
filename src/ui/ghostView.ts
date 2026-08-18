@@ -3233,6 +3233,48 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         padding-left: 18px;
       }
 
+      .request-action-card {
+        border: 1px solid var(--vscode-widget-border, var(--ghost-border));
+        border-left: 3px solid var(--ghost-accent);
+        border-radius: 4px;
+        margin-top: 10px;
+        padding: 8px 10px;
+      }
+
+      .request-action-card.active {
+        border-left-color: var(--vscode-charts-yellow, #cca700);
+      }
+
+      .request-action-card.stopped {
+        border-left-color: var(--vscode-errorForeground, #f14c4c);
+      }
+
+      .request-action-card-heading {
+        display: grid;
+        gap: 3px;
+      }
+
+      .request-action-card-heading strong {
+        color: var(--vscode-foreground);
+      }
+
+      .request-action-card-heading span {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+      }
+
+      .request-action-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .request-card-button {
+        font-size: 0.85em;
+        padding: 4px 8px;
+      }
+
       .message-part-summary {
         display: grid;
         gap: 4px;

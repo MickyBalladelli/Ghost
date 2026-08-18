@@ -2140,6 +2140,39 @@ const stopReasonLabel = (reason: StopReason | undefined): string => (
   reason ? stopReasonLabels[reason] : 'Ghost request failed'
 )
 
+const requestIsActive = (message: ChatMessage): boolean => (
+  message.status === 'streaming' || ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+)
+
+const requestIsStopped = (message: ChatMessage): boolean => (
+  message.status === 'error' || ['cancelled', 'failed'].includes(message.requestStatus ?? '') || Boolean(message.stopReason)
+)
+
+const messageDiffPath = (message: ChatMessage): string | undefined => {
+  const diffPart = [...message.parts].reverse().find(part => part.kind === 'tool' && part.toolCall.diffPreview?.path)
+  if (diffPart?.kind === 'tool' && diffPart.toolCall.diffPreview?.path) {
+    return diffPart.toolCall.diffPreview.path
+  }
+  return message.requestSummary?.changedFiles[0]
+}
+
+const renderRequestActionCard = (message: ChatMessage): string => {
+  const active = requestIsActive(message)
+  const stopped = requestIsStopped(message)
+  if (message.role !== 'assistant' || (!active && !stopped)) {
+    return ''
+  }
+  const diffPath = messageDiffPath(message)
+  const title = active ? 'Ghost is working' : `Ghost stopped: ${stopReasonLabel(message.stopReason)}`
+  const detail = active
+    ? 'Stop this request if it is taking too long.'
+    : 'Choose an action to recover or inspect the stopped request.'
+  const actions = active
+    ? `<button type="button" class="request-card-button secondary" data-action="cancel-request" data-message-id="${escapeAttribute(message.id)}">Cancel</button>`
+    : `<button type="button" class="request-card-button" data-action="retry" data-message-id="${escapeAttribute(message.id)}">Retry</button><button type="button" class="request-card-button" data-action="continue" data-message-id="${escapeAttribute(message.id)}">Continue</button><button type="button" class="request-card-button secondary" data-action="regenerate" data-message-id="${escapeAttribute(message.id)}">Regenerate</button>${diffPath ? `<button type="button" class="request-card-button secondary" data-action="open-diff" data-message-id="${escapeAttribute(message.id)}">Open Diff</button>` : ''}`
+  return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><div class="request-action-card-actions">${actions}</div></section>`
+}
+
 const createMessageElement = (message: ChatMessage): HTMLElement => {
   const article = document.createElement('article')
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
@@ -2163,23 +2196,22 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     <div class="message-body">${renderMarkdown(message.content, showThinkingPlaceholder)}</div>
     ${responseStats}
     ${renderRequestSummary(message)}
+    ${renderRequestActionCard(message)}
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
   if (actions && message.role === 'assistant') {
+    const stopped = requestIsStopped(message)
     if (message.content) {
       addAction(actions, 'Copy', 'copy', message.id)
     }
-    if (message.content || message.status === 'error' || message.requestStatus === 'failed' || message.stopReason) {
+    if (!stopped && message.content) {
       addAction(actions, 'Retry', 'retry', message.id)
       addAction(actions, 'Regenerate', 'regenerate', message.id)
     }
     if (message.content) {
       addAction(actions, 'Edit & resend', 'edit-resend', message.id)
     }
-  }
-  if (actions && message.role === 'assistant' && (message.status === 'error' || message.requestStatus === 'failed' || message.stopReason)) {
-    addAction(actions, 'Continue', 'continue', message.id)
   }
   if (actions && message.role === 'user') {
     addAction(actions, 'Edit', 'edit', message.id)
@@ -2508,6 +2540,13 @@ const updateMessageElement = (message: ChatMessage) => {
     existingRequestSummary.outerHTML = requestSummary || '<section class="request-summary" hidden></section>'
   } else if (requestSummary) {
     element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', requestSummary)
+  }
+  const existingRequestActionCard = element.querySelector<HTMLElement>('.request-action-card')
+  const requestActionCard = renderRequestActionCard(message)
+  if (existingRequestActionCard) {
+    existingRequestActionCard.outerHTML = requestActionCard || '<section class="request-action-card" hidden></section>'
+  } else if (requestActionCard) {
+    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', requestActionCard)
   }
   element.classList.toggle('error', message.status === 'error')
   ensureAnimatedStatusLabels()
@@ -3062,8 +3101,22 @@ const handleMessageAction = (action: string, messageId: string) => {
   } else if (action === 'edit-resend') {
     post('edit', { ...lifecycleEnvelope('edit'), messageId, prompt: message.content })
     editAndResendMessage(messageId)
+  } else if (action === 'cancel-request') {
+    const requestId = message.requestId ?? activeRequest?.requestId
+    if (requestId) {
+      post('cancel', { requestId, conversationId: conversation.id })
+    }
   } else if (action === 'continue') {
     continueConversation(messageId)
+  } else if (action === 'open-diff') {
+    const path = messageDiffPath(message)
+    if (path) {
+      post('open-file', {
+        requestId: message.requestId ?? createId('open-diff'),
+        conversationId: conversation.id,
+        path
+      })
+    }
   } else if (action === 'retry' || action === 'regenerate') {
     post(action, { ...lifecycleEnvelope(action), messageId })
     retryMessage(messageId)
