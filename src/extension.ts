@@ -128,6 +128,10 @@ export async function activate(context: vscode.ExtensionContext) {
   const openGhostView = () => vscode.commands.executeCommand('workbench.view.extension.ghost')
   const openViewCommand = vscode.commands.registerCommand('ghost.open', openGhostView)
   const focusViewCommand = vscode.commands.registerCommand('ghost.focus', openGhostView)
+  const openSetupCommand = vscode.commands.registerCommand('ghost.openSetup', async () => {
+    await openGhostView()
+    ghostView.openSetup()
+  })
   const resetViewCommand = vscode.commands.registerCommand('ghost.reset', async () => {
     await openGhostView()
     await ghostView.reset()
@@ -170,6 +174,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ghostViewRegistration,
     openViewCommand,
     focusViewCommand,
+    openSetupCommand,
     resetViewCommand,
     exportViewCommand,
     clearViewCommand,

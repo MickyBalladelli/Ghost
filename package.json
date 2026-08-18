@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.1.29",
+  "version": "1.1.33",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -28,6 +28,7 @@
     "onCommand:ghost.checkModels",
     "onCommand:ghost.open",
     "onCommand:ghost.focus",
+    "onCommand:ghost.openSetup",
     "onCommand:ghost.reset",
     "onCommand:ghost.export",
     "onCommand:ghost.clear",
@@ -77,6 +78,10 @@
       {
         "command": "ghost.open",
         "title": "Ghost: Open Interface"
+      },
+      {
+        "command": "ghost.openSetup",
+        "title": "Ghost: Open setup"
       },
       {
         "command": "ghost.focus",

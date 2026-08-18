@@ -3551,6 +3551,12 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     }
     return
   }
+  if (message.type === 'open-first-run') {
+    firstRunSetupOpened = true
+    renderFirstRunSetup()
+    setModalVisibility(firstRunModalElement, true)
+    return
+  }
   if (message.type === 'file-picked') {
     for (const attachment of message.attachments) {
       addAttachment(attachment)
@@ -3779,15 +3785,21 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       conversation.completionRecord = completionRecord
     } else if (request.setupTest) {
       conversation.completionRecord = undefined
-      setupTestStatusElement.textContent = status === 'completed'
-        ? 'Test passed: model replied.'
-        : `Test failed: ${status}.`
+      if (status === 'completed') {
+        const reply = assistantMessage.content.trim().replace(/\s+/g, ' ')
+        setupTestStatusElement.textContent = reply
+          ? `Test passed: ${reply.slice(0, 240)}`
+          : 'Test completed, but the model returned no text.'
+      } else {
+        setupTestStatusElement.textContent = `Test failed: ${status}.`
+      }
+      setModalVisibility(firstRunModalElement, true)
     } else {
       conversation.completionRecord = {
-        changedFiles: [],
+        changedFiles: summaryChangedFiles(assistantMessage),
         checksRun: [],
-        failures: [status === 'completed' ? 'Model did not provide a completion record.' : `Request ended without a completion record (${status}).`],
-        remainingWork: ['Provide a structured completion record before the final answer.'],
+        failures: status === 'completed' ? [] : [`Request ended before completion (${status}).`],
+        remainingWork: status === 'completed' ? [] : ['Review the result and retry the request if needed.'],
         recordedAt: Date.now()
       }
     }
@@ -3912,6 +3924,9 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
       (message.modelMetadata === undefined || Array.isArray(message.modelMetadata)) &&
       (message.connection === 'online' || message.connection === 'offline' || message.connection === 'unknown')
     )
+  }
+  if (message.type === 'open-first-run') {
+    return true
   }
   if (message.type === 'file-picked') {
     return Array.isArray(message.attachments)

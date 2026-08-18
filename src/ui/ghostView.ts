@@ -222,6 +222,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     void this.sendControlsState()
   }
 
+  openSetup(): void {
+    this.postMessage({
+      source: 'ghost-extension',
+      version: GHOST_WEBVIEW_PROTOCOL_VERSION,
+      type: 'open-first-run'
+    })
+  }
+
   async reset(): Promise<void> {
     const confirmation = await vscode.window.showWarningMessage(
       'Delete all Ghost conversation history and preferences?',
