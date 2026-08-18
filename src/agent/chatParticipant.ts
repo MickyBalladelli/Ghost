@@ -824,6 +824,15 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
   )
 }
 
+function findStreamedToolCallStart(text: string): number | undefined {
+  const matches = [
+    /<tool_call>/i.exec(text),
+    /\{\s*["'](?:tool|tool_call|toolCall|function|name|tool_name)["']\s*:/i.exec(text)
+  ].filter((match): match is RegExpExecArray => match !== null)
+
+  return matches.length ? Math.min(...matches.map(match => match.index)) : undefined
+}
+
 async function streamModelTurn(
   llmFactory: LlmFactory,
   options: Parameters<LlmFactory['streamChatCompletion']>[0],
@@ -837,6 +846,7 @@ async function streamModelTurn(
   let decided = false
   let bufferingToolCall = false
   const toolCallAssembler = new LocalToolCallStreamAssembler()
+  let toolCallProbe = ''
   let hidingReasoning = false
   let hiddenReasoningNotified = false
 
@@ -894,7 +904,28 @@ async function streamModelTurn(
     }
 
     if (decided && !bufferingToolCall) {
-      emitVisibleChunk(chunk)
+      const combined = toolCallProbe + chunk
+      const toolCallStart = findStreamedToolCallStart(combined)
+      if (toolCallStart === undefined) {
+        emitVisibleChunk(chunk)
+        toolCallProbe = combined.slice(-512)
+        continue
+      }
+
+      const chunkStart = Math.max(0, toolCallStart - toolCallProbe.length)
+      if (chunkStart > 0) {
+        emitVisibleChunk(chunk.slice(0, chunkStart))
+      }
+      bufferingToolCall = true
+      const update = toolCallAssembler.append(combined.slice(toolCallStart))
+      if (update.complete || update.overflowed || update.splitSuggested) {
+        return {
+          generated: toolCallAssembler.getText(),
+          streamed: false,
+          modelTokens: Math.ceil(modelCharacters / 4),
+          splitSuggested: update.splitSuggested
+        }
+      }
       continue
     }
 
@@ -902,8 +933,27 @@ async function streamModelTurn(
 
     if (!decided) {
       const firstContent = generated.trimStart()
+      const toolCallStart = findStreamedToolCallStart(generated)
 
-      if (firstContent.startsWith('{') || firstContent.startsWith('<tool_call>')) {
+      if (toolCallStart !== undefined) {
+        decided = true
+        bufferingToolCall = true
+        const explanatoryPrefix = generated.slice(0, toolCallStart)
+        if (explanatoryPrefix.trim()) {
+          emitVisibleChunk(explanatoryPrefix)
+        }
+        const update = toolCallAssembler.append(generated.slice(toolCallStart))
+        toolCallProbe = ''
+        generated = ''
+        if (update.complete || update.overflowed || update.splitSuggested) {
+          return {
+            generated: toolCallAssembler.getText(),
+            streamed: false,
+            modelTokens: Math.ceil(modelCharacters / 4),
+            splitSuggested: update.splitSuggested
+          }
+        }
+      } else if (firstContent.startsWith('{') || firstContent.startsWith('<tool_call>')) {
         decided = true
         bufferingToolCall = true
         const update = toolCallAssembler.append(generated)
@@ -919,13 +969,14 @@ async function streamModelTurn(
       } else if (firstContent) {
         decided = true
         emitVisibleChunk(generated)
+        toolCallProbe = generated.slice(-512)
         generated = ''
       }
     }
   }
 
   return {
-    generated: generated.trim(),
+    generated: bufferingToolCall ? toolCallAssembler.getText() : generated.trim(),
     streamed: decided && !bufferingToolCall,
     modelTokens: Math.ceil(modelCharacters / 4),
     splitSuggested: false
