@@ -98,7 +98,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add stable coding, balanced, and creative generation profiles. Show the effective values and restore defaults per setting.
 - [x] Add a first-run setup flow that checks the provider, lists models, tests one request, and explains missing capabilities.
 - [x] Use VS Code theme variables consistently. Add high-contrast, reduced-motion, keyboard-only, and screen-reader checks.
-- [ ] Replace unsafe or expensive whole-message rendering with safe DOM updates and a central markdown/syntax rendering policy.
+- [x] Replace unsafe or expensive whole-message rendering with safe DOM updates and a central markdown/syntax rendering policy.
 - [ ] Add copy buttons for code, paths, errors, commands, and diagnostics. Do not copy hidden secrets.
 
 ## P1 — speed and resource use

@@ -1929,7 +1929,11 @@ const renderContextPreview = () => {
     checkbox.disabled = item.detail.startsWith('No ') || item.detail === '0 files' || item.detail === '0 tools'
     checkbox.dataset.contextKey = item.key
     const text = document.createElement('span')
-    text.innerHTML = `<strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small>`
+    const labelText = document.createElement('strong')
+    labelText.textContent = item.label
+    const detailText = document.createElement('small')
+    detailText.textContent = item.detail
+    text.append(labelText, detailText)
     label.append(checkbox, text)
     contextPreviewElement.append(label)
   }
@@ -2315,6 +2319,24 @@ const safeLink = (value: string): string | undefined => {
   }
 }
 
+const createMarkupFragment = (markup: string): DocumentFragment => {
+  const template = document.createElement('template')
+  template.innerHTML = markup
+  return template.content
+}
+
+const replaceMarkup = (element: Element, markup: string): void => {
+  element.replaceChildren(createMarkupFragment(markup))
+}
+
+const replaceElementMarkup = (element: Element, markup: string): void => {
+  element.replaceWith(createMarkupFragment(markup))
+}
+
+const insertMarkupBefore = (target: Element, markup: string): void => {
+  target.before(createMarkupFragment(markup))
+}
+
 const inlineMarkdown = (value: string): string => {
   let html = escapeHtml(value)
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -2479,6 +2501,10 @@ const renderMarkdown = (markdown: string, showThinkingPlaceholder = true): strin
   closeList()
   return output.join('') || (showThinkingPlaceholder ? `<p class="message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</p>` : '')
 }
+
+const renderMarkdownFragment = (markdown: string, showThinkingPlaceholder = true): DocumentFragment => (
+  createMarkupFragment(renderMarkdown(markdown, showThinkingPlaceholder))
+)
 
 const findMessage = (conversation: Conversation, messageId: string): ChatMessage | undefined => (
   conversation.messages.find(message => message.id === messageId)
@@ -2664,7 +2690,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     message.status === 'streaming' ||
     ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
   )
-  article.innerHTML = `
+  replaceMarkup(article, `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     ${partSummary}
     <div class="message-body">${renderMarkdown(message.content, showThinkingPlaceholder)}</div>
@@ -2672,7 +2698,7 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
     <div class="message-actions" aria-label="Message actions"></div>
-  `
+  `)
   const actions = article.querySelector<HTMLElement>('.message-actions')
   if (actions) {
     addAction(actions, message.bookmarked ? 'Unbookmark' : 'Bookmark', 'toggle-bookmark', message.id)
@@ -3014,8 +3040,8 @@ const stateCard = (): string => {
   return '<div class="state-card"><div class="state-icon">✦</div><h1>Start a conversation</h1><p>Ask about your code, explain an error, or let Ghost help with a task.</p></div>'
 }
 
-const updateMessageElement = (message: ChatMessage) => {
-  const element = findMessageElement(message.id)
+const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElement) => {
+  const element = existingElement ?? findMessageElement(message.id)
   if (!element) {
     renderMessages(false)
     return
@@ -3027,7 +3053,7 @@ const updateMessageElement = (message: ChatMessage) => {
       message.status === 'streaming' ||
       ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
     )
-    body.innerHTML = renderMarkdown(message.content, showThinkingPlaceholder)
+    body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
   }
   if (status) {
     status.textContent = message.status === 'streaming'
@@ -3039,30 +3065,33 @@ const updateMessageElement = (message: ChatMessage) => {
   const existingSummary = element.querySelector<HTMLElement>('.message-part-summary')
   const summary = renderMessagePartSummary(message)
   if (existingSummary) {
-    existingSummary.outerHTML = summary || '<div class="message-part-summary" hidden></div>'
+    replaceElementMarkup(existingSummary, summary || '<div class="message-part-summary" hidden></div>')
   } else if (summary) {
-    body?.insertAdjacentHTML('beforebegin', summary)
+    body?.before(createMarkupFragment(summary))
   }
   const existingStats = element.querySelector<HTMLElement>('.message-response-stats')
   const stats = renderResponseStats(message)
   if (existingStats) {
-    existingStats.outerHTML = stats || '<div class="message-response-stats" hidden></div>'
+    replaceElementMarkup(existingStats, stats || '<div class="message-response-stats" hidden></div>')
   } else if (stats) {
-    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', stats)
+    const actions = element.querySelector<HTMLElement>('.message-actions')
+    if (actions) insertMarkupBefore(actions, stats)
   }
   const existingRequestSummary = element.querySelector<HTMLElement>('.request-summary')
   const requestSummary = renderRequestSummary(message)
   if (existingRequestSummary) {
-    existingRequestSummary.outerHTML = requestSummary || '<section class="request-summary" hidden></section>'
+    replaceElementMarkup(existingRequestSummary, requestSummary || '<section class="request-summary" hidden></section>')
   } else if (requestSummary) {
-    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', requestSummary)
+    const actions = element.querySelector<HTMLElement>('.message-actions')
+    if (actions) insertMarkupBefore(actions, requestSummary)
   }
   const existingRequestActionCard = element.querySelector<HTMLElement>('.request-action-card')
   const requestActionCard = renderRequestActionCard(message)
   if (existingRequestActionCard) {
-    existingRequestActionCard.outerHTML = requestActionCard || '<section class="request-action-card" hidden></section>'
+    replaceElementMarkup(existingRequestActionCard, requestActionCard || '<section class="request-action-card" hidden></section>')
   } else if (requestActionCard) {
-    element.querySelector<HTMLElement>('.message-actions')?.insertAdjacentHTML('beforebegin', requestActionCard)
+    const actions = element.querySelector<HTMLElement>('.message-actions')
+    if (actions) insertMarkupBefore(actions, requestActionCard)
   }
   element.classList.toggle('error', message.status === 'error')
   ensureAnimatedStatusLabels()
@@ -3145,15 +3174,20 @@ const createCompletionRecordElement = (record: CompletionRecord): HTMLElement =>
 const renderMessages = (forceScroll: boolean) => {
   const conversation = getActiveConversation()
   const previousScrollTop = messagesElement.scrollTop
-  messagesElement.textContent = ''
+  const existingMessages = new Map(
+    Array.from(messagesElement.querySelectorAll<HTMLElement>('[data-message-id]'))
+      .map(element => [element.dataset.messageId, element] as const)
+      .filter((entry): entry is readonly [string, HTMLElement] => Boolean(entry[0]))
+  )
+  const fragment = document.createDocumentFragment()
   if (conversation.taskPlan) {
-    messagesElement.append(createTaskPlanElement(conversation.taskPlan))
+    fragment.append(createTaskPlanElement(conversation.taskPlan))
   }
   if (conversation.completionRecord) {
-    messagesElement.append(createCompletionRecordElement(conversation.completionRecord))
+    fragment.append(createCompletionRecordElement(conversation.completionRecord))
   }
   if (conversation.messages.length === 0) {
-    messagesElement.innerHTML = stateCard()
+    fragment.append(createMarkupFragment(stateCard()))
   } else {
     const firstVisibleIndex = Math.max(0, conversation.messages.length - visibleMessageCount)
     if (firstVisibleIndex > 0) {
@@ -3162,12 +3196,19 @@ const renderMessages = (forceScroll: boolean) => {
       older.className = 'context-button load-older'
       older.textContent = `Load ${Math.min(200, firstVisibleIndex)} older messages`
       older.dataset.loadOlder = 'true'
-      messagesElement.append(older)
+      fragment.append(older)
     }
     for (const message of conversation.messages.slice(firstVisibleIndex)) {
-      messagesElement.append(createMessageElement(message))
+      const existing = existingMessages.get(message.id)
+      if (existing) {
+        updateMessageElement(message, existing)
+        fragment.append(existing)
+      } else {
+        fragment.append(createMessageElement(message))
+      }
     }
   }
+  messagesElement.replaceChildren(fragment)
   if (!forceScroll && !userIsAtBottom) {
     requestAnimationFrame(() => {
       messagesElement.scrollTop = previousScrollTop
