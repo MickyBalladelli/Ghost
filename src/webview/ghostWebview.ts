@@ -803,6 +803,7 @@ app.innerHTML = `
           <div class="composer-footer">
             <span class="composer-hint" id="composer-hint">Enter to send · Shift+Enter for a new line · ↑/↓ prompt history</span>
             <span class="composer-count" id="composer-count">0 chars · ~0 tokens</span>
+            <span class="persistence-status" id="persistence-status" role="status"></span>
             <span class="prompt-history-actions" aria-label="Prompt history"><button type="button" class="secondary prompt-history-button" id="search-prompt-history" aria-label="Search prompt history" title="Search prompt history">⌕</button><button type="button" class="secondary prompt-history-button" id="previous-prompt" aria-label="Previous prompt" title="Previous prompt (Arrow Up when composer is empty)">↑</button><button type="button" class="secondary prompt-history-button" id="next-prompt" aria-label="Next prompt" title="Next prompt (Arrow Down after browsing history)">↓</button></span>
             <button type="button" class="stop-button" id="stop" hidden>Stop</button>
             <button type="submit" id="send">Send</button>
@@ -1025,6 +1026,7 @@ const statusTextElement = document.getElementById('status-text') as HTMLElement
 const statusFooterElement = document.getElementById('status-footer') as HTMLElement
 const screenReaderStatusElement = document.getElementById('screen-reader-status') as HTMLElement
 const composerCountElement = document.getElementById('composer-count') as HTMLElement
+const persistenceStatusElement = document.getElementById('persistence-status') as HTMLElement
 const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
 const modelProfileElement = document.getElementById('model-profile') as HTMLSelectElement
@@ -1669,6 +1671,11 @@ const renderControls = () => {
   debugLoggingElement.checked = controls.enableDebugLogging
   showReasoningElement.checked = showReasoning
   persistenceElement.checked = controls.enableConversationPersistence
+  persistenceStatusElement.textContent = controls.enableConversationPersistence ? 'Autosave on · history saved' : 'Autosave off · memory only'
+  persistenceStatusElement.title = controls.enableConversationPersistence
+    ? 'Drafts, prompt history, and conversations are saved in VS Code storage.'
+    : 'Drafts, prompt history, and conversations remain in memory until this view closes.'
+  persistenceStatusElement.classList.toggle('enabled', controls.enableConversationPersistence)
   assistantNameElement.value = uiPreferences.assistantName
   assistantAvatarElement.value = uiPreferences.assistantAvatar
   accentColorElement.value = /^#[0-9a-f]{6}$/i.test(uiPreferences.accentColor) ? uiPreferences.accentColor : '#3794ff'
@@ -4375,6 +4382,7 @@ persistenceElement.addEventListener('change', () => {
   controls.enableConversationPersistence = persistenceElement.checked
   sendSettingsUpdate()
   saveState()
+  renderControls()
 })
 assistantNameElement.addEventListener('input', () => {
   uiPreferences.assistantName = assistantNameElement.value.slice(0, 40)
@@ -4663,7 +4671,12 @@ promptElement.addEventListener('input', () => {
     historyIndex = -1
   }
   saveDraft()
+  saveState()
   updateComposer()
+})
+promptElement.addEventListener('blur', () => {
+  saveDraft()
+  saveState()
 })
 promptElement.addEventListener('keydown', event => {
   if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'n') {

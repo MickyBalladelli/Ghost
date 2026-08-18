@@ -18,6 +18,7 @@ All notable changes to this extension are documented here.
 - Show the active auto-accept scope and add an emergency pause for the current request.
 - Add message search results, bookmarks, conversation duplication/branching, and lazy loading for older messages.
 - Add searchable per-conversation prompt history with configurable retention and keyboard guidance.
+- Autosave composer drafts and show whether local conversation persistence is enabled.
 
 ## 1.1.16 - 2026-08-18
 

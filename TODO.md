@@ -89,7 +89,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add a visible auto-accept indicator and an easy emergency stop that disables auto-accept for the current request.
 - [x] Add conversation search, message search, bookmarks, rename, duplicate/branch conversation, and lazy loading for old messages.
 - [x] Keep prompt history per conversation with deduplication, search, configurable size, keyboard hints, and reliable previous/next navigation.
-- [ ] Autosave composer drafts and show whether prompt history/conversation persistence is enabled.
+- [x] Autosave composer drafts and show whether prompt history/conversation persistence is enabled.
 - [ ] Add slash commands or prompt presets for explain, fix, test, review, refactor, and summarize.
 - [ ] Add file/folder mention autocomplete, drag-and-drop files, paste-image support, and clear attachment limits.
 - [ ] Add a workspace selector for multi-root workspaces and show which root each file belongs to.
