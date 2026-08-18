@@ -64,12 +64,12 @@ async function resolveReadableFilePath(input: string, token: vscode.Cancellation
     const code = error instanceof vscode.FileSystemError
       ? error.code
       : (error as NodeJS.ErrnoException).code
-    if (code !== 'FileNotFound' || path.isAbsolute(input) || input.includes('/') || input.includes('\\')) {
+    if (code !== 'FileNotFound' || path.isAbsolute(input)) {
       throw error
     }
   }
 
-  const fileName = path.basename(input)
+  const fileName = path.basename(input.replace(/\\/g, '/'))
   const root = getWorkspaceRoot()
   const matches = await vscode.workspace.findFiles(
     new vscode.RelativePattern(root, `**/${fileName}`),
@@ -85,7 +85,7 @@ async function resolveReadableFilePath(input: string, token: vscode.Cancellation
       .map(match => path.relative(root.fsPath, match.fsPath))
       .slice(0, 8)
       .join(', ')
-    throw new Error(`File '${input}' was not found at the workspace root. Multiple matches exist: ${candidates}. Retry with the full workspace-relative path.`)
+    throw new Error(`File '${input}' was not found at that path. Multiple filename matches exist: ${candidates}. Retry with the full workspace-relative path.`)
   }
   throw new Error(`File '${input}' was not found. Retry with the workspace-relative path shown by ghost_list_directory.`)
 }

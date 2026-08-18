@@ -22,6 +22,7 @@ All notable changes to this extension are documented here.
 - Add /test, /review, and /refactor slash commands with workflow-specific prompts.
 - Add pasted-image attachments, visible attachment limits, and removable attachment chips.
 - Add a multi-root workspace selector and root labels for open files and active context.
+- Recover missing relative file paths when exactly one matching filename exists in the workspace.
 
 ## 1.1.16 - 2026-08-18
 
