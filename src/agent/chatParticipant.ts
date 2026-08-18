@@ -23,6 +23,7 @@ import { createProfiledProviderClient } from '../services/profiledProviderClient
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
 import { profileProtocol } from '../services/profiledProviderClient'
+import { createToolErrorResult, replaceToolResultText, ToolResult } from '../tools/toolResult'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -1620,10 +1621,10 @@ export function createChatParticipantHandler(
         if (toolCall.name === 'ghost_run_terminal_command') {
           budget.commands += 1
         }
-        let toolResult: string
+        let toolOutcome: ToolResult
 
         try {
-          toolResult = await toolExecutor.execute(toolCall, token, {
+          toolOutcome = await toolExecutor.execute(toolCall, token, {
             approved: Boolean(requestOptions.approveTool),
             expectedContent: approval.expectedContent,
             expectedFileExists: approval.expectedFileExists,
@@ -1633,17 +1634,20 @@ export function createChatParticipantHandler(
             selectedHunkIndexes: approval.selectedHunkIndexes
           })
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown tool error'
-          toolResult = `Tool error: ${message}`
+          toolOutcome = createToolErrorResult(error)
         }
 
         if (token.isCancellationRequested) {
           return
         }
 
-        toolResult = limitToolResult(toolCall.name, toolResult)
+        const limitedToolResult = limitToolResult(toolCall.name, toolOutcome.text)
+        if (limitedToolResult !== toolOutcome.text) {
+          toolOutcome = replaceToolResultText(toolOutcome, limitedToolResult, { truncated: true })
+        }
+        const toolResult = toolOutcome.text
 
-        const editFailed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
+        const editFailed = toolOutcome.status === 'failed' || toolOutcome.status === 'denied' || toolOutcome.status === 'blocked' || toolOutcome.status === 'cancelled' || /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)
         if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < GHOST_RETRY_POLICIES.staleEdit.maxRetries) {
           staleEditRetries += 1

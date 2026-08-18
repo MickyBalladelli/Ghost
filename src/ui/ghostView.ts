@@ -693,8 +693,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         appliedContent: approval.appliedContent,
         selectedHunkIndexes: approval.selectedHunkIndexes
       })
-      const detail = redactSensitiveText(result).slice(0, 16000)
-      const failed = /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected|no changes needed/i.test(detail)
+      const detail = redactSensitiveText(result.text).slice(0, 16000)
+      const failed = result.status !== 'success' && result.status !== 'no-op'
       this.postStreamEvent(requestId, request, {
         type: 'tool-result',
         tool: call.name,

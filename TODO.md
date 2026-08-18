@@ -137,7 +137,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Introduce an event/state store with one owner for request state, conversation state, settings, approvals, and persistence.
 - [x] Add protocol version negotiation and migrations for webview/extension changes.
 - [x] Replace giant `innerHTML` templates with small safe render functions or DOM builders. Centralize escaping and markdown sanitization.
-- [ ] Add typed result objects for tools: status, exit code, changed files, bytes, truncation, warnings, and retryability.
+- [x] Add typed result objects for tools: status, exit code, changed files, bytes, truncation, warnings, and retryability.
 - [ ] Make constants such as tool rounds, edit limits, output limits, timeouts, and context limits configurable or grouped in one policy module.
 - [ ] Define error classes and error codes shared by providers, tools, persistence, approvals, and UI.
 - [ ] Add settings schema versioning and migrations before adding more configuration.

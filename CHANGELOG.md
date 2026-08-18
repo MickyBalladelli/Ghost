@@ -40,6 +40,7 @@ All notable changes to this extension are documented here.
 - Add one Ghost state store for request lifecycle, conversations, settings, approvals, provider status, and persistence snapshots with state-change subscriptions.
 - Add webview/extension protocol version negotiation, legacy v1 compatibility, and persisted/message migration hooks.
 - Replace the giant webview shell HTML template with a safe DOM builder and sanitize generated Markdown fragments before insertion.
+- Add shared typed tool results with status, exit codes, changed files, output bytes, truncation, warnings, and retryability metadata.
 
 ## 1.1.17 - 2026-08-18
 

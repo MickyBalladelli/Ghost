@@ -20,6 +20,7 @@ import { WorkspaceFileSnapshot } from './workspaceFile'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { awaitCancellable } from './cancellation'
 import { validateLocalToolCall } from '../agent/toolSchema'
+import { createToolErrorResult, createToolResult, ToolResult } from './toolResult'
 
 const ALLOW_ACTION = 'Allow'
 
@@ -56,6 +57,18 @@ function getMissingRequiredArgument(call: LocalToolCall): string | undefined {
   return `Tool call rejected: ${call.name} requires a non-empty '${requiredArgument}'. Retry with one JSON tool call using a workspace-relative or absolute path inside the workspace.`
 }
 
+function changedFilesForCall(call: LocalToolCall): string[] {
+  if (call.name === 'ghost_write_file' || call.name === 'ghost_apply_edit') {
+    return typeof call.arguments.path === 'string' ? [call.arguments.path] : []
+  }
+  if (call.name === 'ghost_apply_transaction' && Array.isArray(call.arguments.edits)) {
+    return call.arguments.edits
+      .map(edit => edit && typeof edit === 'object' && typeof (edit as { path?: unknown }).path === 'string' ? (edit as { path: string }).path : undefined)
+      .filter((path): path is string => Boolean(path))
+  }
+  return []
+}
+
 function resultText(result: vscode.LanguageModelToolResult): string {
   return result.content
     .filter(part => part instanceof vscode.LanguageModelTextPart)
@@ -88,11 +101,16 @@ export class LocalToolExecutor {
   private readonly taskPlanTool = new TaskPlanTool()
   private readonly completionRecordTool = new CompletionRecordTool()
 
-  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
-    return awaitCancellable(this.executeInternal(call, token, options), token).catch(error => {
-      if (token.isCancellationRequested) return 'Tool call cancelled by the user.'
-      throw error
-    })
+  async execute(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<ToolResult> {
+    const changedFiles = changedFilesForCall(call)
+    return awaitCancellable(this.executeInternal(call, token, options), token)
+      .then(text => {
+        const result = createToolResult(text, { changedFiles })
+        return result.status === 'success' ? result : { ...result, changedFiles: [] }
+      })
+      .catch(error => token.isCancellationRequested
+        ? createToolResult('Tool call cancelled by the user.', { status: 'cancelled', retryable: true })
+        : createToolErrorResult(error))
   }
 
   private async executeInternal(call: LocalToolCall, token: vscode.CancellationToken, options: { approved?: boolean; expectedContent?: string; expectedFileExists?: boolean; expectedFiles?: Record<string, WorkspaceFileSnapshot>; alreadyApplied?: boolean; appliedContent?: string; selectedHunkIndexes?: number[] } = {}): Promise<string> {
