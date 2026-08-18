@@ -107,6 +107,7 @@ interface UiPreferences {
   composerHeight: number
   promptRows: number
   promptHistoryLimit: number
+  workspaceRoot: string
   workspaceOnly: boolean
 }
 
@@ -389,6 +390,7 @@ interface WebviewRequestOptions {
   mode: GhostMode
   showReasoning: boolean
   customSystemInstructions: string
+  workspaceRoot?: string
   context: {
     workspace: boolean
     folders: boolean
@@ -717,6 +719,7 @@ let uiPreferences: UiPreferences = {
   composerHeight,
   promptRows,
   promptHistoryLimit: defaultPromptHistoryLimit,
+  workspaceRoot: '',
   workspaceOnly: false
 }
 let persistenceReady = false
@@ -795,6 +798,7 @@ app.innerHTML = `
           <label class="screen-reader-only" for="prompt">Message Ghost</label>
           <div class="context-row">
             <button type="button" class="context-button" id="context-preview" aria-haspopup="dialog" title="View prompt context and available tools">Context</button>
+            <label class="workspace-root-control" for="workspace-root"><span>Root</span><select id="workspace-root" aria-label="Workspace root"></select></label>
             <button type="button" class="context-button" id="attach">Attach</button>
             <input id="file-input" type="file" multiple hidden>
             <span class="attachment-limit" id="attachment-limit" aria-live="polite"></span>
@@ -1100,6 +1104,7 @@ const showDiagnosticsElement = document.getElementById('show-diagnostics') as HT
 const debugLoggingElement = document.getElementById('debug-logging') as HTMLInputElement
 const autoContextElement = document.getElementById('auto-context') as HTMLInputElement
 const workspaceSettingsElement = document.getElementById('workspace-settings') as HTMLInputElement
+const workspaceRootElement = document.getElementById('workspace-root') as HTMLSelectElement
 const systemInstructionsElement = document.getElementById('system-instructions') as HTMLTextAreaElement
 const resetSystemInstructionsElement = document.getElementById('reset-system-instructions') as HTMLButtonElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
@@ -1215,6 +1220,7 @@ const createPersistedState = () => ({
     showDiagnostics: uiPreferences.showDiagnostics,
     autoContext: uiPreferences.autoContext,
     customSystemInstructions: uiPreferences.customSystemInstructions,
+    workspaceRoot: uiPreferences.workspaceRoot,
     workspaceOnly: uiPreferences.workspaceOnly,
     enableDebugLogging: controls.enableDebugLogging
   }
@@ -1624,6 +1630,18 @@ const renderControls = () => {
   composerHeightElement.value = String(composerHeight)
   promptRowsElement.value = String(promptRows)
   promptHistoryLimitElement.value = String(uiPreferences.promptHistoryLimit)
+  workspaceRootElement.textContent = ''
+  for (const folder of contextData.folders) {
+    const option = document.createElement('option')
+    option.value = folder
+    option.textContent = `${folder.split(/[\\/]/).pop() ?? folder} · ${folder}`
+    workspaceRootElement.append(option)
+  }
+  workspaceRootElement.value = contextData.folders.includes(uiPreferences.workspaceRoot)
+    ? uiPreferences.workspaceRoot
+    : contextData.folders[0] ?? ''
+  uiPreferences.workspaceRoot = workspaceRootElement.value
+  workspaceRootElement.disabled = contextData.folders.length <= 1
   promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
   openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
@@ -1719,12 +1737,17 @@ const renderControls = () => {
   renderPresets()
 }
 
+const workspaceFolderLabel = (filePath: string): string => {
+  const root = contextData.folders.find(folder => filePath === folder || filePath.startsWith(`${folder}/`) || filePath.startsWith(`${folder}\\`))
+  return root ? root.split(/[\\/]/).pop() ?? root : 'Outside workspace roots'
+}
+
 const renderContextPreview = () => {
   contextPreviewElement.textContent = ''
   const items: Array<{ key: keyof typeof contextEnabled; label: string; detail: string }> = [
-    { key: 'workspace', label: 'Workspace', detail: contextData.workspaceName },
-    { key: 'folders', label: 'Folders', detail: `${contextData.folders.length} folder${contextData.folders.length === 1 ? '' : 's'}` },
-    { key: 'activeFile', label: 'Active editor', detail: contextData.activeFile?.name ?? 'No active file' },
+    { key: 'workspace', label: 'Workspace', detail: `${contextData.workspaceName} · root: ${uiPreferences.workspaceRoot ? workspaceFolderLabel(uiPreferences.workspaceRoot) : 'all roots'}` },
+    { key: 'folders', label: 'Folders', detail: contextData.folders.length > 0 ? contextData.folders.map(folder => folder.split(/[\\/]/).pop() ?? folder).join(', ') : '0 folders' },
+    { key: 'activeFile', label: 'Active editor', detail: contextData.activeFile ? `${contextData.activeFile.name} · ${workspaceFolderLabel(contextData.activeFile.path)}` : 'No active file' },
     { key: 'selection', label: 'Selection', detail: contextData.activeFile?.hasSelection ? 'Selected text' : 'No selection' },
     { key: 'openFiles', label: 'Open files', detail: `${contextData.openFiles.length} file${contextData.openFiles.length === 1 ? '' : 's'}` },
     { key: 'tools', label: 'Available tools', detail: `${contextData.tools.length} tools` }
@@ -1954,6 +1977,7 @@ const buildRequestOptions = (): WebviewRequestOptions => ({
   mode: controls.mode,
   showReasoning,
   customSystemInstructions: uiPreferences.customSystemInstructions,
+  workspaceRoot: uiPreferences.workspaceRoot || undefined,
   context: uiPreferences.autoContext ? { ...contextEnabled } : {
     workspace: false,
     folders: false,
@@ -3740,6 +3764,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.customSystemInstructions === 'string') {
         uiPreferences.customSystemInstructions = preferences.customSystemInstructions.slice(0, 8000)
       }
+      if (typeof preferences.workspaceRoot === 'string') {
+        uiPreferences.workspaceRoot = preferences.workspaceRoot
+      }
       if (typeof preferences.workspaceOnly === 'boolean') {
         uiPreferences.workspaceOnly = preferences.workspaceOnly
       }
@@ -4462,6 +4489,11 @@ resetSystemInstructionsElement.addEventListener('click', () => {
 workspaceSettingsElement.addEventListener('change', () => {
   uiPreferences.workspaceOnly = workspaceSettingsElement.checked
   sendSettingsUpdate()
+  saveState()
+})
+workspaceRootElement.addEventListener('change', () => {
+  uiPreferences.workspaceRoot = workspaceRootElement.value
+  renderContextPreview()
   saveState()
 })
 

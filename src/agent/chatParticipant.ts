@@ -557,6 +557,7 @@ export interface GhostRequestOptions {
   maxTokens?: number
   mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
   context?: GhostContextSelection
+  workspaceRoot?: string
   additionalContext?: string
   showReasoning?: boolean
   customSystemInstructions?: string
@@ -632,9 +633,12 @@ function getActiveEditorContext(maxContextTokens: number, includeSelection: bool
   }
 }
 
-function getWorkspaceContext(includeOpenFiles: boolean, includeFolders: boolean): string {
+function getWorkspaceContext(includeOpenFiles: boolean, includeFolders: boolean, selectedWorkspaceRoot?: string): string {
   const workspaceName = vscode.workspace.name ?? 'untitled workspace'
   const workspaceFolders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
+  const selectedRoot = selectedWorkspaceRoot && workspaceFolders.includes(selectedWorkspaceRoot)
+    ? selectedWorkspaceRoot
+    : undefined
   const openTabs = includeOpenFiles
     ? vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
     : []
@@ -643,6 +647,7 @@ function getWorkspaceContext(includeOpenFiles: boolean, includeFolders: boolean)
   return [
     `Workspace: ${workspaceName}`,
     `Workspace folders: ${includeFolders && workspaceFolders.length > 0 ? workspaceFolders.join(', ') : 'none'}`,
+    `Selected workspace root: ${selectedRoot ?? 'all roots'}`,
     `Open tabs: ${openTabs.length > 0 ? openTabs.join(', ') : 'none'}`,
     `Open terminals: ${terminals.length > 0 ? terminals.join(', ') : 'none'}`,
     'Terminal output: unavailable unless captured by an extension-owned terminal.'
@@ -837,7 +842,7 @@ async function buildContextPrompt(
 
   if (context.workspace !== false) {
     onProgress?.('Context: preparing workspace context')
-    sections.push(getWorkspaceContext(context.openFiles !== false, context.folders !== false))
+    sections.push(getWorkspaceContext(context.openFiles !== false, context.folders !== false, options.workspaceRoot))
   }
 
   let workspaceSearch = ''

@@ -96,6 +96,7 @@ export interface GhostWebviewRequestOptions {
   context?: Partial<Record<GhostContextKey, boolean>>
   showReasoning?: boolean
   customSystemInstructions?: string
+  workspaceRoot?: string
 }
 
 export interface GhostSettingsUpdate {
@@ -357,6 +358,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     (value.maxTokens !== undefined && !isFiniteNumber(value.maxTokens)) ||
     (value.showReasoning !== undefined && typeof value.showReasoning !== 'boolean') ||
     (value.customSystemInstructions !== undefined && !isBoundedString(value.customSystemInstructions, 8000)) ||
+    (value.workspaceRoot !== undefined && !isBoundedString(value.workspaceRoot, 4096)) ||
     (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false

@@ -92,7 +92,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Autosave composer drafts and show whether prompt history/conversation persistence is enabled.
 - [x] Add slash commands or prompt presets for explain, fix, test, review, refactor, and summarize.
 - [x] Add file/folder mention autocomplete, drag-and-drop files, paste-image support, and clear attachment limits.
-- [ ] Add a workspace selector for multi-root workspaces and show which root each file belongs to.
+- [x] Add a workspace selector for multi-root workspaces and show which root each file belongs to.
 - [ ] Add a model/provider quick switcher and a visible connection/model status with refresh and copyable diagnostic details.
 - [ ] Add a settings search and split settings into Provider, Generation, Agent Safety, Appearance, Persistence, and Advanced sections.
 - [ ] Add stable coding, balanced, and creative generation profiles. Show the effective values and restore defaults per setting.

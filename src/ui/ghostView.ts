@@ -1870,7 +1870,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           hasSelection: !editor.selection.isEmpty
         }
       : undefined
-    const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => tab.label))
+    const openFiles = vscode.window.tabGroups.all.flatMap(group => group.tabs.map(tab => {
+      const input = tab.input
+      if (input && typeof input === 'object' && 'uri' in input && input.uri instanceof vscode.Uri) {
+        const folder = vscode.workspace.getWorkspaceFolder(input.uri)
+        const rootLabel = folder?.name ?? folder?.uri.fsPath
+        return rootLabel ? `${rootLabel}: ${tab.label}` : tab.label
+      }
+      return tab.label
+    }))
     const folders = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath) ?? []
     const allowedTools = GHOST_TOOL_NAMES.filter(tool => !(settings.toolDenylist ?? []).includes(tool))
 
@@ -2692,6 +2700,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         flex: 0 0 auto;
         font-size: 0.72em;
         padding: 2px 5px;
+      }
+
+      .workspace-root-control {
+        align-items: center;
+        color: var(--vscode-descriptionForeground);
+        display: inline-flex;
+        flex: 1 1 180px;
+        font-size: 0.7em;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .workspace-root-control select {
+        background: var(--vscode-input-background, transparent);
+        border: 1px solid var(--ghost-border);
+        color: var(--vscode-input-foreground, var(--vscode-foreground));
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        padding: 2px 4px;
+        text-overflow: ellipsis;
       }
 
       .attachment-limit {
