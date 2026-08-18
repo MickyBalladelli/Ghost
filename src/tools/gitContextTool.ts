@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface GitContextInput {
   operation: 'status' | 'diff' | 'stagedDiff' | 'branch' | 'history'
@@ -23,8 +24,7 @@ interface GitScope {
   filePath?: string
 }
 
-const MAX_OUTPUT_CHARACTERS = 24000
-const MAX_ENTRIES = 200
+const { commandTimeoutMs: GIT_COMMAND_TIMEOUT_MS, maxOutputCharacters: MAX_OUTPUT_CHARACTERS, maxEntries: MAX_ENTRIES } = GHOST_POLICY.git
 
 function textResult(value: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(value)])
@@ -40,7 +40,7 @@ function runGit(args: string[], cwd: string, token: vscode.CancellationToken): P
     const timeout = setTimeout(() => {
       child.kill()
       finish(new Error('Git command timed out'))
-    }, 10000)
+    }, GIT_COMMAND_TIMEOUT_MS)
 
     const finish = (error?: Error): void => {
       if (settled) return

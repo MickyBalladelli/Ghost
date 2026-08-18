@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { resolveWorkspacePath } from './workspacePath'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface GhostEditHunk {
   startLine: number
@@ -19,9 +20,7 @@ export interface GhostFileEdit {
   description?: string
 }
 
-const MAX_HUNKS = 50
-const MAX_REPLACEMENT_CHARACTERS = 100000
-const MAX_CONTEXT_CHARACTERS = 10000
+const { maxHunks: MAX_HUNKS, maxReplacementCharacters: MAX_REPLACEMENT_CHARACTERS, maxContextCharacters: MAX_CONTEXT_CHARACTERS } = GHOST_POLICY.edit
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)

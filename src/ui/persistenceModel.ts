@@ -1,6 +1,7 @@
 import { GHOST_PERSISTENCE_SCHEMA_VERSION, GhostPersistedState } from './ghostProtocol'
+import { GHOST_POLICY } from '../ghostPolicy'
 
-export const MAX_GHOST_PROMPT_HISTORY = 100
+export const MAX_GHOST_PROMPT_HISTORY = GHOST_POLICY.persistence.maxPromptHistory
 
 export function normalizePromptHistory(value: unknown): string[] {
   if (!Array.isArray(value)) {

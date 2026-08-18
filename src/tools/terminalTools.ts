@@ -5,6 +5,7 @@ import * as vscode from 'vscode'
 import { DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST, getGhostSettings } from '../config'
 import { redactSensitiveText } from '../privacy/redact'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface RunTerminalCommandInput {
   command: string
@@ -20,10 +21,7 @@ export interface TerminalCommandAudit {
   blockReason?: string
 }
 
-const COMMAND_TIMEOUT_MS = 120000
-const MAX_OUTPUT_CHARS = 200000
-const OUTPUT_RING_CHUNK_CHARS = 8192
-const PROCESS_TERMINATION_GRACE_MS = 500
+const { commandTimeoutMs: COMMAND_TIMEOUT_MS, maxOutputCharacters: MAX_OUTPUT_CHARS, outputRingChunkCharacters: OUTPUT_RING_CHUNK_CHARS, processTerminationGraceMs: PROCESS_TERMINATION_GRACE_MS } = GHOST_POLICY.terminal
 
 type TerminationReason = 'timeout' | 'cancelled'
 const SECRET_ENVIRONMENT_NAME = /(?:API|ACCESS|AUTH|BEARER|CERT|COOKIE|CREDENTIAL|KEY|PASSWORD|PASSWD|PRIVATE|SECRET|TOKEN)/i

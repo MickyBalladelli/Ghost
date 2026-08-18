@@ -122,7 +122,7 @@ function validateHunk(value: unknown, field: string, expectedContentPresent: boo
   if (typeof value.replacement !== 'string') return invalid(`${field}.replacement`, 'expected a string.')
 
   for (const name of ['oldText', 'beforeContext', 'afterContext']) {
-    const result = optionalString(value, name, 10000)
+    const result = optionalString(value, name, GHOST_POLICY.edit.maxContextCharacters)
     if (result) return result.replace(`'${name}'`, `'${field}.${name}'`)
   }
   if ('oldHash' in value && (typeof value.oldHash !== 'string' || !/^[a-fA-F0-9]{64}$/.test(value.oldHash))) {
@@ -312,3 +312,4 @@ export function validateLocalToolCall(call: LocalToolCall): string | undefined {
   if (!isRecord(call.arguments)) return 'Invalid tool arguments: expected an object.'
   return VALIDATORS[call.name](call.arguments)
 }
+import { GHOST_POLICY } from '../ghostPolicy'

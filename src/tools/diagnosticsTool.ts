@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
 import { resolveWorkspacePath } from './workspacePath'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface DiagnosticsInput {
   path?: string
@@ -22,7 +23,7 @@ interface DiagnosticRecord {
   }
 }
 
-const MAX_RESULTS = 200
+const MAX_RESULTS = GHOST_POLICY.diagnostics.maxResults
 
 function textResult(value: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(value)])

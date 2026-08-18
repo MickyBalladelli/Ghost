@@ -23,6 +23,7 @@ import { createProfiledProviderClient } from '../services/profiledProviderClient
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
 import { profileProtocol } from '../services/profiledProviderClient'
+import { GHOST_POLICY } from '../ghostPolicy'
 import { createToolErrorResult, replaceToolResultText, ToolResult } from '../tools/toolResult'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
@@ -47,28 +48,10 @@ const SYSTEM_PROMPT = [
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
-const MAX_TOOL_ROUNDS = 128
-const MIN_TOOL_CALL_TOKENS = 4096
-const TOOL_RESULT_CHARACTER_LIMITS: Record<LocalToolCall['name'], number> = {
-  ghost_read_file: 16000,
-  ghost_search_workspace: 16000,
-  ghost_get_diagnostics: 12000,
-  ghost_git_context: 24000,
-  ghost_update_task_plan: 12000,
-  ghost_record_completion: 12000,
-  ghost_write_file: 8000,
-  ghost_apply_edit: 12000,
-  ghost_apply_transaction: 16000,
-  ghost_run_terminal_command: 24000,
-  ghost_list_directory: 12000
-}
-const REQUEST_BUDGET_LIMITS = {
-  files: 24,
-  changedLines: 4000,
-  changedBytes: 1_000_000,
-  commands: 32,
-  modelTokens: 64_000
-} as const
+const MAX_TOOL_ROUNDS = GHOST_POLICY.agent.maxToolRounds
+const MIN_TOOL_CALL_TOKENS = GHOST_POLICY.agent.minToolCallTokens
+const TOOL_RESULT_CHARACTER_LIMITS = GHOST_POLICY.agent.toolResultCharacterLimits
+const REQUEST_BUDGET_LIMITS = GHOST_POLICY.agent.requestBudget
 
 interface EditRecord {
   signature: string

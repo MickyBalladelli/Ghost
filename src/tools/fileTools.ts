@@ -9,6 +9,7 @@ import { parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEditChange, createWorkspaceFileChange, readFileMutation } from './fileMutationWorkflow'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface ReadFileInput {
   path: string
@@ -111,10 +112,7 @@ function assertNotCancelled(token: vscode.CancellationToken): void {
   }
 }
 
-const MAX_READ_LINES = 400
-const MAX_READ_CHARACTERS = 12000
-const MAX_READ_BYTES = 12000
-const MAX_SAFE_READ_BYTES = 1_048_576
+const { maxReadLines: MAX_READ_LINES, maxReadCharacters: MAX_READ_CHARACTERS, maxReadBytes: MAX_READ_BYTES, maxSafeReadBytes: MAX_SAFE_READ_BYTES } = GHOST_POLICY.file
 
 const VENDORED_DIRECTORY_NAMES = new Set([
   '.git',

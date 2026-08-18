@@ -1,8 +1,7 @@
 import type { Response } from 'node-fetch'
+import { GHOST_POLICY } from '../ghostPolicy'
 
-const DEFAULT_TIMEOUT_MS = 30000
-const DEFAULT_MAX_ATTEMPTS = 2
-const MAX_RETRY_DELAY_MS = 30000
+const { requestTimeoutMs: DEFAULT_TIMEOUT_MS, defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS, maxRetryDelayMs: MAX_RETRY_DELAY_MS, retryBaseDelayMs: RETRY_BASE_DELAY_MS } = GHOST_POLICY.provider
 
 export interface ProviderRequestOptions {
   signal?: AbortSignal
@@ -67,7 +66,7 @@ function retryDelay(attempt: number, retryAfterMs?: number): number {
   if (retryAfterMs !== undefined) {
     return retryAfterMs
   }
-  return Math.min(MAX_RETRY_DELAY_MS, 250 * 2 ** Math.max(0, attempt - 1))
+  return Math.min(MAX_RETRY_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1))
 }
 
 function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {

@@ -1,4 +1,5 @@
 import type { GhostPersistedState } from './ghostProtocol'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface StoredWorkspaceState {
   schemaVersion: number
@@ -14,8 +15,8 @@ export interface StoredGlobalState {
   preferences?: Record<string, unknown>
 }
 
-const MAX_PERSISTED_STRING_CHARS = 24000
-const MAX_PERSISTED_STATE_BYTES = 4 * 1024 * 1024
+const MAX_PERSISTED_STRING_CHARS = GHOST_POLICY.persistence.maxStringCharacters
+const MAX_PERSISTED_STATE_BYTES = GHOST_POLICY.persistence.maxStateBytes
 
 export const isStoredRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)

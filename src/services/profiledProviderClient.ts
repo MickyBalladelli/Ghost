@@ -11,6 +11,7 @@ import { streamOpenAiEvents, streamOpenAiTokens } from './openAiStream'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError, requestWithRetry } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 type FetchLike = typeof fetch
 
@@ -24,7 +25,7 @@ const requestWithProviderTransport = (
   new ProviderHttpTransport(
     request,
     target => createOpenAiRequestAgent(target, settings)
-  ).requestWithDiagnostics(endpoint, init, { signal, timeoutMs: 30000 })
+  ).requestWithDiagnostics(endpoint, init, { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs })
 )
 
 interface ModelsResponse {
@@ -238,7 +239,7 @@ class AnthropicClient implements ProviderClient {
         signal: requestSignal,
         agent: createOpenAiRequestAgent(endpoint, this.transport)
       }),
-      { signal, timeoutMs: 30000 }
+      { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
     )
     if (!response.ok) throw await httpError(response)
     const payload = await response.json() as ModelsResponse
@@ -316,7 +317,7 @@ class GeminiClient implements ProviderClient {
         signal: requestSignal,
         agent: createOpenAiRequestAgent(endpoint, this.transport)
       }),
-      { signal, timeoutMs: 30000 }
+      { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
     )
     if (!response.ok) throw await httpError(response)
     const payload = await response.json() as ModelsResponse
@@ -395,7 +396,7 @@ class CustomHttpClient implements ProviderClient {
         signal: requestSignal,
         agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
       }),
-      { signal, timeoutMs: 30000 }
+      { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
     )
     if (!response.ok) throw await httpError(response)
     return customModelNames(await response.json())

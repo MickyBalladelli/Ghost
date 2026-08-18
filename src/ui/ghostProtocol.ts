@@ -2,12 +2,13 @@ import type { GhostModelMetadata, GhostProgressPhase, GhostRequestStatus, GhostS
 import type { CustomResponseFormat, OpenAiProfileId } from '../services/providerProfiles'
 import type { GhostLogLevel } from '../config'
 import type { GhostModelAliases, GhostModelProfiles, GhostModelRole } from '../services/modelProfiles'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 2 as const
 export const GHOST_SUPPORTED_PROTOCOL_VERSIONS = [1, GHOST_WEBVIEW_PROTOCOL_VERSION] as const
 export type GhostProtocolVersion = typeof GHOST_SUPPORTED_PROTOCOL_VERSIONS[number]
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
-export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = 8 * 1024 * 1024
+export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = GHOST_POLICY.protocol.maxWebviewMessageBytes
 
 export type GhostViewStatus = 'ready' | 'offline'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'

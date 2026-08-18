@@ -138,7 +138,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Add protocol version negotiation and migrations for webview/extension changes.
 - [x] Replace giant `innerHTML` templates with small safe render functions or DOM builders. Centralize escaping and markdown sanitization.
 - [x] Add typed result objects for tools: status, exit code, changed files, bytes, truncation, warnings, and retryability.
-- [ ] Make constants such as tool rounds, edit limits, output limits, timeouts, and context limits configurable or grouped in one policy module.
+- [x] Make constants such as tool rounds, edit limits, output limits, timeouts, and context limits configurable or grouped in one policy module.
 - [ ] Define error classes and error codes shared by providers, tools, persistence, approvals, and UI.
 - [ ] Add settings schema versioning and migrations before adding more configuration.
 - [ ] Add dependency injection for providers, filesystem, clock, process runner, storage, and webview messaging so core behavior can be tested without VS Code.

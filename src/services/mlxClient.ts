@@ -20,6 +20,7 @@ import type {
   ChatToolDefinition,
   ChatVisionImage
 } from './chatTypes'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export const DEFAULT_MLX_URL = 'http://localhost:8000'
 
@@ -239,7 +240,7 @@ export class MlxClient {
     const response = await this.transport.requestWithDiagnostics(endpoint, {
         method: 'GET',
         headers: this.authorizationHeaders()
-      }, { signal, timeoutMs: 30000 })
+      }, { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs })
     await throwForHttpError(response)
 
     const payload = await response.json() as MlxModelsResponse
@@ -261,7 +262,7 @@ export class MlxClient {
     const endpoint = joinEndpoint(this.apiUrl, 'chat/completions')
     const response = await this.transport.requestWithDiagnostics(endpoint, requestOptions, {
       signal: options.signal,
-      timeoutMs: 30000
+      timeoutMs: GHOST_POLICY.provider.requestTimeoutMs
     })
     await throwForHttpError(response)
 

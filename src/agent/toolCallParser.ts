@@ -1,3 +1,5 @@
+import { GHOST_POLICY } from '../ghostPolicy'
+
 export const LOCAL_TOOL_NAMES = [
   'ghost_read_file',
   'ghost_search_workspace',
@@ -52,7 +54,7 @@ export interface LocalToolParseResult {
   detail?: string
 }
 
-const MAX_STREAMED_TOOL_ARGUMENTS = 200000
+const MAX_STREAMED_TOOL_ARGUMENTS = GHOST_POLICY.parser.maxStreamedToolArguments
 const SPLIT_TOOL_ARGUMENT_THRESHOLD = 160000
 
 export interface LocalToolCallStreamUpdate {

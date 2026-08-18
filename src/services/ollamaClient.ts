@@ -16,6 +16,7 @@ import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffi
 import { providerHttpError } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import type { FimCompletionOptions } from './fim'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export type { FimCompletionOptions } from './fim'
 
@@ -295,7 +296,7 @@ export class OllamaClient {
         const response = await this.transport.requestWithDiagnostics(
           endpoint,
           this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders() }),
-          { signal, timeoutMs: 30000 }
+          { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
         )
 
         if (!response.ok) {
@@ -341,7 +342,7 @@ export class OllamaClient {
       const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
         this.withTransport(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream), attempt.kind !== 'ollama'),
-        { signal: options.signal, timeoutMs: 30000 }
+        { signal: options.signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
       )
 
       if (!response.ok) {
@@ -396,7 +397,7 @@ export class OllamaClient {
       const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
         this.withTransport(attempt.endpoint, this.getCompletionRequest(attempt.kind, options, prompt), attempt.kind !== 'ollama'),
-        { signal: options.signal, timeoutMs: options.timeoutMs ?? 30000 }
+        { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs }
       )
 
       if (!response.ok) {

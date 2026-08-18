@@ -6,6 +6,7 @@ import * as path from 'node:path'
 import * as vscode from 'vscode'
 
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
+import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface SearchWorkspaceInput {
   query: string
@@ -27,9 +28,7 @@ interface RipgrepResult {
   truncated: boolean
 }
 
-const MAX_QUERY_LENGTH = 1000
-const DEFAULT_MAX_RESULTS = 100
-const MAX_RESULTS = 200
+const { maxQueryLength: MAX_QUERY_LENGTH, defaultMaxResults: DEFAULT_MAX_RESULTS, maxResults: MAX_RESULTS } = GHOST_POLICY.search
 
 function findRipgrepExecutable(): string {
   const executable = process.platform === 'win32' ? 'rg.exe' : 'rg'
