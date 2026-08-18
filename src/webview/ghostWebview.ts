@@ -2372,7 +2372,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   const renderedProgress = uiPreferences.showThinkingDetails && progressParts.length > 0
     ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
     : ''
-  const renderedTools = toolParts.map(part => {
+  const renderToolCallProgress = (part: Extract<MessagePart, { kind: 'tool' }>): string => {
     const actionText = toolActionText(part.toolCall)
     const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
     const animatedAction = requestActive && (part.toolCall.status === 'running' || part.toolCall.status === 'requested')
@@ -2424,6 +2424,29 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
         ? '✕'
         : '•'
     return `<div class="message-progress tool-progress ${toolStatusClass}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+  }
+  const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+  const toolGroups: Array<Extract<MessagePart, { kind: 'tool' }>[]> = []
+  toolParts.forEach(part => {
+    const previousGroup = toolGroups[toolGroups.length - 1]
+    if (previousGroup && previousGroup[0].toolCall.name === part.toolCall.name) {
+      previousGroup.push(part)
+      return
+    }
+    toolGroups.push([part])
+  })
+  const renderedTools = toolGroups.map(group => {
+    if (group.length === 1) {
+      return renderToolCallProgress(group[0])
+    }
+    const activeTool = [...group].reverse().find(part => part.toolCall.status === 'running' || part.toolCall.status === 'requested')
+    const groupFailed = group.some(part => part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
+    const groupComplete = group.every(part => part.toolCall.status === 'completed')
+    const groupStatusClass = groupFailed ? 'tool-failure' : groupComplete ? 'tool-success' : ''
+    const groupStatusIcon = groupFailed ? '✕' : groupComplete ? '✓' : '•'
+    const groupLabel = `${toolActionText(activeTool?.toolCall ?? group[group.length - 1].toolCall)} · ${group.length} calls`
+    const animatedGroup = requestActive && Boolean(activeTool)
+    return `<details class="tool-timeline ${groupStatusClass}"${animatedGroup ? ' open' : ''}><summary class="message-progress tool-progress ${groupStatusClass}"><span class="tool-status-icon" aria-hidden="true">${groupStatusIcon}</span><strong>${animatedGroup ? animatedStatusLabel(groupLabel) : escapeHtml(groupLabel)}</strong></summary><div class="tool-timeline-items">${group.map(renderToolCallProgress).join('')}</div></details>`
   }).join('')
   const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
   const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')

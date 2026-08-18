@@ -9,6 +9,7 @@ All notable changes to this extension are documented here.
 - Show short live tool progress by default, with detailed arguments and results behind verbose tool progress.
 - Apply the character-sweep animation to every active requested or running tool action.
 - Add a final request summary card with changed files, commands, elapsed time, model, provider, tokens, and status.
+- Group repeated tool calls into compact expandable timelines.
 
 ## 1.1.16 - 2026-08-18
 
