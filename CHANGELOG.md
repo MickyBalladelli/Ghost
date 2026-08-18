@@ -24,6 +24,7 @@ All notable changes to this extension are documented here.
 - Bound persisted conversations and message text, and skip unchanged autosave writes.
 - Dispose webview timers, animation frames, observers, queued stream work, and active requests during unload.
 - Make the result-area “Ghost is thinking…” placeholder light grey.
+- Record local request timing counters for context, provider wait, first token, tools, approvals, and verification when debug logging is enabled.
 
 ## 1.1.17 - 2026-08-18
 

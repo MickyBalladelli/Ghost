@@ -65,7 +65,27 @@ interface GhostRequestState {
   approveAllFileEdits?: boolean
   autoAcceptDisabled?: boolean
   pendingTool?: { toolCallId: string; name: string }
+  timing: RequestTiming
 }
+
+interface RequestTiming {
+  providerStartedAt?: number
+  firstTokenAt?: number
+  toolStartedAt: Map<string, number>
+  toolExecutionMs: number
+  approvalStartedAt: Map<string, number>
+  approvalWaitMs: number
+  verificationStartedAt?: number
+  verificationMs: number
+}
+
+const createRequestTiming = (): RequestTiming => ({
+  toolStartedAt: new Map(),
+  toolExecutionMs: 0,
+  approvalStartedAt: new Map(),
+  approvalWaitMs: 0,
+  verificationMs: 0
+})
 
 interface PendingToolApproval {
   requestId: string
@@ -415,7 +435,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       model: modelSettings.model,
       provider: modelSettings.provider,
       outputTokens: 0,
-      eventLog: []
+      eventLog: [],
+      timing: createRequestTiming()
     }
     this.requests.set(requestId, request)
     this.activeRequestByConversation.set(conversationId, requestId)
@@ -427,6 +448,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const response = {
       markdown: (delta: string) => {
         if (pendingTool) {
+          this.finishToolExecution(request, pendingTool.toolCallId)
           this.markRecoveryApplied(pendingTool.toolCallId, `${pendingTool.name} completed`)
           this.failedToolRetries.delete(pendingTool.toolCallId)
           this.postStreamEvent(requestId, request, {
@@ -458,12 +480,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             toolCallId: this.createToolCallId(),
             name: progress.slice('Running '.length)
           }
+          this.startToolExecution(request, pendingTool.toolCallId)
           request.pendingTool = pendingTool
           return
         }
         if (progress.startsWith('Tool result:')) {
           const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
           if (pendingTool && result) {
+            this.finishToolExecution(request, pendingTool.toolCallId)
             this.markRecoveryApplied(pendingTool.toolCallId, result[2])
             const taskPlan = parseTaskPlanMarker(result[2])
             if (taskPlan) {
@@ -665,6 +689,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
     } finally {
       clearTimeout(timeout)
+      this.debugLog('request timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requests.delete(requestId)
       if (this.activeRequestByConversation.get(conversationId) === requestId) {
@@ -778,7 +803,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       timedOut: false,
       model: getGhostSettings().chatModel,
       outputTokens: 0,
-      eventLog: []
+      eventLog: [],
+      timing: createRequestTiming()
     }
     this.requests.set(requestId, request)
     this.activeRequestByConversation.set(conversationId, requestId)
@@ -875,6 +901,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         message
       })
     } finally {
+      this.debugLog('tool retry timing', { requestId, conversationId, ...this.timingSummary(request) })
       this.resolvePendingApprovals(requestId, { decision: 'reject' })
       this.requests.delete(requestId)
       if (this.activeRequestByConversation.get(conversationId) === requestId) {
@@ -1583,6 +1610,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       pending.resolve(approval)
       return
     }
+    const request = this.requests.get(pending.requestId)
+    if (request) {
+      request.timing.verificationStartedAt = Date.now()
+    }
     try {
       this.pendingApprovals.delete(pending.toolCallId)
       if (expectedFiles) {
@@ -1617,6 +1648,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     } catch {
       this.pendingApprovals.delete(pending.toolCallId)
       pending.resolve({ decision: 'reject', reason: 'Edit path is outside the workspace.' })
+    } finally {
+      if (request?.timing.verificationStartedAt !== undefined) {
+        request.timing.verificationMs += Math.max(0, Date.now() - request.timing.verificationStartedAt)
+        request.timing.verificationStartedAt = undefined
+      }
     }
   }
 
@@ -1722,6 +1758,34 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
+  private startToolExecution(request: GhostRequestState, toolCallId: string): void {
+    if (!request.timing.toolStartedAt.has(toolCallId)) {
+      request.timing.toolStartedAt.set(toolCallId, Date.now())
+    }
+  }
+
+  private finishToolExecution(request: GhostRequestState, toolCallId: string): void {
+    const startedAt = request.timing.toolStartedAt.get(toolCallId)
+    if (startedAt === undefined) {
+      return
+    }
+    request.timing.toolExecutionMs += Math.max(0, Date.now() - startedAt)
+    request.timing.toolStartedAt.delete(toolCallId)
+  }
+
+  private timingSummary(request: GhostRequestState, endedAt = Date.now()): Record<string, number> {
+    const providerStartedAt = request.timing.providerStartedAt
+    const firstTokenAt = request.timing.firstTokenAt
+    return {
+      contextMs: providerStartedAt === undefined ? Math.max(0, endedAt - request.startedAt) : Math.max(0, providerStartedAt - request.startedAt),
+      providerWaitMs: providerStartedAt === undefined || firstTokenAt === undefined ? 0 : Math.max(0, firstTokenAt - providerStartedAt),
+      firstTokenMs: firstTokenAt === undefined ? 0 : Math.max(0, firstTokenAt - request.startedAt),
+      toolExecutionMs: request.timing.toolExecutionMs,
+      approvalWaitMs: request.timing.approvalWaitMs,
+      verificationMs: request.timing.verificationMs
+    }
+  }
+
   private postStreamEvent(
     requestId: string,
     request: GhostRequestState,
@@ -1730,6 +1794,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const timestamp = Date.now()
     request.lastActivityAt = timestamp
     request.status = getRequestStatusForEvent(event, request.status)
+    if (event.phase === 'provider' && request.timing.providerStartedAt === undefined) {
+      request.timing.providerStartedAt = timestamp
+    }
+    if ((event.type === 'text-delta' || event.type === 'code-delta') && request.timing.firstTokenAt === undefined) {
+      request.timing.firstTokenAt = timestamp
+    }
+    if (event.type === 'tool-requested' && typeof event.toolCallId === 'string') {
+      request.timing.approvalStartedAt.set(event.toolCallId, timestamp)
+    }
+    if (event.type === 'tool-result' && typeof event.toolCallId === 'string') {
+      const approvalStartedAt = request.timing.approvalStartedAt.get(event.toolCallId)
+      if (approvalStartedAt !== undefined) {
+        request.timing.approvalWaitMs += Math.max(0, timestamp - approvalStartedAt)
+        request.timing.approvalStartedAt.delete(event.toolCallId)
+      }
+      this.finishToolExecution(request, event.toolCallId)
+    }
     this.appendRequestEvent(request, event, request.status, timestamp)
     request.sequence += 1
     if (event.type === 'tool-requested' && typeof event.toolCallId === 'string' && typeof event.tool === 'string') {
