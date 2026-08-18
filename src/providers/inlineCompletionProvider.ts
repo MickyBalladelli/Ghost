@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { GhostConfig, ghostConfig } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
+import { createOpenAiTransportSettings } from '../services/openAiTransport'
 
 export type FimCompletionFetcher = (
   baseUrl: string,
@@ -134,6 +135,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
           },
           mode: useOpenAiCompatible ? 'openai-compatible' : 'ollama',
           ...(useOpenAiCompatible && this.apiKeyProvider?.() ? { apiKey: this.apiKeyProvider() } : {}),
+          ...(useOpenAiCompatible ? { openAiTransport: createOpenAiTransportSettings(settings) } : {}),
           signal: cancellation.signal
         }
       )

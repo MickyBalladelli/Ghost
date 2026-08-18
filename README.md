@@ -121,6 +121,10 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
+| `ghost.openaiApiKeyHeader` / `ghost.openaiApiKeyPrefix` | `Authorization` / `Bearer` | Select the API-key header format; the key stays in VS Code SecretStorage. |
+| `ghost.openaiOrganization` / `ghost.openaiProject` | empty | Optional organization and project values, sent with their configurable headers. |
+| `ghost.openaiProxy` / `ghost.openaiNoProxy` | empty / localhost list | Route OpenAI-compatible traffic through a proxy with host bypass rules. Proxy URLs must not contain credentials. |
+| `ghost.openaiTlsRejectUnauthorized` | `true` | Verify HTTPS certificates. CA, client certificate, and key files can be configured separately. |
 | `ghost.chatModel` | `qwen2.5-coder:7b` | Model used for chat and agent requests. |
 | `ghost.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
 | `ghost.enableInlineCompletions` | `true` | Enable or disable inline code completion. |

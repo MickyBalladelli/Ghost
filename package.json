@@ -126,6 +126,66 @@
           "default": "http://localhost:8001/v1",
           "description": "OpenAI-compatible model server URL."
         },
+        "ghost.openaiApiKeyHeader": {
+          "type": "string",
+          "default": "Authorization",
+          "description": "Header name used for the provider API key. The key value remains in VS Code SecretStorage."
+        },
+        "ghost.openaiApiKeyPrefix": {
+          "type": "string",
+          "default": "Bearer",
+          "description": "Optional prefix for the provider API key header, such as Bearer."
+        },
+        "ghost.openaiOrganizationHeader": {
+          "type": "string",
+          "default": "OpenAI-Organization",
+          "description": "Header name used for the optional organization identifier."
+        },
+        "ghost.openaiOrganization": {
+          "type": "string",
+          "default": "",
+          "description": "Optional organization identifier sent to the OpenAI-compatible server."
+        },
+        "ghost.openaiProjectHeader": {
+          "type": "string",
+          "default": "OpenAI-Project",
+          "description": "Header name used for the optional project identifier."
+        },
+        "ghost.openaiProject": {
+          "type": "string",
+          "default": "",
+          "description": "Optional project identifier sent to the OpenAI-compatible server."
+        },
+        "ghost.openaiProxy": {
+          "type": "string",
+          "default": "",
+          "description": "Optional HTTP or HTTPS proxy for OpenAI-compatible requests. Do not put credentials in this URL."
+        },
+        "ghost.openaiNoProxy": {
+          "type": "string",
+          "default": "localhost,127.0.0.1,::1",
+          "description": "Comma- or space-separated hosts that bypass the OpenAI-compatible proxy."
+        },
+        "ghost.openaiTlsRejectUnauthorized": {
+          "type": "boolean",
+          "default": true,
+          "description": "Verify OpenAI-compatible HTTPS certificates. Disable only for a trusted development endpoint."
+        },
+        "ghost.openaiTlsCaFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a PEM CA file for OpenAI-compatible HTTPS."
+        },
+        "ghost.openaiTlsCertFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a client certificate PEM file for OpenAI-compatible HTTPS."
+        },
+        "ghost.openaiTlsKeyFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a client private key PEM file for OpenAI-compatible HTTPS."
+        },
         "ghost.chatModel": {
           "type": "string",
           "default": "qwen2.5-coder:7b",
@@ -1052,6 +1112,8 @@
   },
   "dependencies": {
     "@types/node-fetch": "^2.6.13",
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
     "node-fetch": "^2.7.0"
   }
 }

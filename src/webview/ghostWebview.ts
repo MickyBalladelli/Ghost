@@ -31,6 +31,18 @@ interface ControlSettings {
   ollamaUrl: string
   mlxUrl: string
   openaiUrl: string
+  openaiApiKeyHeader: string
+  openaiApiKeyPrefix: string
+  openaiOrganizationHeader: string
+  openaiOrganization: string
+  openaiProjectHeader: string
+  openaiProject: string
+  openaiProxy: string
+  openaiNoProxy: string
+  openaiTlsRejectUnauthorized: boolean
+  openaiTlsCaFile: string
+  openaiTlsCertFile: string
+  openaiTlsKeyFile: string
   toolAllowlist: string[]
   toolDenylist: string[]
   terminalEnvironmentAllowlist: string[]
@@ -548,6 +560,18 @@ let controls: ControlSettings = {
   ollamaUrl: 'http://localhost:11434',
   mlxUrl: 'http://localhost:8000',
   openaiUrl: 'http://localhost:8001/v1',
+  openaiApiKeyHeader: 'Authorization',
+  openaiApiKeyPrefix: 'Bearer',
+  openaiOrganizationHeader: 'OpenAI-Organization',
+  openaiOrganization: '',
+  openaiProjectHeader: 'OpenAI-Project',
+  openaiProject: '',
+  openaiProxy: '',
+  openaiNoProxy: 'localhost,127.0.0.1,::1',
+  openaiTlsRejectUnauthorized: true,
+  openaiTlsCaFile: '',
+  openaiTlsCertFile: '',
+  openaiTlsKeyFile: '',
   toolAllowlist: [],
   toolDenylist: [],
   enableDebugLogging: false,
@@ -734,6 +758,30 @@ app.innerHTML = `
           <label for="provider-endpoint">Provider endpoint</label>
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
+          <label for="openai-api-key-header">OpenAI API key header</label>
+          <input id="openai-api-key-header" type="text" value="Authorization" placeholder="Authorization">
+          <label for="openai-api-key-prefix">OpenAI API key prefix</label>
+          <input id="openai-api-key-prefix" type="text" value="Bearer" placeholder="Bearer">
+          <label for="openai-organization-header">Organization header</label>
+          <input id="openai-organization-header" type="text" value="OpenAI-Organization" placeholder="OpenAI-Organization">
+          <label for="openai-organization">Organization value</label>
+          <input id="openai-organization" type="text" placeholder="Optional organization ID">
+          <label for="openai-project-header">Project header</label>
+          <input id="openai-project-header" type="text" value="OpenAI-Project" placeholder="OpenAI-Project">
+          <label for="openai-project">Project value</label>
+          <input id="openai-project" type="text" placeholder="Optional project ID">
+          <label for="openai-proxy">OpenAI proxy</label>
+          <input id="openai-proxy" type="url" placeholder="http://proxy.example:8080">
+          <label for="openai-no-proxy">OpenAI no-proxy hosts</label>
+          <input id="openai-no-proxy" type="text" placeholder="localhost, 127.0.0.1, ::1">
+          <label class="settings-checkbox" for="openai-tls-reject-unauthorized"><input id="openai-tls-reject-unauthorized" type="checkbox" checked> Verify OpenAI HTTPS certificates</label>
+          <label for="openai-tls-ca-file">TLS CA file</label>
+          <input id="openai-tls-ca-file" type="text" placeholder="Optional PEM file path">
+          <label for="openai-tls-cert-file">TLS client certificate</label>
+          <input id="openai-tls-cert-file" type="text" placeholder="Optional PEM file path">
+          <label for="openai-tls-key-file">TLS client key</label>
+          <input id="openai-tls-key-file" type="text" placeholder="Optional PEM file path">
+          <p class="settings-help">OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.</p>
           <button type="button" id="test-provider">Test provider connection</button>
           <label for="tool-allowlist">Allowed tools</label>
           <input id="tool-allowlist" type="text" placeholder="ghost_read_file, ghost_apply_edit">
@@ -848,6 +896,18 @@ const composerHeightElement = document.getElementById('composer-height') as HTML
 const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
 const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
+const openAiApiKeyHeaderElement = document.getElementById('openai-api-key-header') as HTMLInputElement
+const openAiApiKeyPrefixElement = document.getElementById('openai-api-key-prefix') as HTMLInputElement
+const openAiOrganizationHeaderElement = document.getElementById('openai-organization-header') as HTMLInputElement
+const openAiOrganizationElement = document.getElementById('openai-organization') as HTMLInputElement
+const openAiProjectHeaderElement = document.getElementById('openai-project-header') as HTMLInputElement
+const openAiProjectElement = document.getElementById('openai-project') as HTMLInputElement
+const openAiProxyElement = document.getElementById('openai-proxy') as HTMLInputElement
+const openAiNoProxyElement = document.getElementById('openai-no-proxy') as HTMLInputElement
+const openAiTlsRejectUnauthorizedElement = document.getElementById('openai-tls-reject-unauthorized') as HTMLInputElement
+const openAiTlsCaFileElement = document.getElementById('openai-tls-ca-file') as HTMLInputElement
+const openAiTlsCertFileElement = document.getElementById('openai-tls-cert-file') as HTMLInputElement
+const openAiTlsKeyFileElement = document.getElementById('openai-tls-key-file') as HTMLInputElement
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
 const toolAllowlistElement = document.getElementById('tool-allowlist') as HTMLInputElement
 const toolDenylistElement = document.getElementById('tool-denylist') as HTMLInputElement
@@ -922,6 +982,18 @@ const createPersistedState = () => ({
     ollamaUrl: controls.ollamaUrl,
     mlxUrl: controls.mlxUrl,
     openaiUrl: controls.openaiUrl,
+    openaiApiKeyHeader: controls.openaiApiKeyHeader,
+    openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
+    openaiOrganizationHeader: controls.openaiOrganizationHeader,
+    openaiOrganization: controls.openaiOrganization,
+    openaiProjectHeader: controls.openaiProjectHeader,
+    openaiProject: controls.openaiProject,
+    openaiProxy: controls.openaiProxy,
+    openaiNoProxy: controls.openaiNoProxy,
+    openaiTlsRejectUnauthorized: controls.openaiTlsRejectUnauthorized,
+    openaiTlsCaFile: controls.openaiTlsCaFile,
+    openaiTlsCertFile: controls.openaiTlsCertFile,
+    openaiTlsKeyFile: controls.openaiTlsKeyFile,
     toolAllowlist: controls.toolAllowlist,
     toolDenylist: controls.toolDenylist,
     terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
@@ -1032,6 +1104,18 @@ const sendSettingsUpdate = () => {
         ollamaUrl: controls.ollamaUrl,
         mlxUrl: controls.mlxUrl,
         openaiUrl: controls.openaiUrl,
+        openaiApiKeyHeader: controls.openaiApiKeyHeader,
+        openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
+        openaiOrganizationHeader: controls.openaiOrganizationHeader,
+        openaiOrganization: controls.openaiOrganization,
+        openaiProjectHeader: controls.openaiProjectHeader,
+        openaiProject: controls.openaiProject,
+        openaiProxy: controls.openaiProxy,
+        openaiNoProxy: controls.openaiNoProxy,
+        openaiTlsRejectUnauthorized: controls.openaiTlsRejectUnauthorized,
+        openaiTlsCaFile: controls.openaiTlsCaFile,
+        openaiTlsCertFile: controls.openaiTlsCertFile,
+        openaiTlsKeyFile: controls.openaiTlsKeyFile,
         toolAllowlist: controls.toolAllowlist,
         toolDenylist: controls.toolDenylist,
         terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
@@ -1102,6 +1186,35 @@ const renderControls = () => {
   promptRowsElement.value = String(promptRows)
   promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
+  openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
+  openAiApiKeyPrefixElement.value = controls.openaiApiKeyPrefix
+  openAiOrganizationHeaderElement.value = controls.openaiOrganizationHeader
+  openAiOrganizationElement.value = controls.openaiOrganization
+  openAiProjectHeaderElement.value = controls.openaiProjectHeader
+  openAiProjectElement.value = controls.openaiProject
+  openAiProxyElement.value = controls.openaiProxy
+  openAiNoProxyElement.value = controls.openaiNoProxy
+  openAiTlsRejectUnauthorizedElement.checked = controls.openaiTlsRejectUnauthorized
+  openAiTlsCaFileElement.value = controls.openaiTlsCaFile
+  openAiTlsCertFileElement.value = controls.openaiTlsCertFile
+  openAiTlsKeyFileElement.value = controls.openaiTlsKeyFile
+  const openAiSettingsEnabled = controls.provider === 'openai-compatible'
+  for (const element of [
+    openAiApiKeyHeaderElement,
+    openAiApiKeyPrefixElement,
+    openAiOrganizationHeaderElement,
+    openAiOrganizationElement,
+    openAiProjectHeaderElement,
+    openAiProjectElement,
+    openAiProxyElement,
+    openAiNoProxyElement,
+    openAiTlsRejectUnauthorizedElement,
+    openAiTlsCaFileElement,
+    openAiTlsCertFileElement,
+    openAiTlsKeyFileElement
+  ]) {
+    element.disabled = !openAiSettingsEnabled
+  }
   providerHelpElement.textContent = controls.provider === 'mlx-vlm'
     ? 'MLX VLM OpenAI-compatible endpoint.'
     : controls.provider === 'openai-compatible'
@@ -2504,6 +2617,42 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.openaiUrl === 'string') {
         controls.openaiUrl = preferences.openaiUrl
       }
+      if (typeof preferences.openaiApiKeyHeader === 'string') {
+        controls.openaiApiKeyHeader = preferences.openaiApiKeyHeader
+      }
+      if (typeof preferences.openaiApiKeyPrefix === 'string') {
+        controls.openaiApiKeyPrefix = preferences.openaiApiKeyPrefix
+      }
+      if (typeof preferences.openaiOrganizationHeader === 'string') {
+        controls.openaiOrganizationHeader = preferences.openaiOrganizationHeader
+      }
+      if (typeof preferences.openaiOrganization === 'string') {
+        controls.openaiOrganization = preferences.openaiOrganization
+      }
+      if (typeof preferences.openaiProjectHeader === 'string') {
+        controls.openaiProjectHeader = preferences.openaiProjectHeader
+      }
+      if (typeof preferences.openaiProject === 'string') {
+        controls.openaiProject = preferences.openaiProject
+      }
+      if (typeof preferences.openaiProxy === 'string') {
+        controls.openaiProxy = preferences.openaiProxy
+      }
+      if (typeof preferences.openaiNoProxy === 'string') {
+        controls.openaiNoProxy = preferences.openaiNoProxy
+      }
+      if (typeof preferences.openaiTlsRejectUnauthorized === 'boolean') {
+        controls.openaiTlsRejectUnauthorized = preferences.openaiTlsRejectUnauthorized
+      }
+      if (typeof preferences.openaiTlsCaFile === 'string') {
+        controls.openaiTlsCaFile = preferences.openaiTlsCaFile
+      }
+      if (typeof preferences.openaiTlsCertFile === 'string') {
+        controls.openaiTlsCertFile = preferences.openaiTlsCertFile
+      }
+      if (typeof preferences.openaiTlsKeyFile === 'string') {
+        controls.openaiTlsKeyFile = preferences.openaiTlsKeyFile
+      }
       if (Array.isArray(preferences.toolAllowlist)) {
         controls.toolAllowlist = preferences.toolAllowlist.filter((item): item is string => typeof item === 'string')
       }
@@ -3041,6 +3190,38 @@ providerEndpointElement.addEventListener('change', () => {
   sendSettingsUpdate()
   queueModelRefresh()
 })
+const updateOpenAiSettings = () => {
+  controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()
+  controls.openaiApiKeyPrefix = openAiApiKeyPrefixElement.value.trim()
+  controls.openaiOrganizationHeader = openAiOrganizationHeaderElement.value.trim()
+  controls.openaiOrganization = openAiOrganizationElement.value.trim()
+  controls.openaiProjectHeader = openAiProjectHeaderElement.value.trim()
+  controls.openaiProject = openAiProjectElement.value.trim()
+  controls.openaiProxy = openAiProxyElement.value.trim()
+  controls.openaiNoProxy = openAiNoProxyElement.value.trim()
+  controls.openaiTlsRejectUnauthorized = openAiTlsRejectUnauthorizedElement.checked
+  controls.openaiTlsCaFile = openAiTlsCaFileElement.value.trim()
+  controls.openaiTlsCertFile = openAiTlsCertFileElement.value.trim()
+  controls.openaiTlsKeyFile = openAiTlsKeyFileElement.value.trim()
+  sendSettingsUpdate()
+  saveState()
+}
+for (const element of [
+  openAiApiKeyHeaderElement,
+  openAiApiKeyPrefixElement,
+  openAiOrganizationHeaderElement,
+  openAiOrganizationElement,
+  openAiProjectHeaderElement,
+  openAiProjectElement,
+  openAiProxyElement,
+  openAiNoProxyElement,
+  openAiTlsRejectUnauthorizedElement,
+  openAiTlsCaFileElement,
+  openAiTlsCertFileElement,
+  openAiTlsKeyFileElement
+]) {
+  element.addEventListener('change', updateOpenAiSettings)
+}
 testProviderElement.addEventListener('click', () => post('test-provider'))
 const readToolNames = (value: string): string[] => [...new Set(value.split(',').map(item => item.trim()).filter(Boolean))].slice(0, 20)
 const updateToolPermissions = () => {

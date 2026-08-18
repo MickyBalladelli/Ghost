@@ -8,6 +8,7 @@ import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
+import { createOpenAiTransportSettings } from '../services/openAiTransport'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
 import { atomicWriteFile } from '../tools/atomicFile'
@@ -1624,7 +1625,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
             settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
             undefined,
-            () => this.providerApiKey?.(settings.provider)
+            () => this.providerApiKey?.(settings.provider),
+            settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
           )
       const online = await client.checkHealth(3000)
       if (this.disposed || generation !== this.controlsStateGeneration) {
@@ -1688,6 +1690,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
         openaiUrl: settings.openaiUrl,
+        openaiApiKeyHeader: settings.openaiApiKeyHeader,
+        openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
+        openaiOrganizationHeader: settings.openaiOrganizationHeader,
+        openaiOrganization: settings.openaiOrganization,
+        openaiProjectHeader: settings.openaiProjectHeader,
+        openaiProject: settings.openaiProject,
+        openaiProxy: settings.openaiProxy,
+        openaiNoProxy: settings.openaiNoProxy,
+        openaiTlsRejectUnauthorized: settings.openaiTlsRejectUnauthorized,
+        openaiTlsCaFile: settings.openaiTlsCaFile,
+        openaiTlsCertFile: settings.openaiTlsCertFile,
+        openaiTlsKeyFile: settings.openaiTlsKeyFile,
         toolAllowlist: settings.toolAllowlist ?? [...GHOST_TOOL_NAMES],
         toolDenylist: settings.toolDenylist ?? [],
         terminalEnvironmentAllowlist: settings.terminalEnvironmentAllowlist,
@@ -1714,7 +1728,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
           settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
           undefined,
-          () => this.providerApiKey?.(settings.provider)
+          () => this.providerApiKey?.(settings.provider),
+          settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
         )
     const online = await client.checkHealth(3000)
     if (online) {
@@ -1735,6 +1750,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
       await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+    }
+    const openAiTextSettings = [
+      'openaiApiKeyHeader',
+      'openaiApiKeyPrefix',
+      'openaiOrganizationHeader',
+      'openaiOrganization',
+      'openaiProjectHeader',
+      'openaiProject',
+      'openaiProxy',
+      'openaiNoProxy',
+      'openaiTlsCaFile',
+      'openaiTlsCertFile',
+      'openaiTlsKeyFile'
+    ] as const
+    for (const setting of openAiTextSettings) {
+      const value = update[setting]
+      if (typeof value === 'string') {
+        await ghostConfig.update(setting, value.trim(), target)
+      }
+    }
+    if (typeof update.openaiTlsRejectUnauthorized === 'boolean') {
+      await ghostConfig.update('openaiTlsRejectUnauthorized', update.openaiTlsRejectUnauthorized, target)
     }
     if (Array.isArray(update.toolAllowlist)) {
       await ghostConfig.update('toolAllowlist', update.toolAllowlist, target)

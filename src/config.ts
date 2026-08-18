@@ -43,6 +43,18 @@ export const DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST = [
 export interface GhostSettings {
   ollamaUrl: string
   openaiUrl: string
+  openaiApiKeyHeader: string
+  openaiApiKeyPrefix: string
+  openaiOrganizationHeader: string
+  openaiOrganization: string
+  openaiProjectHeader: string
+  openaiProject: string
+  openaiProxy: string
+  openaiNoProxy: string
+  openaiTlsRejectUnauthorized: boolean
+  openaiTlsCaFile: string
+  openaiTlsCertFile: string
+  openaiTlsKeyFile: string
   chatModel: string
   autocompleteModel: string
   maxContextTokens: number
@@ -71,6 +83,18 @@ export type GhostSetting = keyof GhostSettings
 export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   ollamaUrl: 'http://localhost:11434',
   openaiUrl: 'http://localhost:8001/v1',
+  openaiApiKeyHeader: 'Authorization',
+  openaiApiKeyPrefix: 'Bearer',
+  openaiOrganizationHeader: 'OpenAI-Organization',
+  openaiOrganization: '',
+  openaiProjectHeader: 'OpenAI-Project',
+  openaiProject: '',
+  openaiProxy: '',
+  openaiNoProxy: 'localhost,127.0.0.1,::1',
+  openaiTlsRejectUnauthorized: true,
+  openaiTlsCaFile: '',
+  openaiTlsCertFile: '',
+  openaiTlsKeyFile: '',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   maxContextTokens: 8192,
@@ -111,6 +135,18 @@ export class GhostConfig {
     return {
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOST_SETTINGS.ollamaUrl),
       openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOST_SETTINGS.openaiUrl),
+      openaiApiKeyHeader: configuration.get('openaiApiKeyHeader', DEFAULT_GHOST_SETTINGS.openaiApiKeyHeader),
+      openaiApiKeyPrefix: configuration.get('openaiApiKeyPrefix', DEFAULT_GHOST_SETTINGS.openaiApiKeyPrefix),
+      openaiOrganizationHeader: configuration.get('openaiOrganizationHeader', DEFAULT_GHOST_SETTINGS.openaiOrganizationHeader),
+      openaiOrganization: configuration.get('openaiOrganization', DEFAULT_GHOST_SETTINGS.openaiOrganization),
+      openaiProjectHeader: configuration.get('openaiProjectHeader', DEFAULT_GHOST_SETTINGS.openaiProjectHeader),
+      openaiProject: configuration.get('openaiProject', DEFAULT_GHOST_SETTINGS.openaiProject),
+      openaiProxy: configuration.get('openaiProxy', DEFAULT_GHOST_SETTINGS.openaiProxy),
+      openaiNoProxy: configuration.get('openaiNoProxy', DEFAULT_GHOST_SETTINGS.openaiNoProxy),
+      openaiTlsRejectUnauthorized: configuration.get('openaiTlsRejectUnauthorized', DEFAULT_GHOST_SETTINGS.openaiTlsRejectUnauthorized),
+      openaiTlsCaFile: configuration.get('openaiTlsCaFile', DEFAULT_GHOST_SETTINGS.openaiTlsCaFile),
+      openaiTlsCertFile: configuration.get('openaiTlsCertFile', DEFAULT_GHOST_SETTINGS.openaiTlsCertFile),
+      openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
       maxContextTokens: configuration.get('maxContextTokens', DEFAULT_GHOST_SETTINGS.maxContextTokens),

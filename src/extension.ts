@@ -5,6 +5,7 @@ import { ghostConfig, GhostProvider } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { MlxClient } from './services/mlxClient'
 import { OllamaClient } from './services/ollamaClient'
+import { createOpenAiTransportSettings } from './services/openAiTransport'
 import { ProviderSecrets } from './services/providerSecrets'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
@@ -65,7 +66,8 @@ export async function activate(context: vscode.ExtensionContext) {
           settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
           settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
           undefined,
-          () => providerApiKey(settings.provider)
+          () => providerApiKey(settings.provider),
+          settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
         )
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')

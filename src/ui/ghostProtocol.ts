@@ -110,6 +110,18 @@ export interface GhostSettingsUpdate {
   ollamaUrl?: string
   mlxUrl?: string
   openaiUrl?: string
+  openaiApiKeyHeader?: string
+  openaiApiKeyPrefix?: string
+  openaiOrganizationHeader?: string
+  openaiOrganization?: string
+  openaiProjectHeader?: string
+  openaiProject?: string
+  openaiProxy?: string
+  openaiNoProxy?: string
+  openaiTlsRejectUnauthorized?: boolean
+  openaiTlsCaFile?: string
+  openaiTlsCertFile?: string
+  openaiTlsKeyFile?: string
   workspaceOnly?: boolean
   toolAllowlist?: string[]
   toolDenylist?: string[]
@@ -215,6 +227,18 @@ export type GhostExtensionMessage =
         ollamaUrl: string
         mlxUrl: string
         openaiUrl: string
+        openaiApiKeyHeader: string
+        openaiApiKeyPrefix: string
+        openaiOrganizationHeader: string
+        openaiOrganization: string
+        openaiProjectHeader: string
+        openaiProject: string
+        openaiProxy: string
+        openaiNoProxy: string
+        openaiTlsRejectUnauthorized: boolean
+        openaiTlsCaFile: string
+        openaiTlsCertFile: string
+        openaiTlsKeyFile: string
         toolAllowlist: string[]
         toolDenylist: string[]
         terminalEnvironmentAllowlist: string[]
@@ -333,6 +357,18 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.ollamaUrl === undefined || isBoundedString(value.ollamaUrl, 4096))
     && (value.mlxUrl === undefined || isBoundedString(value.mlxUrl, 4096))
     && (value.openaiUrl === undefined || isBoundedString(value.openaiUrl, 4096))
+    && (value.openaiApiKeyHeader === undefined || isBoundedString(value.openaiApiKeyHeader, 256))
+    && (value.openaiApiKeyPrefix === undefined || isBoundedString(value.openaiApiKeyPrefix, 256))
+    && (value.openaiOrganizationHeader === undefined || isBoundedString(value.openaiOrganizationHeader, 256))
+    && (value.openaiOrganization === undefined || isBoundedString(value.openaiOrganization, 512))
+    && (value.openaiProjectHeader === undefined || isBoundedString(value.openaiProjectHeader, 256))
+    && (value.openaiProject === undefined || isBoundedString(value.openaiProject, 512))
+    && (value.openaiProxy === undefined || isBoundedString(value.openaiProxy, 4096))
+    && (value.openaiNoProxy === undefined || isBoundedString(value.openaiNoProxy, 4096))
+    && (value.openaiTlsRejectUnauthorized === undefined || typeof value.openaiTlsRejectUnauthorized === 'boolean')
+    && (value.openaiTlsCaFile === undefined || isBoundedString(value.openaiTlsCaFile, 4096))
+    && (value.openaiTlsCertFile === undefined || isBoundedString(value.openaiTlsCertFile, 4096))
+    && (value.openaiTlsKeyFile === undefined || isBoundedString(value.openaiTlsKeyFile, 4096))
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
     && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.length <= 100 && value.toolAllowlist.every(item => isBoundedString(item, 256))))
     && (value.toolDenylist === undefined || (Array.isArray(value.toolDenylist) && value.toolDenylist.length <= 100 && value.toolDenylist.every(item => isBoundedString(item, 256))))

@@ -14,6 +14,7 @@ import {
   buildOpenAiResponsesBody
 } from './providerRequestBuilders'
 import { OpenAiStreamMode, streamOpenAiTokens } from './openAiStream'
+import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 
@@ -26,6 +27,7 @@ export interface OllamaChatOptions extends MlxChatOptions {
   mode?: OllamaApiMode
   openAiMode?: OpenAiApiMode
   apiKey?: string
+  openAiTransport?: OpenAiTransportSettings
 }
 
 export interface FimCompletionOptions {
@@ -36,6 +38,7 @@ export interface FimCompletionOptions {
   signal?: AbortSignal
   mode?: OllamaApiMode
   apiKey?: string
+  openAiTransport?: OpenAiTransportSettings
 }
 
 interface OpenAiModelsResponse {
@@ -208,16 +211,41 @@ export class OllamaClient {
   private readonly request: FetchLike
   private readonly mode: OllamaApiMode
   private readonly apiKeyProvider?: () => string | undefined
+  private readonly openAiTransport?: OpenAiTransportSettings
 
-  constructor(baseUrl = DEFAULT_OLLAMA_URL, mode: OllamaApiMode = 'auto', request: FetchLike = fetch, apiKeyProvider?: () => string | undefined) {
+  constructor(
+    baseUrl = DEFAULT_OLLAMA_URL,
+    mode: OllamaApiMode = 'auto',
+    request: FetchLike = fetch,
+    apiKeyProvider?: () => string | undefined,
+    openAiTransport?: OpenAiTransportSettings
+  ) {
     this.baseUrl = normalizeBaseUrl(baseUrl)
     this.mode = mode
     this.request = request
     this.apiKeyProvider = apiKeyProvider
+    this.openAiTransport = openAiTransport
   }
 
   private authorizationHeaders(apiKey = this.apiKeyProvider?.()): Record<string, string> {
-    return apiKey ? { authorization: `Bearer ${apiKey}` } : {}
+    return buildOpenAiAuthenticationHeaders(apiKey, this.openAiTransport ?? {
+      apiKeyHeader: 'Authorization',
+      apiKeyPrefix: 'Bearer',
+      organizationHeader: 'OpenAI-Organization',
+      organization: '',
+      projectHeader: 'OpenAI-Project',
+      project: ''
+    })
+  }
+
+  private withTransport(endpoint: string, init: RequestInit, useOpenAiTransport = true): RequestInit {
+    if (!useOpenAiTransport || !this.openAiTransport) {
+      return init
+    }
+    return {
+      ...init,
+      agent: createOpenAiRequestAgent(endpoint, this.openAiTransport)
+    }
   }
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
@@ -225,11 +253,11 @@ export class OllamaClient {
 
     for (const endpoint of endpoints) {
       try {
-        const response = await this.request(endpoint, {
+        const response = await this.request(endpoint, this.withTransport(endpoint, {
           method: 'GET',
           headers: this.authorizationHeaders(),
           signal: withTimeout(timeoutMs)
-        })
+        }))
 
         if (response.ok) {
           return true
@@ -247,7 +275,7 @@ export class OllamaClient {
 
     for (const endpoint of this.getModelEndpoints()) {
       try {
-        const response = await this.request(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal })
+        const response = await this.request(endpoint, this.withTransport(endpoint, { method: 'GET', headers: this.authorizationHeaders(), signal }))
 
         if (!response.ok) {
           lastError = await httpError(response)
@@ -282,7 +310,10 @@ export class OllamaClient {
     let lastError: Error | undefined
 
     for (const attempt of attempts) {
-      const response = await this.request(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream))
+      const response = await this.request(
+        attempt.endpoint,
+        this.withTransport(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream), attempt.kind !== 'ollama')
+      )
 
       if (!response.ok) {
         lastError = await httpError(response)
@@ -335,7 +366,7 @@ export class OllamaClient {
     for (const attempt of attempts) {
       const response = await this.request(
         attempt.endpoint,
-        this.getCompletionRequest(attempt.kind, options, prompt)
+        this.withTransport(attempt.endpoint, this.getCompletionRequest(attempt.kind, options, prompt), attempt.kind !== 'ollama')
       )
 
       if (!response.ok) {
@@ -493,5 +524,5 @@ export async function fetchFimCompletion(
   baseUrl: string,
   options: FimCompletionOptions
 ): Promise<string> {
-  return new OllamaClient(baseUrl).fetchFimCompletion(options)
+  return new OllamaClient(baseUrl, 'auto', fetch, undefined, options.openAiTransport).fetchFimCompletion(options)
 }
