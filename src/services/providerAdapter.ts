@@ -4,7 +4,11 @@ export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions'
 export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'http' | 'unknown'
 
-export interface ProviderCapabilities {
+export interface ModelCapabilityRecord {
+  model: string
+  provider: ProviderId
+  contextWindow: number
+  outputLimit: number
   nativeApi: ProviderNativeApi
   supportsTools: boolean
   supportsJsonMode: boolean
@@ -56,7 +60,7 @@ export interface ProviderClient {
 
 export interface ProviderAdapter {
   readonly provider: ProviderId
-  capabilities(): ProviderCapabilities
+  capabilities(model?: string): ModelCapabilityRecord
   chat(options: MlxChatOptions): Promise<string>
   stream(options: MlxChatOptions): AsyncGenerator<string>
   listModels(signal?: AbortSignal): Promise<string[]>
@@ -64,8 +68,12 @@ export interface ProviderAdapter {
   normalizeError(error: unknown): ProviderError
 }
 
-const CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
+type CapabilityDefaults = Omit<ModelCapabilityRecord, 'model' | 'provider'>
+
+const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
   ollama: {
+    contextWindow: 32768,
+    outputLimit: 8192,
     nativeApi: 'ollama',
     supportsTools: false,
     supportsJsonMode: false,
@@ -75,6 +83,8 @@ const CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
     supportsSampling: { temperature: true, topP: true, topK: true, minP: true, presencePenalty: true, repeatPenalty: true }
   },
   'mlx-vlm': {
+    contextWindow: 32768,
+    outputLimit: 8192,
     nativeApi: 'mlx-chat-completions',
     supportsTools: false,
     supportsJsonMode: false,
@@ -84,6 +94,8 @@ const CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
   },
   'openai-compatible': {
+    contextWindow: 32768,
+    outputLimit: 8192,
     nativeApi: 'openai-chat-completions',
     supportsTools: false,
     supportsJsonMode: false,
@@ -119,10 +131,10 @@ export function normalizeProviderError(provider: ProviderId, error: unknown): Pr
 }
 
 export function createProviderAdapter(provider: ProviderId, client: ProviderClient): ProviderAdapter {
-  const capabilities = CAPABILITIES[provider]
+  const capabilityDefaults = CAPABILITIES[provider]
   return {
     provider,
-    capabilities: () => capabilities,
+    capabilities: (model = '') => ({ model: model.trim(), provider, ...capabilityDefaults }),
     async chat(options) {
       let result = ''
       try {
