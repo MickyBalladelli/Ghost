@@ -147,6 +147,7 @@ interface ChatMessage {
   stopReason?: StopReason
   eventLog?: RequestEvent[]
   requestId?: string
+  bookmarked?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -528,6 +529,7 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
     ...(value.stopReason ? { stopReason: value.stopReason } : {}),
     ...(normalizeRequestEventLog(value.eventLog).length > 0 ? { eventLog: normalizeRequestEventLog(value.eventLog) } : {}),
     ...(value.requestId ? { requestId: value.requestId } : {}),
+    ...(value.bookmarked === true ? { bookmarked: true } : {}),
     createdAt: timestamp,
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : timestamp
   }
@@ -970,7 +972,8 @@ app.innerHTML = `
         <div class="modal-header"><h2 id="history-title">Conversation history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close conversation history">×</button></div>
         <div class="modal-scroll">
           <p class="modal-description">Choose a previous conversation to continue.</p>
-          <input id="history-search" type="search" placeholder="Search conversations" aria-label="Search conversation history">
+          <div class="history-search-row"><input id="history-search" type="search" placeholder="Search conversations and messages" aria-label="Search conversation history and messages"><label><input id="history-bookmarks-only" type="checkbox"> Bookmarks only</label></div>
+          <p class="modal-description" id="history-search-summary" aria-live="polite"></p>
           <div class="history-list" id="history-list"></div>
         </div>
         <div class="modal-footer"><button type="button" class="secondary" id="new-history-chat">New conversation</button><button type="button" class="secondary" data-close-modal="history-modal">Close</button></div>
@@ -1083,6 +1086,8 @@ const editToolArgumentsElement = document.getElementById('edit-tool-arguments') 
 const editToolErrorElement = document.getElementById('edit-tool-error') as HTMLElement
 const contextPreviewElement = document.getElementById('context-preview-list') as HTMLElement
 const historySearchElement = document.getElementById('history-search') as HTMLInputElement
+const historyBookmarksOnlyElement = document.getElementById('history-bookmarks-only') as HTMLInputElement
+const historySearchSummaryElement = document.getElementById('history-search-summary') as HTMLElement
 const historyListElement = document.getElementById('history-list') as HTMLElement
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
 const presetNameElement = document.getElementById('preset-name') as HTMLInputElement
@@ -1704,13 +1709,21 @@ const renderContextPreview = () => {
 
 const renderHistory = () => {
   const query = historySearchElement.value.trim().toLowerCase()
+  const bookmarksOnly = historyBookmarksOnlyElement.checked
   historyListElement.textContent = ''
   const entries = state.conversations.filter(conversation => (
-    conversation.title.toLowerCase().includes(query) ||
-    conversation.messages.some(message => message.content.toLowerCase().includes(query))
+    !bookmarksOnly || conversation.messages.some(message => message.bookmarked)
+  )).filter(conversation => (
+    !query || conversation.title.toLowerCase().includes(query) || conversation.messages.some(message => message.content.toLowerCase().includes(query))
   ))
+  const matchingMessages = query
+    ? entries.reduce((count, conversation) => count + conversation.messages.filter(message => message.content.toLowerCase().includes(query)).length, 0)
+    : 0
+  historySearchSummaryElement.textContent = query || bookmarksOnly
+    ? `${entries.length} conversation${entries.length === 1 ? '' : 's'} · ${matchingMessages} matching message${matchingMessages === 1 ? '' : 's'}`
+    : ''
   if (entries.length === 0) {
-    historyListElement.innerHTML = '<p class="modal-description">No matching conversations.</p>'
+    historyListElement.textContent = bookmarksOnly ? 'No bookmarked conversations.' : 'No matching conversations.'
     return
   }
   for (const conversation of entries) {
@@ -1724,7 +1737,8 @@ const renderHistory = () => {
     select.dataset.historyConversation = conversation.id
     const meta = document.createElement('small')
     meta.className = 'conversation-meta'
-    meta.textContent = `${conversation.messages.length} message${conversation.messages.length === 1 ? '' : 's'}`
+    const bookmarkCount = conversation.messages.filter(message => message.bookmarked).length
+    meta.textContent = `${conversation.messages.length} message${conversation.messages.length === 1 ? '' : 's'}${bookmarkCount ? ` · ${bookmarkCount} bookmark${bookmarkCount === 1 ? '' : 's'}` : ''}`
     const actions = document.createElement('span')
     actions.className = 'conversation-actions'
     const rename = document.createElement('button')
@@ -1735,6 +1749,22 @@ const renderHistory = () => {
     rename.setAttribute('aria-label', `Rename ${conversation.title}`)
     rename.dataset.conversationAction = 'rename'
     rename.dataset.conversationId = conversation.id
+    const duplicate = document.createElement('button')
+    duplicate.type = 'button'
+    duplicate.className = 'conversation-action'
+    duplicate.textContent = '⧉'
+    duplicate.title = 'Duplicate conversation'
+    duplicate.setAttribute('aria-label', `Duplicate ${conversation.title}`)
+    duplicate.dataset.conversationAction = 'duplicate'
+    duplicate.dataset.conversationId = conversation.id
+    const branch = document.createElement('button')
+    branch.type = 'button'
+    branch.className = 'conversation-action'
+    branch.textContent = '⑂'
+    branch.title = 'Branch conversation'
+    branch.setAttribute('aria-label', `Branch ${conversation.title}`)
+    branch.dataset.conversationAction = 'branch'
+    branch.dataset.conversationId = conversation.id
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'conversation-action'
@@ -1743,9 +1773,22 @@ const renderHistory = () => {
     remove.setAttribute('aria-label', `Delete ${conversation.title}`)
     remove.dataset.conversationAction = 'delete'
     remove.dataset.conversationId = conversation.id
-    actions.append(rename, remove)
+    actions.append(rename, duplicate, branch, remove)
     item.append(select, meta, actions)
     historyListElement.append(item)
+    if (query) {
+      for (const message of conversation.messages.filter(item => item.content.toLowerCase().includes(query)).slice(0, 8)) {
+        const result = document.createElement('button')
+        result.type = 'button'
+        result.className = 'history-message-result'
+        result.dataset.historyMessage = message.id
+        result.dataset.historyConversation = conversation.id
+        const role = message.role === 'user' ? 'You' : uiPreferences.assistantName || 'Ghost'
+        result.textContent = `${role}: ${message.content.replace(/\s+/g, ' ').trim().slice(0, 180)}${message.content.length > 180 ? '…' : ''}`
+        result.title = 'Open matching message'
+        historyListElement.append(result)
+      }
+    }
   }
 }
 
@@ -2331,6 +2374,10 @@ const createMessageElement = (message: ChatMessage): HTMLElement => {
     <div class="message-actions" aria-label="Message actions"></div>
   `
   const actions = article.querySelector<HTMLElement>('.message-actions')
+  if (actions) {
+    addAction(actions, message.bookmarked ? 'Unbookmark' : 'Bookmark', 'toggle-bookmark', message.id)
+    addAction(actions, 'Branch', 'branch-message', message.id)
+  }
   if (actions && message.role === 'assistant') {
     const stopped = requestIsStopped(message)
     if (message.content) {
@@ -3286,13 +3333,75 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
   }
 }
 
+const cloneMessages = (messages: ChatMessage[]): ChatMessage[] => (
+  messages.map(message => normalizeMessage(JSON.parse(JSON.stringify(message)) as Partial<ChatMessage>))
+)
+
+const deriveConversation = (conversation: Conversation, titlePrefix: string, messageIndex?: number): void => {
+  const timestamp = Date.now()
+  const messages = messageIndex === undefined
+    ? cloneMessages(conversation.messages)
+    : cloneMessages(conversation.messages.slice(0, messageIndex + 1))
+  const derived: Conversation = {
+    ...conversation,
+    id: createId('conversation'),
+    title: `${titlePrefix}${conversation.title}`,
+    messages,
+    draft: '',
+    promptHistory: [...conversation.promptHistory],
+    activeRequestId: undefined,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+  state = {
+    ...state,
+    conversations: [derived, ...state.conversations],
+    activeConversationId: derived.id
+  }
+  notice = undefined
+  render(true)
+  restoreDraft()
+  promptElement.focus()
+}
+
+const openConversationMessage = (conversationId: string, messageId: string): void => {
+  const conversation = state.conversations.find(item => item.id === conversationId)
+  const messageIndex = conversation?.messages.findIndex(item => item.id === messageId) ?? -1
+  if (!conversation || messageIndex < 0) {
+    return
+  }
+  saveDraft()
+  state.activeConversationId = conversationId
+  visibleMessageCount = Math.max(200, conversation.messages.length - messageIndex)
+  notice = undefined
+  setModalVisibility(historyModalElement, false)
+  render(false)
+  restoreDraft()
+  requestAnimationFrame(() => {
+    const element = messagesElement.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
+    element?.scrollIntoView({ block: 'center' })
+    element?.classList.add('search-hit')
+    window.setTimeout(() => element?.classList.remove('search-hit'), 1600)
+  })
+}
+
 const handleMessageAction = (action: string, messageId: string) => {
   const conversation = getActiveConversation()
   const message = findMessage(conversation, messageId)
   if (!message) {
     return
   }
-  if (action === 'copy') {
+  if (action === 'toggle-bookmark') {
+    message.bookmarked = !message.bookmarked
+    conversation.updatedAt = Date.now()
+    saveState()
+    renderMessages(false)
+  } else if (action === 'branch-message') {
+    const messageIndex = conversation.messages.findIndex(item => item.id === messageId)
+    if (messageIndex >= 0) {
+      deriveConversation(conversation, 'Branch of ', messageIndex)
+    }
+  } else if (action === 'copy') {
     void copyText(message.content)
   } else if (action === 'edit') {
     post('edit', { ...lifecycleEnvelope('edit'), messageId, prompt: message.content })
@@ -3345,6 +3454,11 @@ const handleConversationAction = (action: string, conversationId: string) => {
       conversation.title = title
       render(false)
     }
+  } else if (action === 'duplicate') {
+    deriveConversation(conversation, 'Copy of ')
+  } else if (action === 'branch') {
+    const lastMessageIndex = conversation.messages.length - 1
+    deriveConversation(conversation, 'Branch of ', lastMessageIndex >= 0 ? lastMessageIndex : undefined)
   } else if (action === 'delete') {
     if (!window.confirm(`Delete “${conversation.title}”?`)) {
       return
@@ -4328,12 +4442,18 @@ document.addEventListener('keydown', event => {
   }
 })
 historySearchElement.addEventListener('input', renderHistory)
+historyBookmarksOnlyElement.addEventListener('change', renderHistory)
 historyListElement.addEventListener('click', event => {
   const target = event.target as HTMLElement
   const action = target.closest<HTMLButtonElement>('[data-conversation-action]')
   if (action?.dataset.conversationAction && action.dataset.conversationId) {
     handleConversationAction(action.dataset.conversationAction, action.dataset.conversationId)
     renderHistory()
+    return
+  }
+  const result = target.closest<HTMLButtonElement>('[data-history-message]')
+  if (result?.dataset.historyConversation && result.dataset.historyMessage) {
+    openConversationMessage(result.dataset.historyConversation, result.dataset.historyMessage)
     return
   }
   const item = target.closest<HTMLButtonElement>('[data-history-conversation]')

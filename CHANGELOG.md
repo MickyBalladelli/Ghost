@@ -16,6 +16,7 @@ All notable changes to this extension are documented here.
 - Add approve-all-pending-files plus request, session, workspace, and single-file approval scopes.
 - Replace the Edit Arguments prompt with a validated JSON editor modal.
 - Show the active auto-accept scope and add an emergency pause for the current request.
+- Add message search results, bookmarks, conversation duplication/branching, and lazy loading for older messages.
 
 ## 1.1.16 - 2026-08-18
 
