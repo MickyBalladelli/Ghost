@@ -179,6 +179,7 @@ export type GhostWebviewMessage =
       attachments?: GhostAttachment[]
     })
   | (GhostRequestEnvelope & { type: 'cancel' })
+  | (GhostRequestEnvelope & { type: 'disable-auto-accept' })
   | (GhostRequestEnvelope & { type: 'retry-tool'; toolCallId: string; tool: string; arguments: GhostToolArguments })
   | (GhostRequestEnvelope & { type: 'approve-all-files' })
   | (GhostRequestEnvelope & { type: 'continue'; resume: GhostContinuation; options?: GhostWebviewRequestOptions })
@@ -468,7 +469,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
       (value.attachments === undefined || (Array.isArray(value.attachments) && value.attachments.length <= 8 && value.attachments.every(isAttachment)))
     )
   }
-  if (value.type === 'cancel' || value.type === 'retry' || value.type === 'regenerate' || value.type === 'approve-all-files') {
+  if (value.type === 'cancel' || value.type === 'disable-auto-accept' || value.type === 'retry' || value.type === 'regenerate' || value.type === 'approve-all-files') {
     return value.type === 'cancel' || isNonEmptyString(value.messageId)
   }
   if (value.type === 'retry-tool') {

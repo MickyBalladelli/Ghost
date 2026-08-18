@@ -15,6 +15,7 @@ All notable changes to this extension are documented here.
 - Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
 - Add approve-all-pending-files plus request, session, workspace, and single-file approval scopes.
 - Replace the Edit Arguments prompt with a validated JSON editor modal.
+- Show the active auto-accept scope and add an emergency pause for the current request.
 
 ## 1.1.16 - 2026-08-18
 

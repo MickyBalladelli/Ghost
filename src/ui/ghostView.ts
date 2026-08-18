@@ -63,6 +63,7 @@ interface GhostRequestState {
   autoAcceptFilePath?: string
   approvedFilePaths?: Set<string>
   approveAllFileEdits?: boolean
+  autoAcceptDisabled?: boolean
   pendingTool?: { toolCallId: string; name: string }
 }
 
@@ -600,6 +601,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request.stopReason = 'cancelled'
     request.stopMessage = 'The request was cancelled.'
     request.cancellation.cancel()
+  }
+
+  private disableAutoAccept(requestId: string, conversationId: string): void {
+    const request = this.requests.get(requestId)
+    if (!request || request.conversationId !== conversationId) {
+      return
+    }
+    request.autoAcceptDisabled = true
+    this.postStreamEvent(requestId, request, {
+      type: 'warning',
+      message: 'Auto-accept disabled for this request. Future file edits will ask for approval.'
+    })
   }
 
   private async continueRequest(
@@ -1143,7 +1156,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     request: GhostRequestState,
     call: LocalToolCall
   ): boolean {
-    if (scope === 'confirm') {
+    if (scope === 'confirm' || request.autoAcceptDisabled) {
       return false
     }
     if (scope === 'one-edit' || scope === 'request' || scope === 'session' || scope === 'workspace' || scope === 'always') {
@@ -2214,6 +2227,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       case 'cancel':
         this.cancel(message.requestId, message.conversationId)
         return
+      case 'disable-auto-accept':
+        this.disableAutoAccept(message.requestId, message.conversationId)
+        return
       case 'retry-tool':
         await this.retryFailedTool(message.requestId, message.conversationId, message.toolCallId, {
           name: message.tool as LocalToolName,
@@ -2591,6 +2607,25 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .connection-indicator.external .status-dot {
         background: var(--vscode-editorWarning-foreground, #cca700);
+      }
+
+      .auto-accept-indicator {
+        border: 1px solid var(--ghost-border);
+        border-radius: 999px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.72em;
+        padding: 2px 6px;
+        white-space: nowrap;
+      }
+
+      .auto-accept-indicator.enabled {
+        border-color: var(--vscode-editorWarning-foreground, #cca700);
+        color: var(--vscode-editorWarning-foreground, #cca700);
+      }
+
+      .auto-accept-indicator.paused {
+        border-color: var(--vscode-testing-iconPassed, #73c991);
+        color: var(--vscode-testing-iconPassed, #73c991);
       }
 
       .control-button,

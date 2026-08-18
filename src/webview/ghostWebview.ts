@@ -342,6 +342,7 @@ interface ActiveRequest {
   tokenCount: number
   tokensPerSecond?: number
   stopReason?: StopReason
+  autoAcceptDisabled?: boolean
 }
 
 interface ModelMetadata {
@@ -774,6 +775,7 @@ app.innerHTML = `
       <select id="model-profile" aria-label="Model profile"></select>
       <span class="model-capabilities" id="model-capabilities" aria-live="polite"></span>
       <span class="connection-indicator" id="connection-indicator"><span class="status-dot" aria-hidden="true"></span><span id="connection-text">Checking…</span></span>
+      <span class="auto-accept-indicator" id="auto-accept-indicator" aria-live="polite"></span>
       <button type="button" class="control-button settings-button" id="settings" aria-haspopup="dialog" aria-label="Settings" title="Settings"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" fill="currentColor"/></svg></button>
     </section>
     <div class="chat-layout">
@@ -1008,6 +1010,7 @@ const modelProfileElement = document.getElementById('model-profile') as HTMLSele
 const modelCapabilitiesElement = document.getElementById('model-capabilities') as HTMLElement
 const connectionIndicatorElement = document.getElementById('connection-indicator') as HTMLElement
 const connectionTextElement = document.getElementById('connection-text') as HTMLElement
+const autoAcceptIndicatorElement = document.getElementById('auto-accept-indicator') as HTMLElement
 const attachmentListElement = document.getElementById('attachment-list') as HTMLElement
 const fileInputElement = document.getElementById('file-input') as HTMLInputElement
 const mentionMenuElement = document.getElementById('mention-menu') as HTMLElement
@@ -1543,6 +1546,20 @@ const renderControls = () => {
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
   fileEditApprovalElement.value = controls.fileEditApproval
+  const autoAcceptLabels: Record<AutoAcceptScope, string> = {
+    confirm: 'Auto-accept off',
+    'one-edit': 'Auto-accept: one edit',
+    'current-file': 'Auto-accept: current file',
+    request: 'Auto-accept: request',
+    session: 'Auto-accept: session',
+    workspace: 'Auto-accept: workspace',
+    always: 'Auto-accept: always'
+  }
+  const autoAcceptPaused = activeRequest?.autoAcceptDisabled === true
+  autoAcceptIndicatorElement.textContent = autoAcceptPaused ? 'Auto-accept paused for request' : autoAcceptLabels[controls.fileEditApproval]
+  autoAcceptIndicatorElement.classList.toggle('enabled', controls.fileEditApproval !== 'confirm' && !autoAcceptPaused)
+  autoAcceptIndicatorElement.classList.toggle('paused', autoAcceptPaused)
+  autoAcceptIndicatorElement.title = autoAcceptPaused ? 'Future file edits will ask for approval in this request.' : 'File edit approval scope'
   composerHeightElement.value = String(composerHeight)
   promptRowsElement.value = String(promptRows)
   promptElement.rows = promptRows
@@ -2275,10 +2292,14 @@ const renderRequestActionCard = (message: ChatMessage): string => {
   }
   const diffPath = messageDiffPath(message)
   const title = active ? 'Ghost is working' : `Ghost stopped: ${stopReasonLabel(message.stopReason)}`
-  const detail = active ? 'Stop this request if it is taking too long.' : stopReasonDetail(message)
+  const autoAcceptEnabled = active && controls.fileEditApproval !== 'confirm' && activeRequest?.autoAcceptDisabled !== true
+  const autoAcceptPaused = active && activeRequest?.autoAcceptDisabled === true
+  const detail = active
+    ? autoAcceptEnabled ? 'Auto-accept is enabled for file edits. Stop it below if needed.' : autoAcceptPaused ? 'Auto-accept is paused for this request. Future file edits will ask for approval.' : 'Stop this request if it is taking too long.'
+    : stopReasonDetail(message)
   const hint = active ? '' : stopReasonHint(message.stopReason)
   const actions = active
-    ? `<button type="button" class="request-card-button secondary" data-action="cancel-request" data-message-id="${escapeAttribute(message.id)}">Cancel</button>`
+    ? `<button type="button" class="request-card-button secondary" data-action="cancel-request" data-message-id="${escapeAttribute(message.id)}">Cancel</button>${autoAcceptEnabled ? `<button type="button" class="request-card-button secondary" data-action="disable-auto-accept" data-message-id="${escapeAttribute(message.id)}">Disable auto-accept</button>` : ''}`
     : `<button type="button" class="request-card-button" data-action="retry" data-message-id="${escapeAttribute(message.id)}">Retry</button><button type="button" class="request-card-button" data-action="continue" data-message-id="${escapeAttribute(message.id)}">Continue</button><button type="button" class="request-card-button secondary" data-action="regenerate" data-message-id="${escapeAttribute(message.id)}">Regenerate</button>${diffPath ? `<button type="button" class="request-card-button secondary" data-action="open-diff" data-message-id="${escapeAttribute(message.id)}">Open Diff</button>` : ''}`
   return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</div><div class="request-action-card-actions">${actions}</div></section>`
 }
@@ -3283,6 +3304,14 @@ const handleMessageAction = (action: string, messageId: string) => {
     const requestId = message.requestId ?? activeRequest?.requestId
     if (requestId) {
       post('cancel', { requestId, conversationId: conversation.id })
+    }
+  } else if (action === 'disable-auto-accept') {
+    const requestId = message.requestId ?? activeRequest?.requestId
+    if (requestId && activeRequest?.requestId === requestId) {
+      activeRequest.autoAcceptDisabled = true
+      post('disable-auto-accept', { requestId, conversationId: conversation.id })
+      screenReaderStatusElement.textContent = 'Auto-accept disabled for this request'
+      render(false)
     }
   } else if (action === 'approve-all-files') {
     if (message.requestId) {

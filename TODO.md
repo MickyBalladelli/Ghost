@@ -86,7 +86,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
 - [x] Add “approve all pending files” plus separate scopes for this request, session, workspace, and one file.
 - [x] Make “Edit Arguments” open an editable form populated with the original arguments, validate it, and send it back through the same approval flow.
-- [ ] Add a visible auto-accept indicator and an easy emergency stop that disables auto-accept for the current request.
+- [x] Add a visible auto-accept indicator and an easy emergency stop that disables auto-accept for the current request.
 - [ ] Add conversation search, message search, bookmarks, rename, duplicate/branch conversation, and lazy loading for old messages.
 - [ ] Keep prompt history per conversation with deduplication, search, configurable size, keyboard hints, and reliable previous/next navigation.
 - [ ] Autosave composer drafts and show whether prompt history/conversation persistence is enabled.
