@@ -7,6 +7,8 @@ All notable changes to this extension are documented here.
 - Show model context/output limits, provider capabilities, sampling support, and ignored settings beside the model selector.
 - Add model aliases, selectable named profiles, and role-specific model/generation settings for chat, agent, vision, and autocomplete.
 - Animate the “Ghost is thinking” status label while a response is being generated.
+- Raise the default local request time budget to 120 minutes and make it configurable with `ghost.requestTimeLimitMinutes`.
+- Ask whether to Continue or Stop when any request budget limit is reached instead of ending silently.
 
 ## 1.1.8 - 2026-08-18
 

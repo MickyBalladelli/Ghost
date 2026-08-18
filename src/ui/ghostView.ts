@@ -440,6 +440,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       additionalContext: [continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
+      confirmBudgetContinue: reason => this.confirmBudgetContinue(requestId, request, reason),
       onStop: (reason, message) => {
         if (request.stopReason) {
           return
@@ -773,6 +774,20 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const choice = await awaitCancellable(vscode.window.showWarningMessage(
       `Ghost reached ${toolCallCount} tool calls. Continue working?`,
       { modal: true, detail: 'Choose Continue to allow another batch of tool calls, or Stop to end this request.' },
+      'Continue',
+      'Stop'
+    ), request.cancellation.token).catch(() => undefined)
+    return choice === 'Continue'
+  }
+
+  private async confirmBudgetContinue(requestId: string, request: GhostRequestState, reason: string): Promise<boolean> {
+    this.postStreamEvent(requestId, request, {
+      type: 'warning',
+      message: `Ghost reached a request budget limit: ${reason}. Choose Continue or Stop.`
+    })
+    const choice = await awaitCancellable(vscode.window.showWarningMessage(
+      `Ghost reached a request budget limit: ${reason}. Continue working?`,
+      { modal: true, detail: 'Choose Continue to start a fresh budget window, or Stop to end this request.' },
       'Continue',
       'Stop'
     ), request.cancellation.token).catch(() => undefined)

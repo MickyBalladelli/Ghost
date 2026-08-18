@@ -65,6 +65,7 @@ export interface GhostSettings {
   openaiTlsKeyFile: string
   chatModel: string
   autocompleteModel: string
+  requestTimeLimitMinutes: number
   modelProfile: string
   modelAliases: GhostModelAliases
   modelProfiles: GhostModelProfiles
@@ -116,6 +117,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiTlsKeyFile: '',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
+  requestTimeLimitMinutes: 120,
   modelProfile: '',
   modelAliases: {},
   modelProfiles: {},
@@ -179,6 +181,7 @@ export class GhostConfig {
       openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
+      requestTimeLimitMinutes: configuration.get('requestTimeLimitMinutes', DEFAULT_GHOST_SETTINGS.requestTimeLimitMinutes),
       modelProfile: configuration.get('modelProfile', DEFAULT_GHOST_SETTINGS.modelProfile),
       modelAliases: configuration.get('modelAliases', DEFAULT_GHOST_SETTINGS.modelAliases),
       modelProfiles: configuration.get('modelProfiles', DEFAULT_GHOST_SETTINGS.modelProfiles),

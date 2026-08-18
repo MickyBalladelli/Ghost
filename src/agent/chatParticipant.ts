@@ -63,7 +63,6 @@ const REQUEST_BUDGET_LIMITS = {
   changedLines: 4000,
   changedBytes: 1_000_000,
   commands: 32,
-  timeMs: 30 * 60 * 1000,
   modelTokens: 64_000
 } as const
 
@@ -86,6 +85,7 @@ interface EditCost {
 
 interface RequestBudget {
   startedAt: number
+  timeMs: number
   files: Set<string>
   changedLines: number
   changedBytes: number
@@ -396,8 +396,8 @@ function getEditCost(call: LocalToolCall, selectedHunkIndexes?: number[]): EditC
 
 function getBudgetStopReason(budget: RequestBudget, call?: LocalToolCall, selectedHunkIndexes?: number[]): string | undefined {
   const elapsedMs = Date.now() - budget.startedAt
-  if (elapsedMs >= REQUEST_BUDGET_LIMITS.timeMs) {
-    return `time (${Math.ceil(elapsedMs / 60000)} minutes used of ${REQUEST_BUDGET_LIMITS.timeMs / 60000})`
+  if (elapsedMs >= budget.timeMs) {
+    return `time (${Math.ceil(elapsedMs / 60000)} minutes used of ${budget.timeMs / 60000})`
   }
   if (budget.modelTokens >= REQUEST_BUDGET_LIMITS.modelTokens) {
     return `model tokens (${budget.modelTokens} used of ${REQUEST_BUDGET_LIMITS.modelTokens})`
@@ -430,6 +430,34 @@ function stopForBudget(response: vscode.ChatResponseStream, reason: string, onSt
   const message = `Ghost stopped because the request budget was reached: ${reason}. Review the partial changes and retry with a smaller request.`
   onStop?.('budget-limit', message)
   response.markdown(message)
+}
+
+async function continueAfterBudget(
+  budget: RequestBudget,
+  reason: string,
+  response: vscode.ChatResponseStream,
+  requestOptions: GhostRequestOptions
+): Promise<boolean> {
+  const shouldContinue = requestOptions.confirmBudgetContinue
+    ? await requestOptions.confirmBudgetContinue(reason)
+    : await vscode.window.showWarningMessage(
+        `Ghost reached a request budget limit: ${reason}. Continue working?`,
+        { modal: true, detail: 'Choose Continue to start a fresh budget window, or Stop to end this request.' },
+        'Continue',
+        'Stop'
+      ) === 'Continue'
+  if (!shouldContinue) {
+    stopForBudget(response, reason, requestOptions.onStop)
+    return false
+  }
+  budget.startedAt = Date.now()
+  budget.files.clear()
+  budget.changedLines = 0
+  budget.changedBytes = 0
+  budget.commands = 0
+  budget.modelTokens = 0
+  response.progress('Request budget renewed. Continuing work.')
+  return true
 }
 
 function noToolRecoveryMessage(state: ReturnType<typeof classifyLocalToolResponse>['state'], retries: number): string {
@@ -528,6 +556,7 @@ export interface GhostRequestOptions {
   customSystemInstructions?: string
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
+  confirmBudgetContinue?: (reason: string) => Promise<boolean>
   onStop?: (reason: GhostStopReason, message: string) => void
 }
 
@@ -1105,6 +1134,7 @@ export function createChatParticipantHandler(
       const completedReadCalls = new Map<string, string>()
       const budget: RequestBudget = {
         startedAt: requestStartedAt,
+        timeMs: Math.max(1, Math.floor(settings.requestTimeLimitMinutes)) * 60 * 1000,
         files: new Set<string>(),
         changedLines: 0,
         changedBytes: 0,
@@ -1114,7 +1144,9 @@ export function createChatParticipantHandler(
       while (true) {
         const beforeModelBudget = getBudgetStopReason(budget)
         if (beforeModelBudget) {
-          stopForBudget(response, beforeModelBudget, requestOptions.onStop)
+          if (await continueAfterBudget(budget, beforeModelBudget, response, requestOptions)) {
+            continue
+          }
           return
         }
         const preparedContext = contextBudget.prepare(messages)
@@ -1148,7 +1180,9 @@ export function createChatParticipantHandler(
         budget.modelTokens += turn.modelTokens
         const afterModelBudget = getBudgetStopReason(budget)
         if (afterModelBudget) {
-          stopForBudget(response, afterModelBudget, requestOptions.onStop)
+          if (await continueAfterBudget(budget, afterModelBudget, response, requestOptions)) {
+            continue
+          }
           return
         }
 
@@ -1251,8 +1285,9 @@ export function createChatParticipantHandler(
 
         const beforeApprovalBudget = getBudgetStopReason(budget, toolCall)
         if (beforeApprovalBudget) {
-          stopForBudget(response, beforeApprovalBudget, requestOptions.onStop)
-          return
+          if (!await continueAfterBudget(budget, beforeApprovalBudget, response, requestOptions)) {
+            return
+          }
         }
 
         const toolArgumentError = getToolArgumentError(toolCall)
@@ -1343,8 +1378,9 @@ export function createChatParticipantHandler(
         }
         const afterApprovalBudget = getBudgetStopReason(budget, toolCall, approval.selectedHunkIndexes)
         if (afterApprovalBudget) {
-          stopForBudget(response, afterApprovalBudget, requestOptions.onStop)
-          return
+          if (!await continueAfterBudget(budget, afterApprovalBudget, response, requestOptions)) {
+            return
+          }
         }
         if (toolCall.name === 'ghost_run_terminal_command') {
           budget.commands += 1
