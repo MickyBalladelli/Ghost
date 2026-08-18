@@ -1822,11 +1822,13 @@ const updateAnimatedStatusLabels = (timestamp: number): void => {
   const stepMs = 120
   for (const label of labels) {
     const characters = Array.from(label.querySelectorAll<HTMLElement>('.animated-status-character'))
-    const cycleSteps = Math.max(1, characters.length * 2 - 2)
+    const highlightWidth = Math.min(3, characters.length)
+    const travelSteps = Math.max(1, characters.length - highlightWidth + 1)
+    const cycleSteps = Math.max(1, travelSteps * 2 - 2)
     const phase = Math.floor(timestamp / stepMs) % cycleSteps
-    const highlightedIndex = phase < characters.length ? phase : cycleSteps - phase
+    const highlightedIndex = phase < travelSteps ? phase : cycleSteps - phase
     characters.forEach((character, index) => {
-      character.classList.toggle('highlighted', index === highlightedIndex)
+      character.classList.toggle('highlighted', index >= highlightedIndex && index < highlightedIndex + highlightWidth)
     })
   }
   animatedStatusFrame = requestAnimationFrame(updateAnimatedStatusLabels)

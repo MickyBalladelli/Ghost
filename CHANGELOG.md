@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.15 - 2026-08-18
 
+- Make three characters light up together during the thinking-label sweep.
 - Add native tool definitions and structured tool-call streaming for Ollama and OpenAI-compatible providers, with text parsing fallback.
 - Add provider request support for JSON object and JSON schema response formats.
 - Add the `ghost.jsonMode` setting for providers that support JSON mode.
