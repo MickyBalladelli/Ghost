@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.98 - 2026-08-18
+
+- Added a Custom HTTP provider profile with configurable model discovery, chat paths, JSON request templates, and response formats.
+
 ## 1.0.97 - 2026-08-18
 
 - Added provider profiles and adapters for Anthropic, Google Gemini, Azure OpenAI, LM Studio, llama.cpp, vLLM, and LiteLLM.

@@ -4,8 +4,8 @@ import type { GhostSettings } from '../config'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
 import { MlxChatOptions, MlxMessage } from './mlxClient'
 import { OllamaClient } from './ollamaClient'
-import { createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
-import { getOpenAiProfile, OpenAiProfileId, ProviderWireProtocol, resolveOpenAiProfileEndpoint } from './providerProfiles'
+import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
+import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWireProtocol, resolveOpenAiProfileEndpoint } from './providerProfiles'
 import { ProviderClient } from './providerAdapter'
 import { streamOpenAiTokens } from './openAiStream'
 
@@ -109,6 +109,74 @@ function generation(options: MlxChatOptions): { temperature?: number; topP?: num
     topP: options.generation?.topP,
     maxTokens: options.generation?.maxTokens ?? 8192
   }
+}
+
+function joinCustomEndpoint(baseUrl: string, path: string, model?: string): string {
+  const resolvedPath = path.trim().replaceAll('{{model}}', model ? encodeURIComponent(model) : '')
+  if (/^https?:\/\//i.test(resolvedPath)) {
+    return resolvedPath
+  }
+  return `${normalizeEndpoint(baseUrl)}/${resolvedPath.replace(/^\/+/, '')}`
+}
+
+function renderCustomTemplate(template: string, options: MlxChatOptions): Record<string, unknown> {
+  const settings = generation(options)
+  const values: Record<string, unknown> = {
+    model: options.model,
+    messages: options.messages,
+    stream: true,
+    temperature: settings.temperature ?? null,
+    topP: settings.topP ?? null,
+    maxTokens: settings.maxTokens
+  }
+  const parsed = JSON.parse(template) as unknown
+  const render = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      const exact = /^{{([^{}]+)}}$/.exec(value)
+      if (exact && Object.prototype.hasOwnProperty.call(values, exact[1])) {
+        return values[exact[1]]
+      }
+      return value.replace(/{{([^{}]+)}}/g, (_, key: string) => {
+        const replacement = values[key]
+        return typeof replacement === 'string' ? replacement : JSON.stringify(replacement)
+      })
+    }
+    if (Array.isArray(value)) return value.map(render)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, render(item)]))
+    }
+    return value
+  }
+  const result = render(parsed)
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Custom HTTP request template must contain a JSON object')
+  }
+  return result as Record<string, unknown>
+}
+
+function customModelNames(payload: unknown): string[] {
+  if (Array.isArray(payload)) {
+    return payload.flatMap(item => typeof item === 'string' ? [item] : [])
+  }
+  if (!payload || typeof payload !== 'object') return []
+  const record = payload as ModelsResponse
+  const items = record.data ?? record.models ?? []
+  return items.flatMap(item => {
+    if (typeof item === 'string') return [item]
+    const candidate = item as { id?: string; name?: string; displayName?: string }
+    return candidate.id ? [candidate.id] : candidate.name ? [candidate.name.replace(/^models\//, '')] : candidate.displayName ? [candidate.displayName] : []
+  })
+}
+
+function customResponseText(payload: unknown): string {
+  if (typeof payload === 'string') return payload
+  if (!payload || typeof payload !== 'object') return ''
+  const record = payload as {
+    response?: string
+    output_text?: string
+    choices?: Array<{ text?: string; message?: { content?: string } }>
+  }
+  return record.response ?? record.output_text ?? record.choices?.[0]?.message?.content ?? record.choices?.[0]?.text ?? ''
 }
 
 function openAiTransport(settings: GhostSettings): OpenAiTransportSettings {
@@ -264,6 +332,75 @@ class GeminiClient implements ProviderClient {
   }
 }
 
+class CustomHttpClient implements ProviderClient {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly modelsPath: string,
+    private readonly chatPath: string,
+    private readonly requestTemplate: string,
+    private readonly responseFormat: CustomResponseFormat,
+    private readonly settings: GhostSettings,
+    private readonly apiKeyProvider: () => string | undefined,
+    private readonly request: FetchLike = fetch
+  ) {}
+
+  async checkHealth(timeoutMs = 3000): Promise<boolean> {
+    const endpoint = joinCustomEndpoint(this.baseUrl, this.modelsPath)
+    try {
+      const response = await this.request(endpoint, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: withTimeout(timeoutMs),
+        agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    const endpoint = joinCustomEndpoint(this.baseUrl, this.modelsPath)
+    const response = await this.request(endpoint, {
+      method: 'GET',
+      headers: this.headers(),
+      signal,
+      agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings))
+    })
+    if (!response.ok) throw await httpError(response)
+    return customModelNames(await response.json())
+  }
+
+  async *streamChatCompletion(options: MlxChatOptions): AsyncGenerator<string> {
+    const endpoint = joinCustomEndpoint(this.baseUrl, this.chatPath, options.model)
+    const response = await this.request(endpoint, {
+      method: 'POST',
+      headers: { ...this.headers(), accept: this.responseFormat === 'openai-sse' ? 'text/event-stream' : 'application/json', 'content-type': 'application/json' },
+      signal: options.signal,
+      agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
+      body: JSON.stringify(renderCustomTemplate(this.requestTemplate, options))
+    })
+    if (!response.ok) throw await httpError(response)
+    if (this.responseFormat === 'json') {
+      yield customResponseText(await response.json())
+      return
+    }
+    if (!response.body) throw new Error('Custom HTTP server returned an empty streaming response')
+    yield* streamOpenAiTokens(response.body, 'chat-completions')
+  }
+
+  private headers(): Record<string, string> {
+    return buildOpenAiAuthenticationHeaders(this.apiKeyProvider(), {
+      apiKeyHeader: this.settings.openaiApiKeyHeader,
+      apiKeyPrefix: this.settings.openaiApiKeyPrefix,
+      organizationHeader: this.settings.openaiOrganizationHeader,
+      organization: this.settings.openaiOrganization,
+      projectHeader: this.settings.openaiProjectHeader,
+      project: this.settings.openaiProject
+    })
+  }
+}
+
 class AzureOpenAiClient implements ProviderClient {
   constructor(
     private readonly baseUrl: string,
@@ -336,6 +473,17 @@ export function createProfiledProviderClient(
   }
   if (profile.protocol === 'gemini') {
     return new GeminiClient(endpoint, apiKeyProvider, openAiTransport(settings))
+  }
+  if (profile.protocol === 'custom-http') {
+    return new CustomHttpClient(
+      endpoint,
+      settings.openaiCustomModelsPath,
+      settings.openaiCustomChatPath,
+      settings.openaiCustomRequestTemplate,
+      settings.openaiCustomResponseFormat,
+      settings,
+      apiKeyProvider
+    )
   }
   return new AzureOpenAiClient(endpoint, settings.openaiApiVersion, apiKeyProvider, settings)
 }

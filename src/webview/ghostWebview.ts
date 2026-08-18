@@ -2,7 +2,8 @@ type GhostViewStatus = 'ready' | 'offline'
 type NoticeKind = 'error' | 'no-model' | 'info'
 type MessageRole = 'user' | 'assistant'
 type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
-type OpenAiProfile = 'generic' | 'anthropic' | 'gemini' | 'azure-openai' | 'lm-studio' | 'llama-cpp' | 'vllm' | 'litellm'
+type OpenAiProfile = 'generic' | 'anthropic' | 'gemini' | 'azure-openai' | 'lm-studio' | 'llama-cpp' | 'vllm' | 'litellm' | 'custom'
+type CustomResponseFormat = 'openai-sse' | 'json'
 type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
@@ -34,6 +35,10 @@ interface ControlSettings {
   openaiUrl: string
   openaiProfile: OpenAiProfile
   openaiApiVersion: string
+  openaiCustomModelsPath: string
+  openaiCustomChatPath: string
+  openaiCustomRequestTemplate: string
+  openaiCustomResponseFormat: CustomResponseFormat
   openaiApiKeyHeader: string
   openaiApiKeyPrefix: string
   openaiOrganizationHeader: string
@@ -565,6 +570,10 @@ let controls: ControlSettings = {
   openaiUrl: 'http://localhost:8001/v1',
   openaiProfile: 'generic',
   openaiApiVersion: '2024-10-21',
+  openaiCustomModelsPath: '/v1/models',
+  openaiCustomChatPath: '/v1/chat/completions',
+  openaiCustomRequestTemplate: '{"model":"{{model}}","messages":"{{messages}}","stream":"{{stream}}","temperature":"{{temperature}}","top_p":"{{topP}}","max_tokens":"{{maxTokens}}"}',
+  openaiCustomResponseFormat: 'openai-sse',
   openaiApiKeyHeader: 'Authorization',
   openaiApiKeyPrefix: 'Bearer',
   openaiOrganizationHeader: 'OpenAI-Organization',
@@ -764,9 +773,17 @@ app.innerHTML = `
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
           <label for="openai-profile">Compatibility profile</label>
-          <select id="openai-profile"><option value="generic">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Google Gemini</option><option value="azure-openai">Azure OpenAI</option><option value="lm-studio">LM Studio</option><option value="llama-cpp">llama.cpp</option><option value="vllm">vLLM</option><option value="litellm">LiteLLM</option></select>
+          <select id="openai-profile"><option value="generic">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Google Gemini</option><option value="azure-openai">Azure OpenAI</option><option value="lm-studio">LM Studio</option><option value="llama-cpp">llama.cpp</option><option value="vllm">vLLM</option><option value="litellm">LiteLLM</option><option value="custom">Custom HTTP</option></select>
           <label for="openai-api-version">Azure API version</label>
           <input id="openai-api-version" type="text" value="2024-10-21" placeholder="2024-10-21">
+          <label for="openai-custom-models-path">Custom models path</label>
+          <input id="openai-custom-models-path" type="text" value="/v1/models" placeholder="/v1/models">
+          <label for="openai-custom-chat-path">Custom chat path</label>
+          <input id="openai-custom-chat-path" type="text" value="/v1/chat/completions" placeholder="/v1/chat/completions">
+          <label for="openai-custom-response-format">Custom response format</label>
+          <select id="openai-custom-response-format"><option value="openai-sse">OpenAI SSE</option><option value="json">One JSON response</option></select>
+          <label for="openai-custom-request-template">Custom JSON request template</label>
+          <textarea id="openai-custom-request-template" rows="5" spellcheck="false" placeholder='{"model":"{{model}}","messages":"{{messages}}","stream":"{{stream}}"}'></textarea>
           <label for="openai-api-key-header">OpenAI API key header</label>
           <input id="openai-api-key-header" type="text" value="Authorization" placeholder="Authorization">
           <label for="openai-api-key-prefix">OpenAI API key prefix</label>
@@ -907,6 +924,10 @@ const providerEndpointElement = document.getElementById('provider-endpoint') as 
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
 const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
 const openAiApiVersionElement = document.getElementById('openai-api-version') as HTMLInputElement
+const openAiCustomModelsPathElement = document.getElementById('openai-custom-models-path') as HTMLInputElement
+const openAiCustomChatPathElement = document.getElementById('openai-custom-chat-path') as HTMLInputElement
+const openAiCustomResponseFormatElement = document.getElementById('openai-custom-response-format') as HTMLSelectElement
+const openAiCustomRequestTemplateElement = document.getElementById('openai-custom-request-template') as HTMLTextAreaElement
 const openAiApiKeyHeaderElement = document.getElementById('openai-api-key-header') as HTMLInputElement
 const openAiApiKeyPrefixElement = document.getElementById('openai-api-key-prefix') as HTMLInputElement
 const openAiOrganizationHeaderElement = document.getElementById('openai-organization-header') as HTMLInputElement
@@ -995,6 +1016,10 @@ const createPersistedState = () => ({
     openaiUrl: controls.openaiUrl,
     openaiProfile: controls.openaiProfile,
     openaiApiVersion: controls.openaiApiVersion,
+    openaiCustomModelsPath: controls.openaiCustomModelsPath,
+    openaiCustomChatPath: controls.openaiCustomChatPath,
+    openaiCustomRequestTemplate: controls.openaiCustomRequestTemplate,
+    openaiCustomResponseFormat: controls.openaiCustomResponseFormat,
     openaiApiKeyHeader: controls.openaiApiKeyHeader,
     openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
     openaiOrganizationHeader: controls.openaiOrganizationHeader,
@@ -1119,6 +1144,10 @@ const sendSettingsUpdate = () => {
         openaiUrl: controls.openaiUrl,
         openaiProfile: controls.openaiProfile,
         openaiApiVersion: controls.openaiApiVersion,
+        openaiCustomModelsPath: controls.openaiCustomModelsPath,
+        openaiCustomChatPath: controls.openaiCustomChatPath,
+        openaiCustomRequestTemplate: controls.openaiCustomRequestTemplate,
+        openaiCustomResponseFormat: controls.openaiCustomResponseFormat,
         openaiApiKeyHeader: controls.openaiApiKeyHeader,
         openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
         openaiOrganizationHeader: controls.openaiOrganizationHeader,
@@ -1177,7 +1206,8 @@ const openAiDefaultEndpoints: Record<OpenAiProfile, string> = {
   'lm-studio': 'http://localhost:1234/v1',
   'llama-cpp': 'http://localhost:8080/v1',
   vllm: 'http://localhost:8000/v1',
-  litellm: 'http://localhost:4000/v1'
+  litellm: 'http://localhost:4000/v1',
+  custom: 'http://localhost:8001'
 }
 
 const applyUiPreferences = () => {
@@ -1215,6 +1245,10 @@ const renderControls = () => {
   openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
   openAiProfileElement.value = controls.openaiProfile
   openAiApiVersionElement.value = controls.openaiApiVersion
+  openAiCustomModelsPathElement.value = controls.openaiCustomModelsPath
+  openAiCustomChatPathElement.value = controls.openaiCustomChatPath
+  openAiCustomResponseFormatElement.value = controls.openaiCustomResponseFormat
+  openAiCustomRequestTemplateElement.value = controls.openaiCustomRequestTemplate
   openAiApiKeyPrefixElement.value = controls.openaiApiKeyPrefix
   openAiOrganizationHeaderElement.value = controls.openaiOrganizationHeader
   openAiOrganizationElement.value = controls.openaiOrganization
@@ -1231,6 +1265,10 @@ const renderControls = () => {
     openAiApiKeyHeaderElement,
     openAiProfileElement,
     openAiApiVersionElement,
+    openAiCustomModelsPathElement,
+    openAiCustomChatPathElement,
+    openAiCustomResponseFormatElement,
+    openAiCustomRequestTemplateElement,
     openAiApiKeyPrefixElement,
     openAiOrganizationHeaderElement,
     openAiOrganizationElement,
@@ -2647,11 +2685,23 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.openaiUrl === 'string') {
         controls.openaiUrl = preferences.openaiUrl
       }
-      if (preferences.openaiProfile === 'generic' || preferences.openaiProfile === 'anthropic' || preferences.openaiProfile === 'gemini' || preferences.openaiProfile === 'azure-openai' || preferences.openaiProfile === 'lm-studio' || preferences.openaiProfile === 'llama-cpp' || preferences.openaiProfile === 'vllm' || preferences.openaiProfile === 'litellm') {
+      if (preferences.openaiProfile === 'generic' || preferences.openaiProfile === 'anthropic' || preferences.openaiProfile === 'gemini' || preferences.openaiProfile === 'azure-openai' || preferences.openaiProfile === 'lm-studio' || preferences.openaiProfile === 'llama-cpp' || preferences.openaiProfile === 'vllm' || preferences.openaiProfile === 'litellm' || preferences.openaiProfile === 'custom') {
         controls.openaiProfile = preferences.openaiProfile
       }
       if (typeof preferences.openaiApiVersion === 'string') {
         controls.openaiApiVersion = preferences.openaiApiVersion
+      }
+      if (typeof preferences.openaiCustomModelsPath === 'string') {
+        controls.openaiCustomModelsPath = preferences.openaiCustomModelsPath
+      }
+      if (typeof preferences.openaiCustomChatPath === 'string') {
+        controls.openaiCustomChatPath = preferences.openaiCustomChatPath
+      }
+      if (typeof preferences.openaiCustomRequestTemplate === 'string') {
+        controls.openaiCustomRequestTemplate = preferences.openaiCustomRequestTemplate
+      }
+      if (preferences.openaiCustomResponseFormat === 'openai-sse' || preferences.openaiCustomResponseFormat === 'json') {
+        controls.openaiCustomResponseFormat = preferences.openaiCustomResponseFormat
       }
       if (typeof preferences.openaiApiKeyHeader === 'string') {
         controls.openaiApiKeyHeader = preferences.openaiApiKeyHeader
@@ -3251,6 +3301,10 @@ const updateOpenAiSettings = () => {
   controls.openaiTlsCertFile = openAiTlsCertFileElement.value.trim()
   controls.openaiTlsKeyFile = openAiTlsKeyFileElement.value.trim()
   controls.openaiApiVersion = openAiApiVersionElement.value.trim()
+  controls.openaiCustomModelsPath = openAiCustomModelsPathElement.value.trim()
+  controls.openaiCustomChatPath = openAiCustomChatPathElement.value.trim()
+  controls.openaiCustomResponseFormat = openAiCustomResponseFormatElement.value as CustomResponseFormat
+  controls.openaiCustomRequestTemplate = openAiCustomRequestTemplateElement.value
   sendSettingsUpdate()
   saveState()
 }
@@ -3267,7 +3321,11 @@ for (const element of [
   openAiTlsCaFileElement,
   openAiTlsCertFileElement,
   openAiTlsKeyFileElement,
-  openAiApiVersionElement
+  openAiApiVersionElement,
+  openAiCustomModelsPathElement,
+  openAiCustomChatPathElement,
+  openAiCustomResponseFormatElement,
+  openAiCustomRequestTemplateElement
 ]) {
   element.addEventListener('change', updateOpenAiSettings)
 }

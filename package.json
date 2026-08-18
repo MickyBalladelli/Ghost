@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
-  "version": "1.0.97",
+  "version": "1.0.98",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -136,7 +136,8 @@
             "lm-studio",
             "llama-cpp",
             "vllm",
-            "litellm"
+            "litellm",
+            "custom"
           ],
           "enumDescriptions": [
             "OpenAI-compatible chat completions or responses API.",
@@ -146,7 +147,8 @@
             "LM Studio OpenAI-compatible server.",
             "llama.cpp llama-server OpenAI-compatible endpoint.",
             "vLLM OpenAI-compatible server.",
-            "LiteLLM proxy OpenAI-compatible endpoint."
+            "LiteLLM proxy OpenAI-compatible endpoint.",
+            "Custom local HTTP server using the configured paths and request template."
           ],
           "default": "generic",
           "description": "Compatibility profile used by the OpenAI-compatible provider."
@@ -155,6 +157,30 @@
           "type": "string",
           "default": "2024-10-21",
           "description": "Azure OpenAI API version."
+        },
+        "ghost.openaiCustomModelsPath": {
+          "type": "string",
+          "default": "/v1/models",
+          "description": "Custom HTTP model discovery path."
+        },
+        "ghost.openaiCustomChatPath": {
+          "type": "string",
+          "default": "/v1/chat/completions",
+          "description": "Custom HTTP chat request path. Supports {{model}} in the path."
+        },
+        "ghost.openaiCustomRequestTemplate": {
+          "type": "string",
+          "default": "{\"model\":\"{{model}}\",\"messages\":\"{{messages}}\",\"stream\":\"{{stream}}\",\"temperature\":\"{{temperature}}\",\"top_p\":\"{{topP}}\",\"max_tokens\":\"{{maxTokens}}\"}",
+          "description": "Custom HTTP JSON request template. Exact placeholders become typed JSON values."
+        },
+        "ghost.openaiCustomResponseFormat": {
+          "type": "string",
+          "enum": [
+            "openai-sse",
+            "json"
+          ],
+          "default": "openai-sse",
+          "description": "Custom HTTP response format."
         },
         "ghost.openaiApiKeyHeader": {
           "type": "string",

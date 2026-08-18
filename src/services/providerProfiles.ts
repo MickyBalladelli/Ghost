@@ -7,8 +7,10 @@ export type OpenAiProfileId =
   | 'llama-cpp'
   | 'vllm'
   | 'litellm'
+  | 'custom'
 
-export type ProviderWireProtocol = 'openai-chat' | 'anthropic' | 'gemini'
+export type ProviderWireProtocol = 'openai-chat' | 'anthropic' | 'gemini' | 'custom-http'
+export type CustomResponseFormat = 'openai-sse' | 'json'
 
 export interface OpenAiProviderProfile {
   id: OpenAiProfileId
@@ -84,6 +86,14 @@ export const OPENAI_PROVIDER_PROFILES: Readonly<Record<OpenAiProfileId, OpenAiPr
     description: 'LiteLLM proxy OpenAI-compatible endpoint',
     protocol: 'openai-chat',
     defaultEndpoint: 'http://localhost:4000/v1',
+    supportsFim: false
+  },
+  custom: {
+    id: 'custom',
+    label: 'Custom HTTP',
+    description: 'Local HTTP server with configurable request templates',
+    protocol: 'custom-http',
+    defaultEndpoint: 'http://localhost:8001',
     supportsFim: false
   }
 }

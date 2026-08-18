@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import type { OpenAiProfileId } from './services/providerProfiles'
+import type { CustomResponseFormat, OpenAiProfileId } from './services/providerProfiles'
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
@@ -46,6 +46,10 @@ export interface GhostSettings {
   openaiUrl: string
   openaiProfile: OpenAiProfileId
   openaiApiVersion: string
+  openaiCustomModelsPath: string
+  openaiCustomChatPath: string
+  openaiCustomRequestTemplate: string
+  openaiCustomResponseFormat: CustomResponseFormat
   openaiApiKeyHeader: string
   openaiApiKeyPrefix: string
   openaiOrganizationHeader: string
@@ -88,6 +92,10 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiUrl: 'http://localhost:8001/v1',
   openaiProfile: 'generic',
   openaiApiVersion: '2024-10-21',
+  openaiCustomModelsPath: '/v1/models',
+  openaiCustomChatPath: '/v1/chat/completions',
+  openaiCustomRequestTemplate: '{"model":"{{model}}","messages":"{{messages}}","stream":"{{stream}}","temperature":"{{temperature}}","top_p":"{{topP}}","max_tokens":"{{maxTokens}}"}',
+  openaiCustomResponseFormat: 'openai-sse',
   openaiApiKeyHeader: 'Authorization',
   openaiApiKeyPrefix: 'Bearer',
   openaiOrganizationHeader: 'OpenAI-Organization',
@@ -142,6 +150,10 @@ export class GhostConfig {
       openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOST_SETTINGS.openaiUrl),
       openaiProfile: configuration.get('openaiProfile', DEFAULT_GHOST_SETTINGS.openaiProfile),
       openaiApiVersion: configuration.get('openaiApiVersion', DEFAULT_GHOST_SETTINGS.openaiApiVersion),
+      openaiCustomModelsPath: configuration.get('openaiCustomModelsPath', DEFAULT_GHOST_SETTINGS.openaiCustomModelsPath),
+      openaiCustomChatPath: configuration.get('openaiCustomChatPath', DEFAULT_GHOST_SETTINGS.openaiCustomChatPath),
+      openaiCustomRequestTemplate: configuration.get('openaiCustomRequestTemplate', DEFAULT_GHOST_SETTINGS.openaiCustomRequestTemplate),
+      openaiCustomResponseFormat: configuration.get('openaiCustomResponseFormat', DEFAULT_GHOST_SETTINGS.openaiCustomResponseFormat),
       openaiApiKeyHeader: configuration.get('openaiApiKeyHeader', DEFAULT_GHOST_SETTINGS.openaiApiKeyHeader),
       openaiApiKeyPrefix: configuration.get('openaiApiKeyPrefix', DEFAULT_GHOST_SETTINGS.openaiApiKeyPrefix),
       openaiOrganizationHeader: configuration.get('openaiOrganizationHeader', DEFAULT_GHOST_SETTINGS.openaiOrganizationHeader),

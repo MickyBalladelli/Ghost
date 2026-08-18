@@ -1689,6 +1689,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         openaiUrl: resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl),
         openaiProfile: settings.openaiProfile,
         openaiApiVersion: settings.openaiApiVersion,
+        openaiCustomModelsPath: settings.openaiCustomModelsPath,
+        openaiCustomChatPath: settings.openaiCustomChatPath,
+        openaiCustomRequestTemplate: settings.openaiCustomRequestTemplate,
+        openaiCustomResponseFormat: settings.openaiCustomResponseFormat,
         openaiApiKeyHeader: settings.openaiApiKeyHeader,
         openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
         openaiOrganizationHeader: settings.openaiOrganizationHeader,
@@ -1751,6 +1755,20 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.openaiApiVersion === 'string' && update.openaiApiVersion.trim()) {
       await ghostConfig.update('openaiApiVersion', update.openaiApiVersion.trim(), target)
+    }
+    const customHttpSettings = [
+      'openaiCustomModelsPath',
+      'openaiCustomChatPath',
+      'openaiCustomRequestTemplate'
+    ] as const
+    for (const setting of customHttpSettings) {
+      const value = update[setting]
+      if (typeof value === 'string') {
+        await ghostConfig.update(setting, value, target)
+      }
+    }
+    if (update.openaiCustomResponseFormat) {
+      await ghostConfig.update('openaiCustomResponseFormat', update.openaiCustomResponseFormat, target)
     }
     const openAiTextSettings = [
       'openaiApiKeyHeader',
