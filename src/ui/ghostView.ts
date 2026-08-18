@@ -3516,6 +3516,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .message-placeholder {
+        color: var(--vscode-descriptionForeground, #a6a6a6);
         font-weight: 400;
       }
 

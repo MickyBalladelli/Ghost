@@ -12,6 +12,7 @@ All notable changes to this extension are documented here.
 - Reuse visible message elements during refreshes and centralize generated markdown markup through safe DOM fragments.
 - Add copy controls for paths, errors, commands, diagnostics, and code, with secret redaction before clipboard writes.
 - Add shared provider HTTP transport diagnostics with keep-alive agents, timeout, abort, and retry handling for local and profiled providers.
+- Make the result-area “Ghost is thinking…” placeholder light grey.
 
 ## 1.1.17 - 2026-08-18
 
