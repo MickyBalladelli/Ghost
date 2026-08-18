@@ -126,6 +126,36 @@
           "default": "http://localhost:8001/v1",
           "description": "OpenAI-compatible model server URL."
         },
+        "ghost.openaiProfile": {
+          "type": "string",
+          "enum": [
+            "generic",
+            "anthropic",
+            "gemini",
+            "azure-openai",
+            "lm-studio",
+            "llama-cpp",
+            "vllm",
+            "litellm"
+          ],
+          "enumDescriptions": [
+            "OpenAI-compatible chat completions or responses API.",
+            "Anthropic Messages API.",
+            "Google Gemini Generative Language API.",
+            "Azure OpenAI chat completions API.",
+            "LM Studio OpenAI-compatible server.",
+            "llama.cpp llama-server OpenAI-compatible endpoint.",
+            "vLLM OpenAI-compatible server.",
+            "LiteLLM proxy OpenAI-compatible endpoint."
+          ],
+          "default": "generic",
+          "description": "Compatibility profile used by the OpenAI-compatible provider."
+        },
+        "ghost.openaiApiVersion": {
+          "type": "string",
+          "default": "2024-10-21",
+          "description": "Azure OpenAI API version."
+        },
         "ghost.openaiApiKeyHeader": {
           "type": "string",
           "default": "Authorization",

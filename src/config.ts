@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import type { OpenAiProfileId } from './services/providerProfiles'
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
@@ -43,6 +44,8 @@ export const DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST = [
 export interface GhostSettings {
   ollamaUrl: string
   openaiUrl: string
+  openaiProfile: OpenAiProfileId
+  openaiApiVersion: string
   openaiApiKeyHeader: string
   openaiApiKeyPrefix: string
   openaiOrganizationHeader: string
@@ -83,6 +86,8 @@ export type GhostSetting = keyof GhostSettings
 export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   ollamaUrl: 'http://localhost:11434',
   openaiUrl: 'http://localhost:8001/v1',
+  openaiProfile: 'generic',
+  openaiApiVersion: '2024-10-21',
   openaiApiKeyHeader: 'Authorization',
   openaiApiKeyPrefix: 'Bearer',
   openaiOrganizationHeader: 'OpenAI-Organization',
@@ -135,6 +140,8 @@ export class GhostConfig {
     return {
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOST_SETTINGS.ollamaUrl),
       openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOST_SETTINGS.openaiUrl),
+      openaiProfile: configuration.get('openaiProfile', DEFAULT_GHOST_SETTINGS.openaiProfile),
+      openaiApiVersion: configuration.get('openaiApiVersion', DEFAULT_GHOST_SETTINGS.openaiApiVersion),
       openaiApiKeyHeader: configuration.get('openaiApiKeyHeader', DEFAULT_GHOST_SETTINGS.openaiApiKeyHeader),
       openaiApiKeyPrefix: configuration.get('openaiApiKeyPrefix', DEFAULT_GHOST_SETTINGS.openaiApiKeyPrefix),
       openaiOrganizationHeader: configuration.get('openaiOrganizationHeader', DEFAULT_GHOST_SETTINGS.openaiOrganizationHeader),

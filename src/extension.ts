@@ -5,7 +5,8 @@ import { ghostConfig, GhostProvider } from './config'
 import { createInlineCompletionProvider } from './providers/inlineCompletionProvider'
 import { MlxClient } from './services/mlxClient'
 import { OllamaClient } from './services/ollamaClient'
-import { createOpenAiTransportSettings } from './services/openAiTransport'
+import { createProfiledProviderClient } from './services/profiledProviderClient'
+import { getOpenAiProfile, resolveOpenAiProfileEndpoint } from './services/providerProfiles'
 import { ProviderSecrets } from './services/providerSecrets'
 import { checkRequiredOllamaModels } from './ui/modelDiagnostics'
 import { GhostViewProvider } from './ui/ghostView'
@@ -58,17 +59,13 @@ export async function activate(context: vscode.ExtensionContext) {
     const providerLabel = settings.provider === 'mlx-vlm'
       ? 'MLX/VLM'
       : settings.provider === 'openai-compatible'
-        ? 'OpenAI-compatible'
+        ? getOpenAiProfile(settings.openaiProfile).label
         : 'Ollama'
     const client = settings.provider === 'mlx-vlm'
       ? new MlxClient(settings.mlxUrl, undefined, () => providerApiKey('mlx-vlm'))
-      : new OllamaClient(
-          settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
-          undefined,
-          () => providerApiKey(settings.provider),
-          settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
-        )
+      : settings.provider === 'openai-compatible'
+        ? createProfiledProviderClient(settings, () => providerApiKey('openai-compatible'))
+        : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => providerApiKey('ollama'))
     const online = await client.checkHealth()
     statusBar.setStatus(online ? 'ready' : 'offline')
     ghostView.setStatus(online ? 'ready' : 'offline')
@@ -77,14 +74,14 @@ export async function activate(context: vscode.ExtensionContext) {
       const endpoint = settings.provider === 'mlx-vlm'
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
-          ? settings.openaiUrl
+          ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
           : settings.ollamaUrl
       await vscode.window.showInformationMessage(`${providerLabel} is online at ${endpoint}.`)
     } else {
       const endpoint = settings.provider === 'mlx-vlm'
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
-          ? settings.openaiUrl
+          ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
           : settings.ollamaUrl
       await vscode.window.showErrorMessage(`${providerLabel} is offline at ${endpoint}.`)
     }

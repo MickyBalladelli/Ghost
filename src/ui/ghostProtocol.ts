@@ -1,4 +1,5 @@
 import type { GhostProgressPhase, GhostRequestStatus, GhostStopReason } from './ghostState'
+import type { OpenAiProfileId } from '../services/providerProfiles'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 1 as const
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
@@ -6,6 +7,7 @@ export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = 8 * 1024 * 1024
 
 export type GhostViewStatus = 'ready' | 'offline'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostOpenAiProfile = OpenAiProfileId
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
@@ -110,6 +112,8 @@ export interface GhostSettingsUpdate {
   ollamaUrl?: string
   mlxUrl?: string
   openaiUrl?: string
+  openaiProfile?: GhostOpenAiProfile
+  openaiApiVersion?: string
   openaiApiKeyHeader?: string
   openaiApiKeyPrefix?: string
   openaiOrganizationHeader?: string
@@ -227,6 +231,8 @@ export type GhostExtensionMessage =
         ollamaUrl: string
         mlxUrl: string
         openaiUrl: string
+        openaiProfile: GhostOpenAiProfile
+        openaiApiVersion: string
         openaiApiKeyHeader: string
         openaiApiKeyPrefix: string
         openaiOrganizationHeader: string
@@ -339,6 +345,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
   }
   return (
     (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible'].includes(value.provider as string)) &&
+    (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
     (value.maxContextTokens === undefined || isFiniteNumber(value.maxContextTokens)) &&
@@ -357,6 +364,9 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.ollamaUrl === undefined || isBoundedString(value.ollamaUrl, 4096))
     && (value.mlxUrl === undefined || isBoundedString(value.mlxUrl, 4096))
     && (value.openaiUrl === undefined || isBoundedString(value.openaiUrl, 4096))
+    && (value.openaiApiVersion === undefined || isBoundedString(value.openaiApiVersion, 128))
+    && (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm'].includes(value.openaiProfile as string))
+    && (value.openaiApiVersion === undefined || isBoundedString(value.openaiApiVersion, 128))
     && (value.openaiApiKeyHeader === undefined || isBoundedString(value.openaiApiKeyHeader, 256))
     && (value.openaiApiKeyPrefix === undefined || isBoundedString(value.openaiApiKeyPrefix, 256))
     && (value.openaiOrganizationHeader === undefined || isBoundedString(value.openaiOrganizationHeader, 256))

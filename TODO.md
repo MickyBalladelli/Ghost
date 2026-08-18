@@ -63,7 +63,7 @@ Roadmap from the full project review. Order matters: protect user files first, t
 - [x] Move request construction into small provider-specific builders and test each request body independently.
 - [x] Support both OpenAI `/v1/chat/completions` and `/v1/responses`, including streamed tool-call deltas.
 - [x] Add configurable authentication headers, API key name, organization/project headers, proxy, TLS, and no-proxy settings for OpenAI-compatible servers.
-- [ ] Add adapters or tested compatibility profiles for Anthropic, Google/Gemini, Azure OpenAI, LM Studio, llama.cpp/llama-server, vLLM, and LiteLLM.
+- [x] Add adapters or tested compatibility profiles for Anthropic, Google/Gemini, Azure OpenAI, LM Studio, llama.cpp/llama-server, vLLM, and LiteLLM.
 - [ ] Keep an extension point for local HTTP servers with custom model discovery and request templates.
 - [ ] Make endpoint joining robust for trailing slashes, `/v1`, native Ollama routes, IPv6, and reverse proxies.
 - [ ] Add shared timeout, retry, status parsing, rate-limit handling, and normalized provider errors.

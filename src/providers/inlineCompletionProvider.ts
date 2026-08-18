@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { GhostConfig, ghostConfig } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
 import { createOpenAiTransportSettings } from '../services/openAiTransport'
+import { isFimCompatibleProfile, resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 
 export type FimCompletionFetcher = (
   baseUrl: string,
@@ -102,6 +103,10 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       return []
     }
 
+    if (settings.provider === 'openai-compatible' && !isFimCompatibleProfile(settings.openaiProfile)) {
+      return []
+    }
+
     const requestId = ++this.requestSequence
     const { prefix, suffix } = getDocumentPrefixAndSuffix(document, position)
 
@@ -118,9 +123,9 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
     const cancellation = createCancellationSignal(token)
 
     try {
-      const useOpenAiCompatible = settings.provider === 'openai-compatible'
+      const useOpenAiCompatible = settings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
       const completion = await this.fetchCompletion(
-        useOpenAiCompatible ? settings.openaiUrl : settings.ollamaUrl,
+        useOpenAiCompatible ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl,
         {
           model: settings.autocompleteModel,
           prefix,

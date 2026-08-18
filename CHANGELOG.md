@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.0.97 - 2026-08-18
+
+- Added provider profiles and adapters for Anthropic, Google Gemini, Azure OpenAI, LM Studio, llama.cpp, vLLM, and LiteLLM.
+- Added provider-specific model discovery, authentication, streaming, and endpoint defaults.
+
 ## 1.0.96 - 2026-08-18
 
 - Included proxy transport dependencies in the VSIX so Ghost can activate.

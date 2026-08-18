@@ -16,7 +16,7 @@ import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler 
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
-import { createOpenAiTransportSettings } from '../services/openAiTransport'
+import { createProfiledProviderClient } from '../services/profiledProviderClient'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -817,12 +817,9 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
     {
       ollamaClient: new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => providerApiKey?.('ollama')),
       mlxClient: new MlxClient(settings.mlxUrl, undefined, () => providerApiKey?.('mlx-vlm')),
-      openaiCompatibleClient: new OllamaClient(
-        settings.openaiUrl,
-        'openai-compatible',
-        undefined,
-        () => providerApiKey?.('openai-compatible'),
-        createOpenAiTransportSettings(settings)
+      openaiCompatibleClient: createProfiledProviderClient(
+        settings,
+        () => providerApiKey?.('openai-compatible')
       )
     },
     {

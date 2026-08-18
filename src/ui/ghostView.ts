@@ -8,7 +8,8 @@ import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostProvider } from '../config'
 import { MlxClient } from '../services/mlxClient'
 import { OllamaClient } from '../services/ollamaClient'
-import { createOpenAiTransportSettings } from '../services/openAiTransport'
+import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
 import { atomicWriteFile } from '../tools/atomicFile'
@@ -1621,13 +1622,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     try {
       const client = settings.provider === 'mlx-vlm'
         ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
-        : new OllamaClient(
-            settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-            settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
-            undefined,
-            () => this.providerApiKey?.(settings.provider),
-            settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
-          )
+        : settings.provider === 'openai-compatible'
+          ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+          : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
       const online = await client.checkHealth(3000)
       if (this.disposed || generation !== this.controlsStateGeneration) {
         return
@@ -1635,7 +1632,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       connection = online ? 'online' : 'offline'
       if (online) {
         try {
-          models = await client.listModels()
+          models = client.listModels ? await client.listModels() : []
         } catch (error) {
           this.debugLog('provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
         }
@@ -1689,7 +1686,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
-        openaiUrl: settings.openaiUrl,
+        openaiUrl: resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl),
+        openaiProfile: settings.openaiProfile,
+        openaiApiVersion: settings.openaiApiVersion,
         openaiApiKeyHeader: settings.openaiApiKeyHeader,
         openaiApiKeyPrefix: settings.openaiApiKeyPrefix,
         openaiOrganizationHeader: settings.openaiOrganizationHeader,
@@ -1706,7 +1705,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         toolDenylist: settings.toolDenylist ?? [],
         terminalEnvironmentAllowlist: settings.terminalEnvironmentAllowlist,
         enableDebugLogging: settings.enableDebugLogging,
-        networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl) ? 'external' : 'local'
+        networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       connection,
@@ -1724,13 +1723,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const settings = getGhostSettings()
       const client = settings.provider === 'mlx-vlm'
       ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
-      : new OllamaClient(
-          settings.provider === 'openai-compatible' ? settings.openaiUrl : settings.ollamaUrl,
-          settings.provider === 'openai-compatible' ? 'openai-compatible' : 'ollama',
-          undefined,
-          () => this.providerApiKey?.(settings.provider),
-          settings.provider === 'openai-compatible' ? createOpenAiTransportSettings(settings) : undefined
-        )
+      : settings.provider === 'openai-compatible'
+        ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+        : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
     const online = await client.checkHealth(3000)
     if (online) {
       await vscode.window.showInformationMessage(`${settings.provider} provider is reachable.`)
@@ -1750,6 +1745,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
       await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+    }
+    if (typeof update.openaiProfile === 'string') {
+      await ghostConfig.update('openaiProfile', update.openaiProfile, target)
+    }
+    if (typeof update.openaiApiVersion === 'string' && update.openaiApiVersion.trim()) {
+      await ghostConfig.update('openaiApiVersion', update.openaiApiVersion.trim(), target)
     }
     const openAiTextSettings = [
       'openaiApiKeyHeader',

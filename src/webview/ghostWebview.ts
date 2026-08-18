@@ -2,6 +2,7 @@ type GhostViewStatus = 'ready' | 'offline'
 type NoticeKind = 'error' | 'no-model' | 'info'
 type MessageRole = 'user' | 'assistant'
 type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+type OpenAiProfile = 'generic' | 'anthropic' | 'gemini' | 'azure-openai' | 'lm-studio' | 'llama-cpp' | 'vllm' | 'litellm'
 type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
@@ -31,6 +32,8 @@ interface ControlSettings {
   ollamaUrl: string
   mlxUrl: string
   openaiUrl: string
+  openaiProfile: OpenAiProfile
+  openaiApiVersion: string
   openaiApiKeyHeader: string
   openaiApiKeyPrefix: string
   openaiOrganizationHeader: string
@@ -560,6 +563,8 @@ let controls: ControlSettings = {
   ollamaUrl: 'http://localhost:11434',
   mlxUrl: 'http://localhost:8000',
   openaiUrl: 'http://localhost:8001/v1',
+  openaiProfile: 'generic',
+  openaiApiVersion: '2024-10-21',
   openaiApiKeyHeader: 'Authorization',
   openaiApiKeyPrefix: 'Bearer',
   openaiOrganizationHeader: 'OpenAI-Organization',
@@ -758,6 +763,10 @@ app.innerHTML = `
           <label for="provider-endpoint">Provider endpoint</label>
           <input id="provider-endpoint" type="url" placeholder="http://localhost:11434">
           <p class="settings-help" id="provider-help">Endpoint for the selected provider.</p>
+          <label for="openai-profile">Compatibility profile</label>
+          <select id="openai-profile"><option value="generic">OpenAI-compatible</option><option value="anthropic">Anthropic</option><option value="gemini">Google Gemini</option><option value="azure-openai">Azure OpenAI</option><option value="lm-studio">LM Studio</option><option value="llama-cpp">llama.cpp</option><option value="vllm">vLLM</option><option value="litellm">LiteLLM</option></select>
+          <label for="openai-api-version">Azure API version</label>
+          <input id="openai-api-version" type="text" value="2024-10-21" placeholder="2024-10-21">
           <label for="openai-api-key-header">OpenAI API key header</label>
           <input id="openai-api-key-header" type="text" value="Authorization" placeholder="Authorization">
           <label for="openai-api-key-prefix">OpenAI API key prefix</label>
@@ -896,6 +905,8 @@ const composerHeightElement = document.getElementById('composer-height') as HTML
 const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
 const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
+const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
+const openAiApiVersionElement = document.getElementById('openai-api-version') as HTMLInputElement
 const openAiApiKeyHeaderElement = document.getElementById('openai-api-key-header') as HTMLInputElement
 const openAiApiKeyPrefixElement = document.getElementById('openai-api-key-prefix') as HTMLInputElement
 const openAiOrganizationHeaderElement = document.getElementById('openai-organization-header') as HTMLInputElement
@@ -982,6 +993,8 @@ const createPersistedState = () => ({
     ollamaUrl: controls.ollamaUrl,
     mlxUrl: controls.mlxUrl,
     openaiUrl: controls.openaiUrl,
+    openaiProfile: controls.openaiProfile,
+    openaiApiVersion: controls.openaiApiVersion,
     openaiApiKeyHeader: controls.openaiApiKeyHeader,
     openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
     openaiOrganizationHeader: controls.openaiOrganizationHeader,
@@ -1104,6 +1117,8 @@ const sendSettingsUpdate = () => {
         ollamaUrl: controls.ollamaUrl,
         mlxUrl: controls.mlxUrl,
         openaiUrl: controls.openaiUrl,
+        openaiProfile: controls.openaiProfile,
+        openaiApiVersion: controls.openaiApiVersion,
         openaiApiKeyHeader: controls.openaiApiKeyHeader,
         openaiApiKeyPrefix: controls.openaiApiKeyPrefix,
         openaiOrganizationHeader: controls.openaiOrganizationHeader,
@@ -1154,6 +1169,17 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
     ? controls.openaiUrl
     : controls.ollamaUrl
 
+const openAiDefaultEndpoints: Record<OpenAiProfile, string> = {
+  generic: 'http://localhost:8001/v1',
+  anthropic: 'https://api.anthropic.com',
+  gemini: 'https://generativelanguage.googleapis.com',
+  'azure-openai': '',
+  'lm-studio': 'http://localhost:1234/v1',
+  'llama-cpp': 'http://localhost:8080/v1',
+  vllm: 'http://localhost:8000/v1',
+  litellm: 'http://localhost:4000/v1'
+}
+
 const applyUiPreferences = () => {
   const accent = /^#[0-9a-f]{6}$/i.test(uiPreferences.accentColor) ? uiPreferences.accentColor : ''
   document.documentElement.style.setProperty('--ghost-accent', accent || 'var(--vscode-textLink-foreground, #3794ff)')
@@ -1187,6 +1213,8 @@ const renderControls = () => {
   promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
   openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
+  openAiProfileElement.value = controls.openaiProfile
+  openAiApiVersionElement.value = controls.openaiApiVersion
   openAiApiKeyPrefixElement.value = controls.openaiApiKeyPrefix
   openAiOrganizationHeaderElement.value = controls.openaiOrganizationHeader
   openAiOrganizationElement.value = controls.openaiOrganization
@@ -1201,6 +1229,8 @@ const renderControls = () => {
   const openAiSettingsEnabled = controls.provider === 'openai-compatible'
   for (const element of [
     openAiApiKeyHeaderElement,
+    openAiProfileElement,
+    openAiApiVersionElement,
     openAiApiKeyPrefixElement,
     openAiOrganizationHeaderElement,
     openAiOrganizationElement,
@@ -2617,6 +2647,12 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.openaiUrl === 'string') {
         controls.openaiUrl = preferences.openaiUrl
       }
+      if (preferences.openaiProfile === 'generic' || preferences.openaiProfile === 'anthropic' || preferences.openaiProfile === 'gemini' || preferences.openaiProfile === 'azure-openai' || preferences.openaiProfile === 'lm-studio' || preferences.openaiProfile === 'llama-cpp' || preferences.openaiProfile === 'vllm' || preferences.openaiProfile === 'litellm') {
+        controls.openaiProfile = preferences.openaiProfile
+      }
+      if (typeof preferences.openaiApiVersion === 'string') {
+        controls.openaiApiVersion = preferences.openaiApiVersion
+      }
       if (typeof preferences.openaiApiKeyHeader === 'string') {
         controls.openaiApiKeyHeader = preferences.openaiApiKeyHeader
       }
@@ -3174,6 +3210,17 @@ providerElement.addEventListener('change', () => {
   queueModelRefresh()
 })
 
+openAiProfileElement.addEventListener('change', () => {
+  const previousDefault = openAiDefaultEndpoints[controls.openaiProfile]
+  controls.openaiProfile = openAiProfileElement.value as OpenAiProfile
+  if (!controls.openaiUrl || controls.openaiUrl === previousDefault || controls.openaiUrl === 'http://localhost:8001/v1') {
+    controls.openaiUrl = openAiDefaultEndpoints[controls.openaiProfile]
+  }
+  renderControls()
+  sendSettingsUpdate()
+  queueModelRefresh()
+})
+
 providerEndpointElement.addEventListener('change', () => {
   const endpoint = providerEndpointElement.value.trim()
   if (!endpoint) {
@@ -3203,6 +3250,7 @@ const updateOpenAiSettings = () => {
   controls.openaiTlsCaFile = openAiTlsCaFileElement.value.trim()
   controls.openaiTlsCertFile = openAiTlsCertFileElement.value.trim()
   controls.openaiTlsKeyFile = openAiTlsKeyFileElement.value.trim()
+  controls.openaiApiVersion = openAiApiVersionElement.value.trim()
   sendSettingsUpdate()
   saveState()
 }
@@ -3218,7 +3266,8 @@ for (const element of [
   openAiTlsRejectUnauthorizedElement,
   openAiTlsCaFileElement,
   openAiTlsCertFileElement,
-  openAiTlsKeyFileElement
+  openAiTlsKeyFileElement,
+  openAiApiVersionElement
 ]) {
   element.addEventListener('change', updateOpenAiSettings)
 }
