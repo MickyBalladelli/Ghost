@@ -3197,6 +3197,46 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         overflow-wrap: anywhere;
       }
 
+      .setup-check {
+        border-bottom: 1px solid var(--ghost-border);
+        display: grid;
+        gap: 6px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 12px 0;
+      }
+
+      .setup-check span {
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.85em;
+        grid-column: 1 / -1;
+      }
+
+      .setup-model-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        grid-column: 1 / -1;
+      }
+
+      .setup-model-chip {
+        background: var(--vscode-badge-background);
+        border-radius: 3px;
+        color: var(--vscode-badge-foreground);
+        font-size: 0.75em;
+        padding: 3px 6px;
+      }
+
+      .setup-capabilities {
+        background: var(--vscode-textCodeBlock-background);
+        border: 1px solid var(--ghost-border);
+        border-radius: 4px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 0.8em;
+        line-height: 1.4;
+        margin-top: 12px;
+        padding: 8px;
+      }
+
       .history-search-row {
         align-items: center;
         display: flex;

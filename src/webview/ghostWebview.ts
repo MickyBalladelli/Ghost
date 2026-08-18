@@ -125,6 +125,7 @@ interface UiPreferences {
   promptRows: number
   promptHistoryLimit: number
   workspaceRoot: string
+  firstRunSetupComplete: boolean
   workspaceOnly: boolean
 }
 
@@ -737,6 +738,7 @@ let uiPreferences: UiPreferences = {
   promptRows,
   promptHistoryLimit: defaultPromptHistoryLimit,
   workspaceRoot: '',
+  firstRunSetupComplete: false,
   workspaceOnly: false
 }
 let persistenceReady = false
@@ -748,6 +750,7 @@ let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
 let progressTimer: number | undefined
 let visibleMessageCount = 200
+let firstRunSetupOpened = false
 
 const formatElapsed = (milliseconds: number): string => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
@@ -1027,6 +1030,19 @@ app.innerHTML = `
         <div class="modal-footer"><button type="button" class="secondary" id="copy-diagnostics">Copy diagnostics</button><button type="button" class="secondary" id="quick-refresh-models">Refresh models</button><button type="button" class="secondary" data-close-modal="quick-switch-modal">Done</button></div>
       </section>
     </div>
+    <div class="modal-backdrop" id="first-run-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="first-run-title">
+        <div class="modal-header"><h2 id="first-run-title">Set up Ghost</h2><button type="button" class="icon-button" data-close-modal="first-run-modal" aria-label="Close setup">×</button></div>
+        <div class="modal-scroll">
+          <p class="modal-description">Check your local provider before your first request. Ghost stays local unless you choose an external endpoint.</p>
+          <div class="setup-check"><strong>1. Provider</strong><span id="setup-provider-status">Checking…</span><button type="button" class="secondary" id="setup-check-provider">Check provider</button></div>
+          <div class="setup-check"><strong>2. Models</strong><span id="setup-model-status">Waiting for model list…</span><div class="setup-model-list" id="setup-model-list"></div></div>
+          <div class="setup-check"><strong>3. Test request</strong><span id="setup-test-status">Optional: send one small request to verify generation.</span><button type="button" id="setup-test-request">Run test request</button></div>
+          <div class="setup-capabilities" id="setup-capabilities"></div>
+        </div>
+        <div class="modal-footer"><button type="button" id="finish-first-run">Finish setup</button></div>
+      </section>
+    </div>
     <div class="modal-backdrop" id="history-modal" hidden>
       <section class="modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
         <div class="modal-header"><h2 id="history-title">Conversation history</h2><button type="button" class="icon-button" data-close-modal="history-modal" aria-label="Close conversation history">×</button></div>
@@ -1176,6 +1192,15 @@ const quickConnectionStatusElement = document.getElementById('quick-connection-s
 const quickConnectionDetailsElement = document.getElementById('quick-connection-details') as HTMLElement
 const copyDiagnosticsElement = document.getElementById('copy-diagnostics') as HTMLButtonElement
 const quickRefreshModelsElement = document.getElementById('quick-refresh-models') as HTMLButtonElement
+const firstRunModalElement = document.getElementById('first-run-modal') as HTMLElement
+const setupProviderStatusElement = document.getElementById('setup-provider-status') as HTMLElement
+const setupCheckProviderElement = document.getElementById('setup-check-provider') as HTMLButtonElement
+const setupModelStatusElement = document.getElementById('setup-model-status') as HTMLElement
+const setupModelListElement = document.getElementById('setup-model-list') as HTMLElement
+const setupTestStatusElement = document.getElementById('setup-test-status') as HTMLElement
+const setupTestRequestElement = document.getElementById('setup-test-request') as HTMLButtonElement
+const setupCapabilitiesElement = document.getElementById('setup-capabilities') as HTMLElement
+const finishFirstRunElement = document.getElementById('finish-first-run') as HTMLButtonElement
 const settingsSearchElement = document.getElementById('settings-search') as HTMLInputElement
 const settingsGridElement = document.querySelector<HTMLElement>('.settings-grid') as HTMLElement
 const promptHistorySearchElement = document.getElementById('prompt-history-search') as HTMLInputElement
@@ -1278,6 +1303,7 @@ const createPersistedState = () => ({
     autoContext: uiPreferences.autoContext,
     customSystemInstructions: uiPreferences.customSystemInstructions,
     workspaceRoot: uiPreferences.workspaceRoot,
+    firstRunSetupComplete: uiPreferences.firstRunSetupComplete,
     workspaceOnly: uiPreferences.workspaceOnly,
     enableDebugLogging: controls.enableDebugLogging
   }
@@ -1657,6 +1683,32 @@ const renderQuickSwitch = (): void => {
   ].join(' · ')
 }
 
+const renderFirstRunSetup = (): void => {
+  const connectionLabel = connection === 'online' ? 'Connected' : connection === 'offline' ? 'Offline' : 'Checking…'
+  setupProviderStatusElement.textContent = `${connectionLabel} · ${controls.provider} · ${providerEndpoint()}`
+  setupModelStatusElement.textContent = availableModels.length > 0
+    ? `${availableModels.length} model${availableModels.length === 1 ? '' : 's'} available`
+    : 'No models reported yet'
+  setupModelListElement.textContent = ''
+  for (const model of availableModels.slice(0, 12)) {
+    const chip = document.createElement('span')
+    chip.className = 'setup-model-chip'
+    chip.textContent = model
+    setupModelListElement.append(chip)
+  }
+  if (availableModels.length > 12) {
+    const more = document.createElement('span')
+    more.className = 'setup-model-chip'
+    more.textContent = `+${availableModels.length - 12} more`
+    setupModelListElement.append(more)
+  }
+  const metadata = availableModelMetadata.find(item => item.id === controls.chatModel)
+  setupCapabilitiesElement.textContent = metadata
+    ? `Selected model: ${controls.chatModel}. ${metadata.supportsTools ? 'Tools supported.' : 'Tools unavailable; Ghost can still chat.'} ${metadata.supportsVision ? 'Vision supported.' : 'Vision unavailable.'} ${metadata.supportsStreaming ? 'Streaming supported.' : 'Streaming unavailable.'}`
+    : 'Capability details will appear after model discovery.'
+  setupTestRequestElement.disabled = Boolean(activeRequest) || connection === 'offline' || !controls.chatModel
+}
+
 const renderSettingsSearch = (): void => {
   const query = settingsSearchElement.value.trim().toLowerCase()
   const children = Array.from(settingsGridElement.children) as HTMLElement[]
@@ -1833,6 +1885,7 @@ const renderControls = () => {
       ? controls.networkAccess === 'external' ? 'Offline · external endpoint' : 'Offline'
       : 'Checking…'
   renderQuickSwitch()
+  renderFirstRunSetup()
 
   attachmentListElement.textContent = ''
   attachmentLimitElement.textContent = `${attachments.length}/${maxAttachments} attachments · max 1 MB text · 700 KB images`
@@ -3882,6 +3935,9 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
       if (typeof preferences.workspaceRoot === 'string') {
         uiPreferences.workspaceRoot = preferences.workspaceRoot
       }
+      if (typeof preferences.firstRunSetupComplete === 'boolean') {
+        uiPreferences.firstRunSetupComplete = preferences.firstRunSetupComplete
+      }
       if (typeof preferences.workspaceOnly === 'boolean') {
         uiPreferences.workspaceOnly = preferences.workspaceOnly
       }
@@ -3936,6 +3992,11 @@ const handleExtensionMessage = (message: GhostExtensionMessage) => {
     viewStatus = connection === 'offline' ? 'offline' : 'ready'
     contextData = { ...message.context, tools: message.tools }
     render(false)
+    if (!uiPreferences.firstRunSetupComplete && !firstRunSetupOpened) {
+      firstRunSetupOpened = true
+      renderFirstRunSetup()
+      setModalVisibility(firstRunModalElement, true)
+    }
     return
   }
   if (message.type === 'file-picked') {
@@ -4666,6 +4727,24 @@ copyDiagnosticsElement.addEventListener('click', () => {
     `Models available: ${availableModels.join(', ') || 'none'}`
   ].filter(Boolean).join('\n')
   void copyText(diagnostics)
+})
+setupCheckProviderElement.addEventListener('click', () => {
+  setupProviderStatusElement.textContent = 'Checking provider…'
+  testProviderElement.click()
+})
+setupTestRequestElement.addEventListener('click', () => {
+  if (activeRequest) {
+    setupTestStatusElement.textContent = 'Finish the current request before running the setup test.'
+    return
+  }
+  setupTestStatusElement.textContent = 'Test request sent. Watch the conversation for the result.'
+  setModalVisibility(firstRunModalElement, false)
+  submitPrompt('Reply with exactly READY so I can verify the selected model.')
+})
+finishFirstRunElement.addEventListener('click', () => {
+  uiPreferences.firstRunSetupComplete = true
+  saveState()
+  setModalVisibility(firstRunModalElement, false)
 })
 document.getElementById('history')?.addEventListener('click', () => {
   renderHistory()
