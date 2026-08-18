@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.6 - 2026-08-18
+
+- Stops repeated identical file reads instead of looping on the same file range.
+
 ## 1.1.5 - 2026-08-18
 
 - Fixed workspace search when VS Code starts with a reduced PATH and cannot find ripgrep by command name.

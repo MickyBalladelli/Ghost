@@ -12,6 +12,7 @@ import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalTools'
+import { resolveWorkspacePath } from '../tools/workspacePath'
 import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler } from './toolCallParser'
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
@@ -265,6 +266,26 @@ function isStaleEditConflict(value: string): boolean {
 
 function isFileEditTool(name: LocalToolCall['name']): boolean {
   return name === 'ghost_write_file' || name === 'ghost_apply_edit' || name === 'ghost_apply_transaction'
+}
+
+function readToolCallSignature(call: LocalToolCall): string | undefined {
+  if (call.name !== 'ghost_read_file' || typeof call.arguments.path !== 'string') {
+    return undefined
+  }
+
+  let filePath = call.arguments.path
+  try {
+    filePath = resolveWorkspacePath(filePath).fsPath
+  } catch {
+    // Validation already reports invalid paths. Keep a fallback key for safety.
+  }
+
+  const options = Object.keys(call.arguments)
+    .filter(key => key !== 'path')
+    .sort()
+    .map(key => [key, call.arguments[key]])
+
+  return JSON.stringify([filePath, options])
 }
 
 function getEditPath(call: LocalToolCall): string | undefined {
@@ -1064,6 +1085,7 @@ export function createChatParticipantHandler(
       let emptyProviderRetries = 0
       let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
+      const completedReadCalls = new Set<string>()
       const budget: RequestBudget = {
         startedAt: requestStartedAt,
         files: new Set<string>(),
@@ -1233,6 +1255,14 @@ export function createChatParticipantHandler(
           continue
         }
 
+        const readSignature = readToolCallSignature(toolCall)
+        if (readSignature && completedReadCalls.has(readSignature)) {
+          const message = 'Ghost stopped because it requested the same file range again. The previous read result is already in context; retry with a different range or continue with the task.'
+          requestOptions.onStop?.('invalid-model-response', message)
+          response.markdown(message)
+          return
+        }
+
         response.progress(`Running ${toolCall.name}`)
         const approval = requestOptions.approveTool
           ? await requestOptions.approveTool(toolCall)
@@ -1368,6 +1398,7 @@ export function createChatParticipantHandler(
           fileEditStates.set(editPath, editState)
         }
         if (editPaths.length > 0 && !editFailed && !editNoOp) {
+          completedReadCalls.clear()
           successfulWorkspaceChange = true
           const cost = getEditCost(toolCall, approval.selectedHunkIndexes)
           if (cost) {
@@ -1377,6 +1408,9 @@ export function createChatParticipantHandler(
             budget.changedLines += cost.changedLines
             budget.changedBytes += cost.changedBytes
           }
+        }
+        if (readSignature && !editFailed) {
+          completedReadCalls.add(readSignature)
         }
       }
 
