@@ -1012,8 +1012,9 @@ async function streamModelTurn(
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
+): Promise<{ generated: string; streamed: boolean; streamedText?: string; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
   let generated = ''
+  let streamedText = ''
   let modelCharacters = 0
   let visibleCharacters = 0
   let decided = false
@@ -1038,6 +1039,7 @@ async function streamModelTurn(
       if (value.trim()) {
         visibleCharacters += value.trim().length
       }
+      streamedText += value
       response.markdown(value)
     }
     if (showReasoning) {
@@ -1189,6 +1191,7 @@ async function streamModelTurn(
       ? JSON.stringify({ tool: completedNativeToolCall.name, arguments: completedNativeToolCall.arguments })
       : bufferingToolCall ? toolCallAssembler.getText() : generated.trim(),
     streamed: completedNativeToolCall ? false : decided && !bufferingToolCall,
+    ...(streamedText ? { streamedText } : {}),
     modelTokens: Math.ceil(modelCharacters / 4),
     splitSuggested: false,
     visibleText: visibleCharacters > 0 || generated.trim().length > 0,
@@ -1396,11 +1399,11 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (token.isCancellationRequested || turn.streamed) {
+        if (token.isCancellationRequested || (turn.streamed && (successfulWorkspaceChange || !workspaceChangeRequested))) {
           return
         }
 
-        const generated = turn.generated
+        const generated = turn.generated || (turn.streamed ? turn.streamedText ?? '' : '')
 
         if (turn.splitSuggested) {
           if (splitEditRetries < GHOST_RETRY_POLICIES.splitEdit.maxRetries) {

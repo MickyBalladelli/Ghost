@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.61 - 2026-08-19
+
+- Continue workspace requests when the model streams a planning sentence instead of calling a tool, so Ghost can recover and request the required file operation.
+
 ## 1.1.60 - 2026-08-19
 
 - Add clear collapse/expand buttons for the provider controls and provider settings areas, with a top-aligned chevron toggle.
