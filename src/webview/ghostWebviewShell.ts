@@ -236,9 +236,9 @@ const createAppShell = (iconUri: string): HTMLDivElement => {
     ])
   ])
   const providerAreaContent = createElement('div', { className: 'provider-area-content', id: 'provider-area-content' }, [
-    label('Provider', 'provider', { className: 'control-label' }), select('provider', providerOptions, { 'aria-label': 'Model provider' }),
-    label('Model', 'model', { className: 'control-label' }), select('model', [], { 'aria-label': 'Chat model' }),
-    label('Profile', 'model-profile', { className: 'control-label' }), select('model-profile', [], { 'aria-label': 'Model profile' }),
+    createElement('div', { className: 'provider-field' }, [label('Provider', 'provider', { className: 'control-label' }), select('provider', providerOptions, { 'aria-label': 'Model provider' })]),
+    createElement('div', { className: 'provider-field' }, [label('Model', 'model', { className: 'control-label' }), select('model', [], { 'aria-label': 'Chat model' })]),
+    createElement('div', { className: 'provider-field' }, [label('Profile', 'model-profile', { className: 'control-label' }), select('model-profile', [], { 'aria-label': 'Model profile' })]),
     createElement('span', { className: 'model-profile-effective', id: 'model-profile-effective', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),
     createElement('span', { className: 'model-capabilities', id: 'model-capabilities', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),
     createElement('span', { className: 'connection-indicator', id: 'connection-indicator', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }, [createElement('span', { className: 'status-dot', 'aria-hidden': 'true' }), createElement('span', { id: 'connection-text' }, ['Checking…'])]),

@@ -2,9 +2,12 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.57 - 2026-08-19
+## 1.1.60 - 2026-08-19
 
-- Add clear collapse/expand buttons for the provider controls and provider settings areas, with a top-aligned chevron toggle beside the Provider label.
+- Add clear collapse/expand buttons for the provider controls and provider settings areas, with a top-aligned chevron toggle.
+- Align Provider, Model, and Profile labels above their controls and allow provider status text to wrap fully.
+- Stack the Provider, Model, and Profile fields vertically.
+- Wrap those label/select groups together, keeping them on one row when space allows.
 
 ## 1.1.53 - 2026-08-19
 

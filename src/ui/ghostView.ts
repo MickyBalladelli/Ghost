@@ -2593,11 +2593,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .control-strip {
-        align-items: center;
+        align-items: start;
         border-bottom: 1px solid var(--ghost-border);
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
         gap: 6px;
+        grid-template-columns: minmax(0, 1fr);
         padding: 7px 10px;
       }
 
@@ -2612,6 +2612,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         min-height: 30px;
         padding: 5px 9px;
         align-self: flex-start;
+        grid-column: 1;
+        grid-row: 1;
         width: 30px;
       }
 
@@ -2633,12 +2635,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .provider-area-content {
-        align-items: center;
+        align-items: start;
         display: flex;
-        flex: 1 1 220px;
         flex-wrap: wrap;
         gap: 6px;
         min-width: 0;
+        width: 100%;
       }
 
       .provider-area-content[hidden] {
@@ -2648,6 +2650,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .control-label {
         color: var(--vscode-descriptionForeground);
         font-size: 0.78em;
+      }
+
+      .provider-field {
+        display: flex;
+        flex: 1 1 150px;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .provider-field select {
+        max-width: none;
+        width: 100%;
       }
 
       select,
@@ -2670,12 +2685,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .model-capabilities {
         color: var(--vscode-descriptionForeground);
-        flex-basis: 100%;
+        flex: 1 1 100%;
         font-size: 0.72em;
         line-height: 1.35;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
 
       .connection-indicator {
@@ -2756,11 +2771,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .model-profile-effective {
         color: var(--vscode-descriptionForeground);
-        flex: 1 1 220px;
+        flex: 1 1 100%;
         font-size: 0.72em;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        white-space: normal;
       }
 
       .history-button .ui-icon {
