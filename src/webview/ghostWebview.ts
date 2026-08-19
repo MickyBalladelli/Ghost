@@ -2160,8 +2160,8 @@ const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTML
     : renderMarkdown(message.content, showThinkingPlaceholder)
   replaceMarkup(article, `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
-    ${partSummary}
     <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
+    ${partSummary}
     ${responseStats}
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
@@ -2496,8 +2496,11 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   const summary = renderMessagePartSummary(message)
   if (existingSummary) {
     replaceElementMarkup(existingSummary, summary || '<div class="message-part-summary" hidden></div>')
+    if (body) {
+      body.after(existingSummary)
+    }
   } else if (summary) {
-    body?.before(createMarkupFragment(summary))
+    body?.after(createMarkupFragment(summary))
   }
   const existingStats = element.querySelector<HTMLElement>('.message-response-stats')
   const stats = renderResponseStats(message)

@@ -1015,6 +1015,7 @@ async function streamModelTurn(
 ): Promise<{ generated: string; streamed: boolean; streamedText?: string; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
   let generated = ''
   let streamedText = ''
+  let bufferedVisibleText = ''
   let modelCharacters = 0
   let visibleCharacters = 0
   let decided = false
@@ -1040,7 +1041,11 @@ async function streamModelTurn(
         visibleCharacters += value.trim().length
       }
       streamedText += value
-      response.markdown(value)
+      if (bufferForToolCall) {
+        bufferedVisibleText += value
+      } else {
+        response.markdown(value)
+      }
     }
     if (showReasoning) {
       emitMarkdown(chunk)
@@ -1186,6 +1191,9 @@ async function streamModelTurn(
   const completedNativeToolCall = nativeToolName
     ? parseNativeLocalToolCall(nativeToolName, nativeToolArguments)
     : undefined
+  if (bufferForToolCall && !bufferingToolCall && bufferedVisibleText) {
+    response.markdown(bufferedVisibleText)
+  }
   return {
     generated: completedNativeToolCall
       ? JSON.stringify({ tool: completedNativeToolCall.name, arguments: completedNativeToolCall.arguments })

@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.62 - 2026-08-19
+
+- Keep partial tool JSON and pre-tool planning text out of the visible response while streamed tool calls are being assembled.
+- Place approval and tool-progress sections after assistant output so new output and approval stay at the bottom.
+
 ## 1.1.61 - 2026-08-19
 
 - Continue workspace requests when the model streams a planning sentence instead of calling a tool, so Ghost can recover and request the required file operation.
