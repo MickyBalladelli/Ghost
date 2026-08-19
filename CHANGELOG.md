@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.51 - 2026-08-19
+
+- Restore the three provider choices whenever the controls render.
+
 ## 1.1.50 - 2026-08-19
 
 - Retry missing workspace paths with relative-path guidance instead of stopping the request.

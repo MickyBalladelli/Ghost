@@ -66,6 +66,25 @@ const defaultGenerationSettings = {
   responseLength: 'balanced' as ResponseLength
 }
 
+const providerChoices: Array<{ value: GhostProvider; label: string }> = [
+  { value: 'ollama', label: 'Ollama' },
+  { value: 'mlx-vlm', label: 'MLX / VLM' },
+  { value: 'openai-compatible', label: 'OpenAI-compatible' }
+]
+
+const renderProviderOptions = (element: HTMLSelectElement, selectedProvider: GhostProvider): void => {
+  element.textContent = ''
+  for (const provider of providerChoices) {
+    const option = document.createElement('option')
+    option.value = provider.value
+    option.textContent = provider.label
+    element.append(option)
+  }
+  element.value = providerChoices.some(provider => provider.value === selectedProvider)
+    ? selectedProvider
+    : providerChoices[0].value
+}
+
 const MAX_FAILED_TOOL_RETRIES = 2
 const maxAttachments = 8
 const maxImageAttachmentBytes = 700 * 1024
@@ -1039,7 +1058,7 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
 }
 
 const renderQuickSwitch = (): void => {
-  quickProviderElement.value = controls.provider
+  renderProviderOptions(quickProviderElement, controls.provider)
   quickModelElement.textContent = ''
   for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
     const option = document.createElement('option')
@@ -1116,7 +1135,7 @@ const renderSettingsSearch = (): void => {
 }
 
 const renderControls = () => {
-  providerElement.value = controls.provider
+  renderProviderOptions(providerElement, controls.provider)
   modelElement.textContent = ''
   for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
     const option = document.createElement('option')
