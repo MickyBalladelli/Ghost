@@ -2,6 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.65 - 2026-08-19
+
+- Keep live progress and approval sections in one current block, preventing stale approval cards from appearing before newer progress output.
+
+## 1.1.64 - 2026-08-19
+
+- Keep “Ghost is thinking…” after the assistant output and approval section.
+
 ## 1.1.62 - 2026-08-19
 
 - Keep partial tool JSON and pre-tool planning text out of the visible response while streamed tool calls are being assembled.

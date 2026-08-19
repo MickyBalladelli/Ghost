@@ -2157,11 +2157,15 @@ const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTML
   const shouldDeferMarkdown = deferMarkdown && message.content.length > 500
   const messageBody = shouldDeferMarkdown
     ? '<p>Older message will render when visible.</p>'
-    : renderMarkdown(message.content, showThinkingPlaceholder)
+    : renderMarkdown(message.content, false)
+  const thinkingStatus = showThinkingPlaceholder
+    ? `<div class="message-thinking-status message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</div>`
+    : ''
   replaceMarkup(article, `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
     ${partSummary}
+    ${thinkingStatus}
     ${responseStats}
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
@@ -2478,12 +2482,12 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   const body = element.querySelector<HTMLElement>('.message-body')
   const status = element.querySelector<HTMLElement>('.message-state')
   const hasRenderedOutput = Boolean(body?.textContent?.trim())
+  const showThinkingPlaceholder = message.role === 'assistant' && (
+    message.status === 'streaming' ||
+    ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
+  )
   if (body && body.dataset.deferredMarkdown !== 'true' && (message.content.trim() || !hasRenderedOutput)) {
-    const showThinkingPlaceholder = message.role === 'assistant' && (
-      message.status === 'streaming' ||
-      ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-    )
-    body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
+    body.replaceChildren(renderMarkdownFragment(message.content, false))
   }
   if (status) {
     status.textContent = message.status === 'streaming'
@@ -2495,12 +2499,34 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   const existingSummary = element.querySelector<HTMLElement>('.message-part-summary')
   const summary = renderMessagePartSummary(message)
   if (existingSummary) {
-    replaceElementMarkup(existingSummary, summary || '<div class="message-part-summary" hidden></div>')
-    if (body) {
-      body.after(existingSummary)
+    const replacement = createMarkupFragment(summary || '<div class="message-part-summary" hidden></div>')
+    const replacementSummary = replacement.firstElementChild
+    existingSummary.replaceWith(replacement)
+    if (body && replacementSummary) {
+      body.after(replacementSummary)
     }
   } else if (summary) {
     body?.after(createMarkupFragment(summary))
+  }
+  const thinkingStatus = showThinkingPlaceholder
+    ? `<div class="message-thinking-status message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</div>`
+    : ''
+  const existingThinkingStatus = element.querySelector<HTMLElement>('.message-thinking-status')
+  if (existingThinkingStatus) {
+    if (thinkingStatus) {
+      const replacement = createMarkupFragment(thinkingStatus)
+      const replacementStatus = replacement.firstElementChild
+      existingThinkingStatus.replaceWith(replacement)
+      const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary') ?? body
+      if (summaryAnchor && replacementStatus) {
+        summaryAnchor.after(replacementStatus)
+      }
+    } else {
+      existingThinkingStatus.remove()
+    }
+  } else if (thinkingStatus) {
+    const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary') ?? body
+    summaryAnchor?.after(createMarkupFragment(thinkingStatus))
   }
   const existingStats = element.querySelector<HTMLElement>('.message-response-stats')
   const stats = renderResponseStats(message)
@@ -2553,7 +2579,7 @@ const lazyMessageObserver = typeof IntersectionObserver === 'undefined'
         ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
       )
       if (message.content.trim() || !body.textContent?.trim()) {
-        body.replaceChildren(renderMarkdownFragment(message.content, showThinkingPlaceholder))
+        body.replaceChildren(renderMarkdownFragment(message.content, false))
       }
       lazyMessageObserver?.unobserve(element)
     }

@@ -3660,6 +3660,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         font-weight: 400;
       }
 
+      .message-thinking-status {
+        margin-top: 8px;
+      }
+
       .message-response-stats {
         color: var(--vscode-descriptionForeground);
         font-size: 0.8em;
