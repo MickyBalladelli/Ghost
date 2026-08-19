@@ -1230,13 +1230,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       tool: call.name,
       toolCallId: pending.toolCallId,
       arguments: argumentsPayload,
-      requiresApproval,
+      requiresApproval: needsInteractiveApproval,
       ...(diffPreview ? { diffPreview } : {}),
       detail: blockedByPolicy
         ? 'Blocked by workspace tool policy'
         : terminalAudit ? formatTerminalAudit(terminalAudit)
         : autoAcceptedFileEdit ? 'Auto-accepting file edit'
-        : requiresApproval ? 'Waiting for approval' : 'Running safe workspace tool',
+        : needsInteractiveApproval ? 'Waiting for approval' : 'Running approved workspace tool',
       phase: 'tool'
     })
 
