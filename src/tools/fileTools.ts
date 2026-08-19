@@ -649,6 +649,16 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     const uri = resolveWorkspacePath(options.input.path)
     const workspaceRoot = getWorkspaceRoot()
     const relativePrefix = path.relative(workspaceRoot.fsPath, uri.fsPath)
+    const displayPath = relativePrefix.split(path.sep).join('/') || '.'
+    let stat: vscode.FileStat
+    try {
+      stat = await vscode.workspace.fs.stat(uri)
+    } catch {
+      throw new Error(`Directory '${displayPath}' was not found in the current workspace. Retry with a workspace-relative directory path.`)
+    }
+    if ((stat.type & vscode.FileType.Directory) === 0) {
+      throw new Error(`'${displayPath}' is a file, not a directory. Retry with the containing workspace-relative directory path.`)
+    }
     const entries: string[] = []
     const recursive = options.input.recursive ?? false
     const cursor = options.input.cursor === undefined ? 0 : Number(options.input.cursor)
@@ -676,9 +686,9 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     const pageResult = paginateDirectoryEntries(entries, cursor, pageSize)
     const { entries: page, hasMore, nextCursor } = pageResult
     const suffix = hasMore
-      ? `\n\n[Directory page truncated. Continue with ghost_list_directory({"path":"${uri.fsPath}","recursive":${recursive},"pageSize":${pageSize},"maxDepth":${maxDepth},"cursor":"${nextCursor}"}).]`
+      ? `\n\n[Directory page truncated. Continue with ghost_list_directory({"path":"${displayPath}","recursive":${recursive},"pageSize":${pageSize},"maxDepth":${maxDepth},"cursor":"${nextCursor}"}).]`
       : ''
-    return textResult(`Directory: ${uri.fsPath}\nWorkspace-relative base: ${relativePrefix || '.'}\nDepth limit: ${maxDepth}\nEntries ${page.length === 0 ? 0 : cursor + 1}-${cursor + page.length}${hasMore ? '+' : ''}\n\n${page.join('\n') || '[empty]'}${suffix}`)
+    return textResult(`Directory: ${displayPath}\nWorkspace-relative base: ${displayPath}\nDepth limit: ${maxDepth}\nEntries ${page.length === 0 ? 0 : cursor + 1}-${cursor + page.length}${hasMore ? '+' : ''}\n\n${page.join('\n') || '[empty]'}${suffix}`)
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ListDirectoryInput>): vscode.PreparedToolInvocation {

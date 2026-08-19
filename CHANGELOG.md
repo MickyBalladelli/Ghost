@@ -2,8 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.50 - 2026-08-19
+
+- Retry missing workspace paths with relative-path guidance instead of stopping the request.
+- Keep directory tool results and continuation paths workspace-relative.
+
 ## 1.1.47 - 2026-08-18
 
+- Keep the conversation pinned to the latest message during streaming updates.
 - Keep successful completion records from appearing as failed when their checks mention errors.
 - Show completion records only for successfully completed workspace tasks.
 - Clear cached file reads before retrying a stale edit so rebase recovery reads current workspace content.

@@ -41,7 +41,7 @@ const SYSTEM_PROMPT = [
   'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
   'When using a tool, do not explain the plan first; emit the tool call as the complete response. Keep each ghost_apply_edit hunk small: do not put an entire large component into one replacement. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against nearby file content. Split large work into several focused tool calls and inspect the file between them.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, ghost_write_file, or ghost_apply_transaction.',
-  'Every file or directory tool call must include a non-empty path inside the current workspace. Use a path relative to the workspace root when possible, such as src/app.ts; absolute workspace paths remain accepted for compatibility. Never omit path or use a path outside the workspace. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
+  'Every file or directory tool call must include a non-empty path inside the current workspace. Always use a path relative to the workspace root when possible, such as src/app.ts. Never copy an absolute path from another workspace, invent a directory, omit path, or use a path outside the workspace. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
   'Available tools: ghost_read_file({"path":"src/file.ts or absolute workspace path","allowSpecialFile":false,"mode":"head|tail|lines|bytes|symbol|matches","lineCount":200,"startLine":1,"endLine":400,"startByte":0,"endByte":12000,"symbol":"Name","match":"text","caseSensitive":true,"maxMatches":100}), ghost_search_workspace({"query":"text","path":"optional relative or absolute workspace path","glob":"optional glob","maxResults":100}), ghost_write_file({"path":"src/file.ts or absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"src/file.ts or absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"src/one.ts or absolute workspace path","content":"full text"},{"path":"src/two.ts or absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional relative or absolute workspace path"}), ghost_list_directory({"path":"src or absolute workspace path","recursive":true,"pageSize":100,"maxDepth":3,"cursor":"0"}).',
   'Diagnostics tool: ghost_get_diagnostics({"path":"optional relative or absolute workspace file path","severity":"error|warning|information|hint","maxResults":100}) reads compiler and Problems-panel diagnostics. Omit path for the active file or workspace.',
   'Read source rule: ghost_read_file needs source:"editor" for an open unsaved buffer or source:"disk" for the saved file. If the file is dirty and source is omitted, the tool pauses and asks you to choose. Never edit a file while its editor buffer has unsaved changes; ask the user to save or discard them first.',
@@ -482,6 +482,28 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
     }
   }
   return undefined
+}
+
+const PATH_RECOVERY_TOOLS = new Set([
+  'ghost_read_file',
+  'ghost_search_workspace',
+  'ghost_get_diagnostics',
+  'ghost_git_context',
+  'ghost_list_directory'
+])
+
+function getPathRecoveryKey(call: LocalToolCall, result: string): string | undefined {
+  if (!PATH_RECOVERY_TOOLS.has(call.name)) {
+    return undefined
+  }
+  const pathValue = call.arguments.path
+  if (typeof pathValue !== 'string' || !pathValue.trim()) {
+    return undefined
+  }
+  if (!/enoent|not found|does not exist|inside the current workspace|not a directory|no such file|no such directory/i.test(result)) {
+    return undefined
+  }
+  return `${call.name}:${pathValue}`
 }
 
 export interface ChatParticipantOptions {
@@ -1294,6 +1316,7 @@ export function createChatParticipantHandler(
       let toolCallCount = 0
       let missingToolRetries = 0
       let invalidToolRetries = 0
+      const pathRecoveryRetries = new Map<string, number>()
       let emptyResponseRetries = 0
       let staleEditRetries = 0
       const staleEditRecoveryPaths = new Set<string>()
@@ -1631,6 +1654,23 @@ export function createChatParticipantHandler(
         }
 
         response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult)}`)
+
+        const pathRecoveryKey = getPathRecoveryKey(toolCall, toolResult)
+        if (pathRecoveryKey) {
+          const retries = pathRecoveryRetries.get(pathRecoveryKey) ?? 0
+          if (retries < 2) {
+            pathRecoveryRetries.set(pathRecoveryKey, retries + 1)
+            response.progress('The workspace path was not found. Asking Ghost to retry with a workspace-relative path.')
+            messages.push(
+              { role: 'assistant', content: generated },
+              {
+                role: 'user',
+                content: `Tool result for ${toolCall.name}:\n${toolResult}\nRetry this workspace operation now with a path relative to the current workspace, such as TODO.md or src/file.ts. Do not reuse an absolute path from another workspace or invent a directory name.`
+              }
+            )
+            continue
+          }
+        }
 
         messages.push(
           { role: 'assistant', content: generated },
