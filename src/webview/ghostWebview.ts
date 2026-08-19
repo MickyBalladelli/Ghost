@@ -3585,14 +3585,14 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
         setupTestStatusElement.textContent = `Test failed: ${status}.`
       }
       setModalVisibility(firstRunModalElement, true)
-    } else if (completionRecord && hasMeaningfulCompletionRecord) {
+    } else if (status === 'completed' && completionRecord && hasMeaningfulCompletionRecord) {
       conversation.completionRecord = completionRecord
-    } else if (status !== 'completed' || usedWorkspaceTools) {
+    } else if (status === 'completed' && usedWorkspaceTools) {
       conversation.completionRecord = {
         changedFiles: workspaceChangedFiles,
         checksRun: [],
-        failures: status === 'completed' ? [] : [`Request ended before completion (${status}).`],
-        remainingWork: status === 'completed' ? [] : ['Review the result and retry the request if needed.'],
+        failures: [],
+        remainingWork: [],
         recordedAt: Date.now()
       }
     } else {

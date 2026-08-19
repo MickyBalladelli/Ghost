@@ -1618,6 +1618,7 @@ export function createChatParticipantHandler(
           for (const path of editPaths) {
             staleEditRecoveryPaths.add(path)
           }
+          completedReadCalls.clear()
           response.progress('Edit was stale. Asking Ghost to refresh the file and rebase the change.')
           messages.push({
             role: 'assistant',

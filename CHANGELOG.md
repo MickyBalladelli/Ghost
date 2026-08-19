@@ -4,6 +4,9 @@ All notable changes to this extension are documented here.
 
 ## 1.1.47 - 2026-08-18
 
+- Show completion records only for successfully completed workspace tasks.
+- Clear cached file reads before retrying a stale edit so rebase recovery reads current workspace content.
+
 - Allow slow local models up to five minutes to start returning provider output before timing out.
 
 ## 1.1.46 - 2026-08-18
