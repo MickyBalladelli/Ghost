@@ -2,6 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.53 - 2026-08-19
+
+- Reject incomplete symbol and matching-file reads before execution, so Ghost can repair the tool call instead of stopping.
+
+## 1.1.52 - 2026-08-19
+
+- Refresh models after the provider setting is applied and select a model returned by the new provider.
+
 ## 1.1.51 - 2026-08-19
 
 - Restore the three provider choices whenever the controls render.

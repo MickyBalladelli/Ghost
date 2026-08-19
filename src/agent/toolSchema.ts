@@ -160,6 +160,12 @@ function validateReadFile(input: Arguments): string | undefined {
     ?? optionalNonEmptyString(input, 'match')
     ?? optionalBoolean(input, 'caseSensitive')
     ?? optionalInteger(input, 'maxMatches', 1, 200)
+    ?? (input.mode === 'symbol' && (typeof input.symbol !== 'string' || !input.symbol.trim())
+      ? invalid('symbol', "is required when mode is 'symbol'.")
+      : undefined)
+    ?? (input.mode === 'matches' && (typeof input.match !== 'string' || !input.match.trim())
+      ? invalid('match', "is required when mode is 'matches'.")
+      : undefined)
 }
 
 function validateSearch(input: Arguments): string | undefined {

@@ -18,7 +18,8 @@ export const GHOST_NATIVE_TOOL_DEFINITIONS: ChatToolDefinition[] = [
           startLine: { type: 'integer', minimum: 1 },
           endLine: { type: 'integer', minimum: 1 },
           lineCount: { type: 'integer', minimum: 1 },
-          match: stringProperty
+          symbol: { type: 'string', description: "Required when mode is 'symbol'." },
+          match: { type: 'string', description: "Required when mode is 'matches'." }
         },
         required: ['path'],
         additionalProperties: false

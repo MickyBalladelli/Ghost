@@ -3322,11 +3322,16 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'controls-state') {
+    const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
+    const selectedModel = incomingModels.includes(message.settings.chatModel)
+      ? message.settings.chatModel
+      : incomingModels[0] ?? message.settings.chatModel
     controls = {
       ...message.settings,
+      chatModel: selectedModel,
       fileEditApproval: message.settings.autoAcceptScope
     }
-    availableModels = message.models
+    availableModels = incomingModels
     availableModelMetadata = message.modelMetadata?.filter(metadata => metadata && typeof metadata.id === 'string').map(metadata => ({
       ...metadata,
       provider: metadata.provider as GhostProvider,
@@ -3341,6 +3346,9 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     viewStatus = connection === 'offline' ? 'offline' : 'ready'
     contextData = { ...message.context, tools: message.tools }
     render(false)
+    if (selectedModel !== message.settings.chatModel && incomingModels.length > 0) {
+      sendSettingsUpdate()
+    }
     if (!uiPreferences.firstRunSetupComplete && !firstRunSetupOpened) {
       firstRunSetupOpened = true
       renderFirstRunSetup()
@@ -3869,9 +3877,9 @@ mentionMenuElement.addEventListener('click', event => {
 providerElement.addEventListener('change', () => {
   controls.provider = providerElement.value as GhostProvider
   availableModels = []
+  availableModelMetadata = []
   renderControls()
   sendSettingsUpdate()
-  queueModelRefresh()
 })
 
 openAiProfileElement.addEventListener('change', () => {
