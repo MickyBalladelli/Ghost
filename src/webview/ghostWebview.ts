@@ -2612,6 +2612,7 @@ const updateComposer = () => {
   promptElement.style.height = `${Math.min(promptElement.scrollHeight, composerHeight)}px`
   promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
   const busy = composerStore.isBusy(activeRequest?.status)
+  sendElement.hidden = busy
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   const entries = promptHistory()
   searchPromptHistoryElement.disabled = busy || entries.length === 0

@@ -2,9 +2,10 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.65 - 2026-08-19
+## 1.1.66 - 2026-08-19
 
 - Keep live progress and approval sections in one current block, preventing stale approval cards from appearing before newer progress output or after session approval.
+- Hide Send while a request is running so Stop is the only visible composer action.
 
 ## 1.1.64 - 2026-08-19
 
