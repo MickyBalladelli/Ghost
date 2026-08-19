@@ -1387,8 +1387,8 @@
   },
   "dependencies": {
     "@types/node-fetch": "^2.6.13",
-    "http-proxy-agent": "^7.0.2",
-    "https-proxy-agent": "^7.0.6",
-    "node-fetch": "^2.7.0"
+    "http-proxy-agent": "^9.1.0",
+    "https-proxy-agent": "^9.1.0",
+    "node-fetch": "^3.3.2"
   }
 }
