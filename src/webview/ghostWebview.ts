@@ -2077,21 +2077,15 @@ const messageDiffPath = (message: ChatMessage): string | undefined => {
 const renderRequestActionCard = (message: ChatMessage): string => {
   const active = requestIsActive(message)
   const stopped = requestIsStopped(message)
-  if (message.role !== 'assistant' || (!active && !stopped)) {
+  if (message.role !== 'assistant' || active || !stopped) {
     return ''
   }
   const diffPath = messageDiffPath(message)
-  const title = active ? 'Ghost is working' : `Ghost stopped: ${stopReasonLabel(message.stopReason)}`
-  const autoAcceptEnabled = active && controls.fileEditApproval !== 'confirm' && activeRequest?.autoAcceptDisabled !== true
-  const autoAcceptPaused = active && activeRequest?.autoAcceptDisabled === true
-  const detail = active
-    ? autoAcceptEnabled ? 'Auto-accept is enabled for file edits. Stop it below if needed.' : autoAcceptPaused ? 'Auto-accept is paused for this request. Future file edits will ask for approval.' : 'Stop this request if it is taking too long.'
-    : stopReasonDetail(message)
-  const hint = active ? '' : stopReasonHint(message.stopReason)
-  const actions = active
-    ? `<button type="button" class="request-card-button secondary" data-action="cancel-request" data-message-id="${escapeAttribute(message.id)}">Cancel</button>${autoAcceptEnabled ? `<button type="button" class="request-card-button secondary" data-action="disable-auto-accept" data-message-id="${escapeAttribute(message.id)}">Disable auto-accept</button>` : ''}`
-    : `<button type="button" class="request-card-button" data-action="retry" data-message-id="${escapeAttribute(message.id)}">Retry</button><button type="button" class="request-card-button" data-action="continue" data-message-id="${escapeAttribute(message.id)}">Continue</button><button type="button" class="request-card-button secondary" data-action="regenerate" data-message-id="${escapeAttribute(message.id)}">Regenerate</button>${diffPath ? `<button type="button" class="request-card-button secondary" data-action="open-diff" data-message-id="${escapeAttribute(message.id)}">Open Diff</button>` : ''}`
-  return `<section class="request-action-card ${active ? 'active' : 'stopped'}" aria-label="${escapeAttribute(active ? 'Active request actions' : 'Stopped request actions')}"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span>${hint ? `<small>${escapeHtml(hint)}</small>` : ''}</div><div class="request-action-card-actions">${actions}</div></section>`
+  const title = `Ghost stopped: ${stopReasonLabel(message.stopReason)}`
+  const detail = stopReasonDetail(message)
+  const hint = stopReasonHint(message.stopReason)
+  const actions = `<button type="button" class="request-card-button" data-action="retry" data-message-id="${escapeAttribute(message.id)}">Retry</button><button type="button" class="request-card-button" data-action="continue" data-message-id="${escapeAttribute(message.id)}">Continue</button><button type="button" class="request-card-button secondary" data-action="regenerate" data-message-id="${escapeAttribute(message.id)}">Regenerate</button>${diffPath ? `<button type="button" class="request-card-button secondary" data-action="open-diff" data-message-id="${escapeAttribute(message.id)}">Open Diff</button>` : ''}`
+  return `<section class="request-action-card stopped" aria-label="Stopped request actions"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span><small>${escapeHtml(hint)}</small></div><div class="request-action-card-actions">${actions}</div></section>`
 }
 
 const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTMLElement => {

@@ -6,6 +6,7 @@ All notable changes to this extension are documented here.
 
 - Retry missing workspace paths with relative-path guidance instead of stopping the request.
 - Keep directory tool results and continuation paths workspace-relative.
+- Remove the duplicate active-request action card; use the bottom Stop control.
 
 ## 1.1.47 - 2026-08-18
 
