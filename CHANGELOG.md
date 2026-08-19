@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.57 - 2026-08-19
+
+- Add clear collapse/expand buttons for the provider controls and provider settings areas, with a top-aligned chevron toggle beside the Provider label.
+
 ## 1.1.53 - 2026-08-19
 
 - Reject incomplete symbol and matching-file reads before execution, so Ghost can repair the tool call instead of stopping.

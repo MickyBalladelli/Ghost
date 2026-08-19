@@ -135,8 +135,16 @@ const createSettingsContent = (): HTMLDivElement => {
     settingRow('Prompt history entries', input('prompt-history-limit', 'number', { min: 10, max: 500, step: 10, value: 100 }), 'prompt-history-limit')
   )
 
-  grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'provider' }, ['Provider']))
-  appendRows(
+  grid.append(button('toggle-provider-settings', 'Provider settings: Collapse', {
+    className: 'settings-section-toggle',
+    'data-settings-section-heading': 'provider',
+    'aria-controls': 'provider-settings-fields',
+    'aria-expanded': 'true'
+  }))
+  const providerSettings = createElement('div', { className: 'settings-section-content', id: 'provider-settings-fields' })
+  grid.append(providerSettings)
+  const appendProviderRows = (...rows: Node[][]): void => rows.forEach(row => providerSettings.append(...row))
+  appendProviderRows(
     settingRow('Provider endpoint', input('provider-endpoint', 'url', { placeholder: 'http://localhost:11434' }), 'provider-endpoint'),
     [createElement('p', { className: 'settings-help', id: 'provider-help' }, ['Endpoint for the selected provider.'])],
     settingRow('Compatibility profile', select('openai-profile', [option('generic', 'OpenAI-compatible'), option('anthropic', 'Anthropic'), option('gemini', 'Google Gemini'), option('azure-openai', 'Azure OpenAI'), option('lm-studio', 'LM Studio'), option('llama-cpp', 'llama.cpp'), option('vllm', 'vLLM'), option('litellm', 'LiteLLM'), option('custom', 'Custom HTTP')]), 'openai-profile'),
@@ -227,7 +235,7 @@ const createAppShell = (iconUri: string): HTMLDivElement => {
       button('reset', '', { className: 'icon-button danger-button', 'aria-label': 'Delete all conversation history and preferences', title: 'Delete all conversation history and preferences' }, [svgIcon('M6 7h12l-1 13H7L6 7Zm3-3h6l1 2H8l1-2Zm-1 7v6m4-6v6m4-6v6')])
     ])
   ])
-  const controls = createElement('section', { className: 'control-strip', 'aria-label': 'Prompt controls' }, [
+  const providerAreaContent = createElement('div', { className: 'provider-area-content', id: 'provider-area-content' }, [
     label('Provider', 'provider', { className: 'control-label' }), select('provider', providerOptions, { 'aria-label': 'Model provider' }),
     label('Model', 'model', { className: 'control-label' }), select('model', [], { 'aria-label': 'Chat model' }),
     label('Profile', 'model-profile', { className: 'control-label' }), select('model-profile', [], { 'aria-label': 'Model profile' }),
@@ -236,7 +244,11 @@ const createAppShell = (iconUri: string): HTMLDivElement => {
     createElement('span', { className: 'connection-indicator', id: 'connection-indicator', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }, [createElement('span', { className: 'status-dot', 'aria-hidden': 'true' }), createElement('span', { id: 'connection-text' }, ['Checking…'])]),
     createElement('span', { className: 'auto-accept-indicator', id: 'auto-accept-indicator', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),
     button('quick-switch', 'Quick switch', { className: 'context-button quick-switch-button', 'aria-haspopup': 'dialog' }),
-    button('settings', '', { className: 'control-button settings-button', 'aria-haspopup': 'dialog', 'aria-label': 'Settings', title: 'Settings' }, [svgIcon('M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5l.3 3.1h4.2l.3-3.1a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z')])
+    button('settings', '', { className: 'control-button settings-button', 'aria-haspopup': 'dialog', 'aria-label': 'Settings', title: 'Settings' }, [svgIcon('M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14.1 2h-4.2l-.3 3.1A8 8 0 0 0 7 6.6l-2.4-1-2 3.4 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6-1.5l2.4 1 2.4-1 2-3.4-2-1.5ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z')])
+  ])
+  const controls = createElement('section', { className: 'control-strip', 'aria-label': 'Prompt controls' }, [
+    button('toggle-provider-area', '', { className: 'provider-area-toggle', 'aria-label': 'Collapse provider controls', title: 'Collapse provider controls', 'aria-controls': 'provider-area-content', 'aria-expanded': 'true' }, [svgIcon('M6 9l6 6 6-6')]),
+    providerAreaContent
   ])
   const composer = createElement('form', { className: 'composer', id: 'composer' }, [
     label('Message Ghost', 'prompt', { className: 'screen-reader-only' }),

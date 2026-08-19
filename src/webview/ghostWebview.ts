@@ -513,6 +513,8 @@ const statusFooterElement = document.getElementById('status-footer') as HTMLElem
 const screenReaderStatusElement = document.getElementById('screen-reader-status') as HTMLElement
 const composerCountElement = document.getElementById('composer-count') as HTMLElement
 const persistenceStatusElement = document.getElementById('persistence-status') as HTMLElement
+const providerAreaToggleElement = document.getElementById('toggle-provider-area') as HTMLButtonElement
+const providerAreaContentElement = document.getElementById('provider-area-content') as HTMLElement
 const providerElement = document.getElementById('provider') as HTMLSelectElement
 const modelElement = document.getElementById('model') as HTMLSelectElement
 const modelProfileElement = document.getElementById('model-profile') as HTMLSelectElement
@@ -620,6 +622,9 @@ const setupCapabilitiesElement = document.getElementById('setup-capabilities') a
 const finishFirstRunElement = document.getElementById('finish-first-run') as HTMLButtonElement
 const settingsSearchElement = document.getElementById('settings-search') as HTMLInputElement
 const settingsGridElement = document.querySelector<HTMLElement>('.settings-grid') as HTMLElement
+const providerSettingsToggleElement = document.getElementById('toggle-provider-settings') as HTMLButtonElement
+const providerSettingsFieldsElement = document.getElementById('provider-settings-fields') as HTMLElement
+let providerSettingsExpanded = true
 const promptHistorySearchElement = document.getElementById('prompt-history-search') as HTMLInputElement
 const promptHistoryListElement = document.getElementById('prompt-history-list') as HTMLElement
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
@@ -1125,7 +1130,7 @@ const renderSettingsSearch = (): void => {
   for (const section of sections) {
     const matches = !query || section.some(item => item.textContent?.toLowerCase().includes(query) || Array.from(item.querySelectorAll('[id]')).some(element => element.id.toLowerCase().includes(query)))
     for (const item of section) {
-      item.hidden = !matches
+      item.hidden = !matches || (item === providerSettingsFieldsElement && !providerSettingsExpanded)
     }
   }
   const presetSection = document.querySelector<HTMLElement>('.preset-section')
@@ -1133,6 +1138,31 @@ const renderSettingsSearch = (): void => {
     presetSection.hidden = Boolean(query) && !presetSection.textContent?.toLowerCase().includes(query)
   }
 }
+
+const updateProviderSettingsVisibility = (): void => {
+  providerSettingsFieldsElement.hidden = !providerSettingsExpanded
+  providerSettingsToggleElement.setAttribute('aria-expanded', String(providerSettingsExpanded))
+  providerSettingsToggleElement.textContent = `Provider settings: ${providerSettingsExpanded ? 'Collapse' : 'Expand'}`
+}
+
+providerSettingsToggleElement.addEventListener('click', () => {
+  providerSettingsExpanded = !providerSettingsExpanded
+  updateProviderSettingsVisibility()
+})
+
+let providerAreaExpanded = true
+const updateProviderAreaVisibility = (): void => {
+  providerAreaContentElement.hidden = !providerAreaExpanded
+  providerAreaToggleElement.setAttribute('aria-expanded', String(providerAreaExpanded))
+  const label = `${providerAreaExpanded ? 'Collapse' : 'Expand'} provider controls`
+  providerAreaToggleElement.setAttribute('aria-label', label)
+  providerAreaToggleElement.title = label
+}
+
+providerAreaToggleElement.addEventListener('click', () => {
+  providerAreaExpanded = !providerAreaExpanded
+  updateProviderAreaVisibility()
+})
 
 const renderControls = () => {
   renderProviderOptions(providerElement, controls.provider)

@@ -2601,6 +2601,50 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         padding: 7px 10px;
       }
 
+      .provider-area-toggle {
+        background: var(--vscode-button-secondaryBackground, var(--ghost-surface));
+        border: 1px solid var(--vscode-button-border, var(--ghost-border));
+        color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+        display: inline-flex;
+        flex: 0 0 auto;
+        font-weight: 600;
+        height: 30px;
+        min-height: 30px;
+        padding: 5px 9px;
+        align-self: flex-start;
+        width: 30px;
+      }
+
+      .provider-area-toggle .ui-icon {
+        transition: transform 120ms ease;
+      }
+
+      .provider-area-toggle[aria-expanded='false'] .ui-icon {
+        transform: rotate(-90deg);
+      }
+
+      .provider-area-toggle:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--ghost-border));
+      }
+
+      .provider-area-toggle:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+
+      .provider-area-content {
+        align-items: center;
+        display: flex;
+        flex: 1 1 220px;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .provider-area-content[hidden] {
+        display: none;
+      }
+
       .control-label {
         color: var(--vscode-descriptionForeground);
         font-size: 0.78em;
@@ -3011,6 +3055,52 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         grid-column: 1 / -1;
         margin-top: 10px;
         padding-bottom: 4px;
+      }
+
+      .settings-section-toggle {
+        align-items: center;
+        background: var(--vscode-button-secondaryBackground, var(--ghost-surface));
+        border: 1px solid var(--vscode-button-border, var(--ghost-border));
+        color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+        cursor: pointer;
+        display: flex;
+        font: inherit;
+        font-size: 0.9em;
+        font-weight: 600;
+        grid-column: 1 / -1;
+        justify-content: space-between;
+        margin-top: 10px;
+        min-height: 30px;
+        padding: 6px 9px;
+        text-align: left;
+        width: 100%;
+      }
+
+      .settings-section-toggle::after {
+        content: '▾';
+        font-size: 1.15em;
+        line-height: 1;
+      }
+
+      .settings-section-toggle[aria-expanded='false']::after {
+        content: '▸';
+      }
+
+      .settings-section-toggle:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--ghost-border));
+      }
+
+      .settings-section-toggle:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+
+      .settings-section-content {
+        display: contents;
+      }
+
+      .settings-section-content[hidden] {
+        display: none;
       }
 
       .settings-inline-action {
