@@ -3509,8 +3509,10 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       .find((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool' && (message.toolCallId ? part.toolCall.id === message.toolCallId : part.toolCall.status !== 'completed'))
     if (toolPart) {
       const detail = redactSensitiveText(message.detail ?? 'Tool completed').slice(0, 16000)
-      const failed = message.resultStatus === 'failed' || /rejected|denied|cancelled|error|failed/i.test(detail)
-      toolPart.toolCall.status = message.resultStatus === 'rejected' || /rejected|denied/i.test(detail)
+      const inferredFailure = message.resultStatus === undefined && /rejected|denied|cancelled|error|failed/i.test(detail)
+      const failed = message.resultStatus === 'failed' || inferredFailure
+      const rejected = message.resultStatus === 'rejected' || (message.resultStatus === undefined && /rejected|denied/i.test(detail))
+      toolPart.toolCall.status = rejected
         ? 'rejected'
         : failed
           ? 'failed'

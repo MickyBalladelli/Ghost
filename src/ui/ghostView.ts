@@ -365,11 +365,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             if (completionRecord) {
               request.completionRecord = completionRecord
             }
-            const resultStatus = /rejected|denied/i.test(result[2])
-              ? 'rejected'
-              : /error|failed|cancelled/i.test(result[2])
-                ? 'failed'
-                : 'completed'
+            const resultStatus = completionRecord
+              ? 'completed'
+              : /rejected|denied/i.test(result[2])
+                ? 'rejected'
+                : /error|failed|cancelled/i.test(result[2])
+                  ? 'failed'
+                  : 'completed'
             if (resultStatus === 'completed') {
               this.failedToolRetries.delete(pendingTool.toolCallId)
             }

@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.47 - 2026-08-18
 
+- Keep successful completion records from appearing as failed when their checks mention errors.
 - Show completion records only for successfully completed workspace tasks.
 - Clear cached file reads before retrying a stale edit so rebase recovery reads current workspace content.
 
