@@ -103,26 +103,39 @@ function hashText(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex')
 }
 
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n|\r/g, '\n')
+}
+
+function splitLines(value: string): string[] {
+  return value.split(/\r\n|\n|\r/)
+}
+
+function detectLineEnding(value: string): string {
+  return value.match(/\r\n|\n|\r/)?.[0] ?? '\n'
+}
+
 function validateHunkContext(lines: string[], hunk: GhostEditHunk, index: number): void {
   const actualText = lines.slice(hunk.startLine - 1, hunk.endLine).join('\n')
-  if (hunk.oldText !== undefined && actualText !== hunk.oldText) {
+  if (hunk.oldText !== undefined && normalizeLineEndings(actualText) !== normalizeLineEndings(hunk.oldText)) {
     throw new Error(`Edit hunk ${index + 1} old text does not match the current file. Refresh and rebase the edit.`)
   }
-  if (hunk.oldHash !== undefined && hashText(actualText) !== hunk.oldHash) {
+  if (hunk.oldHash !== undefined && hashText(normalizeLineEndings(actualText)) !== hunk.oldHash) {
     throw new Error(`Edit hunk ${index + 1} content hash does not match the current file. Refresh and rebase the edit.`)
   }
   const before = lines.slice(0, hunk.startLine - 1).join('\n')
-  if (hunk.beforeContext !== undefined && !before.endsWith(hunk.beforeContext)) {
+  if (hunk.beforeContext !== undefined && !normalizeLineEndings(before).endsWith(normalizeLineEndings(hunk.beforeContext))) {
     throw new Error(`Edit hunk ${index + 1} preceding context does not match the current file. Refresh and rebase the edit.`)
   }
   const after = lines.slice(hunk.endLine).join('\n')
-  if (hunk.afterContext !== undefined && !after.startsWith(hunk.afterContext)) {
+  if (hunk.afterContext !== undefined && !normalizeLineEndings(after).startsWith(normalizeLineEndings(hunk.afterContext))) {
     throw new Error(`Edit hunk ${index + 1} following context does not match the current file. Refresh and rebase the edit.`)
   }
 }
 
 export function applyGhostEdit(content: string, edit: GhostFileEdit, selectedHunkIndexes?: Set<number>): string {
-  const lines = content.split('\n')
+  const lines = splitLines(content)
+  const lineEnding = detectLineEnding(content)
   const selected = selectedHunkIndexes
     ? edit.hunks.filter((_hunk, index) => selectedHunkIndexes.has(index))
     : edit.hunks
@@ -135,9 +148,9 @@ export function applyGhostEdit(content: string, edit: GhostFileEdit, selectedHun
     if (hunk.endLine > lines.length) {
       throw new Error(`Edit hunk exceeds file length at line ${hunk.startLine}`)
     }
-    lines.splice(hunk.startLine - 1, hunk.endLine - hunk.startLine + 1, ...hunk.replacement.split('\n'))
+    lines.splice(hunk.startLine - 1, hunk.endLine - hunk.startLine + 1, ...splitLines(hunk.replacement))
   }
-  return lines.join('\n')
+  return lines.join(lineEnding)
 }
 
 export function summarizeGhostEdit(edit: GhostFileEdit): string {
