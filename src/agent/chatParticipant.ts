@@ -254,6 +254,15 @@ function describesWorkspaceChange(value: string): boolean {
   return /\b(?:fix|edit|change|update|implement|create|write|remove|delete|add|replace|apply|modify|wire|refactor)\b/i.test(value)
 }
 
+function hasPendingWorkspaceTask(value: string | undefined): boolean {
+  if (!value?.trim()) {
+    return false
+  }
+  const latestGhostReply = /(?:^|\n\n)Ghost:\n([\s\S]*)$/i.exec(value)?.[1] ?? ''
+  return /\b(?:would you like me to|want me to|shall i|should i|ready to apply|ready to proceed|tell me to proceed)\b/i.test(latestGhostReply)
+    && describesWorkspaceChange(latestGhostReply)
+}
+
 function isLikelyConversationalPrompt(value: string): boolean {
   const prompt = value.trim()
   if (!prompt || prompt.length > 240 || describesWorkspaceChange(prompt)) {
@@ -1234,7 +1243,9 @@ export function createChatParticipantHandler(
       : 30
     const requestOptions = getRequestOptions(request)
     const conversationalPrompt = isLikelyConversationalPrompt(request.prompt)
-    const contextOptions = conversationalPrompt
+    const pendingWorkspaceTask = hasPendingWorkspaceTask(requestOptions.additionalContext)
+    const keepWorkspaceTools = pendingWorkspaceTask || requestOptions.mode === 'agent'
+    const contextOptions = conversationalPrompt && !pendingWorkspaceTask
       ? {
           ...requestOptions,
           context: {
@@ -1243,7 +1254,7 @@ export function createChatParticipantHandler(
             activeFile: false,
             selection: false,
             openFiles: false,
-            tools: false
+            tools: keepWorkspaceTools
           }
         }
       : requestOptions
@@ -1286,12 +1297,12 @@ export function createChatParticipantHandler(
     }
 
     const toolsEnabled = requestOptions.context?.tools !== false
-    const requestToolsEnabled = toolsEnabled && !conversationalPrompt
+    const requestToolsEnabled = toolsEnabled && (!conversationalPrompt || keepWorkspaceTools)
     const nativeToolCalling = requestToolsEnabled && (
       modelSettings.provider === 'ollama' ||
       (modelSettings.provider === 'openai-compatible' && profileProtocol(settings.openaiProfile) === 'openai-chat')
     )
-    const workspaceChangeRequested = describesWorkspaceChange(request.prompt)
+    const workspaceChangeRequested = describesWorkspaceChange(request.prompt) || pendingWorkspaceTask
     const completionRecordEnabled = workspaceChangeRequested || requestOptions.mode === 'edit'
     if (!toolsEnabled && workspaceChangeRequested) {
       response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')

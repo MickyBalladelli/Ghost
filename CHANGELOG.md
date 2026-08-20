@@ -2,6 +2,11 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.86 - 2026-08-20
+
+- Render tool and progress logs before the assistant conclusion.
+- Keep workspace tools enabled for short confirmations of pending edit tasks.
+
 ## 1.1.85 - 2026-08-20
 
 - Preserve bounded conversation history between Ghost prompts so short follow-ups like "yes" retain context.

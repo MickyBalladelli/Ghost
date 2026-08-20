@@ -2221,9 +2221,9 @@ const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTML
     : ''
   replaceMarkup(article, `
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
-    <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
     ${partSummary}
     ${thinkingStatus}
+    <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
     ${responseStats}
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
@@ -2548,10 +2548,10 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
     const replacementSummary = replacement.firstElementChild
     existingSummary.replaceWith(replacement)
     if (body && replacementSummary) {
-      body.after(replacementSummary)
+      body.before(replacementSummary)
     }
   } else if (summary) {
-    body?.after(createMarkupFragment(summary))
+    body?.before(createMarkupFragment(summary))
   }
   const thinkingStatus = showThinkingPlaceholder
     ? `<div class="message-thinking-status message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</div>`
