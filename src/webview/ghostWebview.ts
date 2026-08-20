@@ -2071,11 +2071,6 @@ const addMessageCopyControls = (article: HTMLElement, message: ChatMessage): voi
     if (target) {
       appendCopyControl(progress, target, command ? 'Copy command' : 'Copy path')
     }
-    const resultCopy = progress.querySelector<HTMLButtonElement>('[data-tool-action="copy-result"]')
-    if (resultCopy && part.toolCall.name === 'ghost_get_diagnostics') {
-      resultCopy.textContent = 'Copy diagnostics'
-      resultCopy.setAttribute('aria-label', 'Copy diagnostics')
-    }
   }
 
   const errorParts = message.parts.filter((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
@@ -2441,8 +2436,8 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const rerunRequestAction = part.toolCall.result && part.toolCall.status !== 'failed' && part.toolCall.status !== 'rejected'
       ? `<button type="button" class="secondary" data-tool-action="rerun" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Rerun request</button>`
       : ''
-    const resultActions = part.toolCall.result || fileAction || restoreAction
-      ? `<div class="tool-result-actions">${fileAction}${restoreAction}${retryToolAction}${part.toolCall.result ? `<button type="button" class="secondary" data-tool-action="copy-result" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Copy result</button>${rerunRequestAction}` : ''}</div>`
+    const resultActions = fileAction || restoreAction || retryToolAction || rerunRequestAction
+      ? `<div class="tool-result-actions">${fileAction}${restoreAction}${retryToolAction}${rerunRequestAction}</div>`
       : ''
     const verboseStatus = uiPreferences.showToolProgress ? ` · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}` : ''
     const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
@@ -3176,10 +3171,6 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     return
   }
   const conversationId = getActiveConversation().id
-  if (action === 'copy-result' && found.toolCall.result) {
-    void copyText(found.toolCall.result)
-    return
-  }
   if ((action === 'open-file' || action === 'open-hunk') && found.toolCall.diffPreview) {
     const path = found.toolCall.diffPreview.files?.[0] ?? found.toolCall.diffPreview.path
     post('open-file', {

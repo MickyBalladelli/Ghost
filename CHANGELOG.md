@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.84 - 2026-08-20
+
+- Remove the duplicate tool-result copy action so each tool message shows only one copy control.
+
 ## 1.1.83 - 2026-08-20
 
 - Make local provider chat timeout configurable, defaulting to 30 minutes instead of the previous hard-coded 5-minute limit.
