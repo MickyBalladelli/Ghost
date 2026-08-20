@@ -28,6 +28,7 @@ import { createToolErrorResult, replaceToolResultText, ToolResult } from '../too
 import { limitToolResultText } from '../tools/toolResultLimits'
 import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
 import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, MIN_TOOL_CALL_TOKENS, outputTokenBudget } from './budgetPolicy'
+import { parseTaskPlanMarker } from './taskPlan'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -47,6 +48,7 @@ const SYSTEM_PROMPT = [
   'Read source rule: ghost_read_file needs source:"editor" for an open unsaved buffer or source:"disk" for the saved file. If the file is dirty and source is omitted, the tool pauses and asks you to choose. Never edit a file while its editor buffer has unsaved changes; ask the user to save or discard them first.',
   'Git tool: ghost_git_context({"operation":"status|diff|stagedDiff|branch|history","path":"optional relative or absolute workspace file path","maxEntries":100}) reads non-ignored workspace Git status, selected-file diffs, branch, or selected-file history. Use a path for diff, stagedDiff, and history when no active file is selected.',
   'Task plan tool: ghost_update_task_plan({"steps":[{"id":"step-1","title":"Do the work","checked":false}],"currentStep":"step-1","blockedReason":"optional","completionEvidence":["optional"]}) persists a bounded plan in the conversation. Use it for multi-step work and update checked steps as work finishes.',
+  'A task plan is progress, not a final answer. After creating or updating an unfinished plan, continue with the first unchecked step and use the workspace tools.',
   'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
 ].join(' ')
 
@@ -1332,6 +1334,7 @@ export function createChatParticipantHandler(
       let staleEditRetries = 0
       const staleEditRecoveryPaths = new Set<string>()
       let successfulWorkspaceChange = false
+      let taskPlanRequiresExecution = false
       let emptyProviderRetries = 0
       let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
@@ -1407,7 +1410,7 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (token.isCancellationRequested || (turn.streamed && (successfulWorkspaceChange || !workspaceChangeRequested))) {
+        if (token.isCancellationRequested || (turn.streamed && !taskPlanRequiresExecution && (successfulWorkspaceChange || !workspaceChangeRequested))) {
           return
         }
 
@@ -1467,7 +1470,7 @@ export function createChatParticipantHandler(
             return
           }
           const malformedToolCall = parsedResponse.state === 'malformed-json' || parsedResponse.state === 'truncated-json' || parsedResponse.state === 'unknown-tool'
-          const expectsWorkspaceTool = requestToolsEnabled && (malformedToolCall || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
+          const expectsWorkspaceTool = requestToolsEnabled && (malformedToolCall || taskPlanRequiresExecution || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
           if (expectsWorkspaceTool && missingToolRetries < GHOST_RETRY_POLICIES.missingTool.maxRetries) {
             missingToolRetries += 1
             const retryMessage = parsedResponse.state === 'unknown-tool'
@@ -1644,6 +1647,10 @@ export function createChatParticipantHandler(
           toolOutcome = replaceToolResultText(toolOutcome, limitedToolResult, { truncated: true })
         }
         const toolResult = toolOutcome.text
+        const updatedTaskPlan = parseTaskPlanMarker(toolResult)
+        if (updatedTaskPlan) {
+          taskPlanRequiresExecution = updatedTaskPlan.steps.some(step => !step.checked)
+        }
 
         const editFailed = toolOutcome.status === 'failed' || toolOutcome.status === 'denied' || toolOutcome.status === 'blocked' || toolOutcome.status === 'cancelled' || /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)

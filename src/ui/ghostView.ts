@@ -2405,8 +2405,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         --ghost-accent: var(--vscode-textLink-foreground, #3794ff);
         --ghost-border: var(--vscode-panel-border, var(--vscode-widget-border, transparent));
         --ghost-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-        --ghost-eye-background: var(--vscode-editor-foreground, #fff);
-        --ghost-pupil-background: var(--vscode-textLink-foreground, #0d468e);
         --ghost-gradient-red: var(--vscode-charts-red, #ff5f6d);
         --ghost-gradient-yellow: var(--vscode-charts-yellow, #ffc371);
         --ghost-gradient-green: var(--vscode-charts-green, #64f38c);
@@ -2479,14 +2477,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .brand-mark {
         display: inline-flex;
-        height: 24px;
+        height: 48px;
         position: relative;
-        width: 24px;
+        width: 48px;
       }
 
       .ghost-face {
-        --ghost-eye-x: 0px;
-        --ghost-eye-y: 0px;
         overflow: hidden;
       }
 
@@ -2495,35 +2491,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         height: 100%;
         position: absolute;
         width: 100%;
-      }
-
-      .ghost-eye {
-        background: var(--ghost-eye-background);
-        border-radius: 50%;
-        height: 23%;
-        overflow: hidden;
-        position: absolute;
-        top: 30%;
-        width: 23%;
-      }
-
-      .ghost-eye-left {
-        left: 29.5%;
-      }
-
-      .ghost-eye-right {
-        left: 64%;
-      }
-
-      .ghost-pupil {
-        background: var(--ghost-pupil-background);
-        border-radius: 50%;
-        height: 46%;
-        left: 50%;
-        position: absolute;
-        top: 50%;
-        transform: translate(-50%, -50%) translate(var(--ghost-eye-x), var(--ghost-eye-y));
-        width: 46%;
       }
 
       .title {
@@ -3879,8 +3846,31 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .tool-status-icon {
         display: inline-block;
+        font-size: 3.6em;
         font-weight: 700;
+        line-height: 0.8;
         margin-right: 4px;
+        min-width: 1.25em;
+        text-align: center;
+        vertical-align: -0.08em;
+      }
+
+      .task-plan-step-icon {
+        display: inline-block;
+        font-size: 3.6em;
+        font-weight: 700;
+        line-height: 0.8;
+        min-width: 1.25em;
+        text-align: center;
+        vertical-align: -0.08em;
+      }
+
+      .task-plan-step-icon.complete {
+        color: var(--vscode-testing-iconPassed, #73c991);
+      }
+
+      .task-plan-step-icon.pending {
+        color: var(--vscode-charts-yellow, #cca700);
       }
 
       .tool-details {
@@ -4358,8 +4348,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           --ghost-accent: Highlight;
           --ghost-border: CanvasText;
           --ghost-surface: Canvas;
-          --ghost-eye-background: Canvas;
-          --ghost-pupil-background: CanvasText;
         }
 
         button,
@@ -4408,9 +4396,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           transition-duration: 0.01ms !important;
         }
 
-        .ghost-pupil {
-          transform: translate(-50%, -50%) !important;
-        }
       }
     </style>
   </head>

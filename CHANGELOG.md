@@ -2,7 +2,7 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.69 - 2026-08-20
+## 1.1.78 - 2026-08-20
 
 - Keep live progress and approval sections in one current block, preventing stale approval cards from appearing before newer progress output or after session approval.
 - Hide Send while a request is running so Stop is the only visible composer action.
@@ -10,6 +10,13 @@ All notable changes to this extension are documented here.
 - Rebase an edit when its exact old text moved to one unambiguous line range.
 - Reduce tool approval choices to Approve now, Approve for session, and Approve forever; persist forever approvals.
 - Show a retried tool group as successful when its latest attempt succeeds.
+- Continue workspace work after displaying an unfinished task plan.
+- Make task and tool status icons easier to see.
+- Increase status icon size and contrast.
+- Double status icon size again for clear visibility.
+- Double the Ghost logo size in the top header.
+- Keep the Ghost eyes still instead of following the pointer.
+- Remove the duplicate CSS eyes layered over the logo image.
 
 ## 1.1.64 - 2026-08-19
 
