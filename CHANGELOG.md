@@ -9,6 +9,7 @@ All notable changes to this extension are documented here.
 - Accept valid edits from CRLF files without converting their line endings.
 - Rebase an edit when its exact old text moved to one unambiguous line range.
 - Reduce tool approval choices to Approve now, Approve for session, and Approve forever; persist forever approvals.
+- Show a retried tool group as successful when its latest attempt succeeds.
 
 ## 1.1.64 - 2026-08-19
 

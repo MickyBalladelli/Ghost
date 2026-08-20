@@ -2432,8 +2432,9 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       return renderToolCallProgress(group[0])
     }
     const activeTool = [...group].reverse().find(part => part.toolCall.status === 'running' || part.toolCall.status === 'requested')
-    const groupFailed = group.some(part => part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
-    const groupComplete = group.every(part => part.toolCall.status === 'completed')
+    const latestTool = group[group.length - 1].toolCall
+    const groupFailed = latestTool.status === 'failed' || latestTool.status === 'rejected'
+    const groupComplete = latestTool.status === 'completed'
     const groupStatusClass = groupFailed ? 'tool-failure' : groupComplete ? 'tool-success' : ''
     const groupStatusIcon = groupFailed ? '✕' : groupComplete ? '✓' : '•'
     const groupLabel = `${toolActionText(activeTool?.toolCall ?? group[group.length - 1].toolCall)} · ${group.length} calls`
