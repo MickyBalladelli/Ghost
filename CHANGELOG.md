@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.87 - 2026-08-20
+
+- Recover stale edits with correctly labeled tool results and report only successfully changed files.
+
 ## 1.1.86 - 2026-08-20
 
 - Render tool and progress logs before the assistant conclusion.

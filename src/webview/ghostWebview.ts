@@ -2260,7 +2260,8 @@ const summaryChangedFiles = (message: ChatMessage): string[] => {
     if (typeof value === 'string' && value.trim()) files.add(value.trim())
   }
   for (const part of message.parts) {
-    if (part.kind !== 'tool' || !['ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction'].includes(part.toolCall.name)) continue
+    if (part.kind !== 'tool' || part.toolCall.status !== 'completed' || !['ghost_write_file', 'ghost_apply_edit', 'ghost_apply_transaction'].includes(part.toolCall.name)) continue
+    if (/no changes needed/i.test(part.toolCall.result ?? '')) continue
     const args = parseToolArguments(part.toolCall)
     add(args.path)
     if (Array.isArray(args.edits)) {
@@ -3723,7 +3724,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
-    const changedFiles = [...new Set([...(completionRecord?.changedFiles ?? []), ...summaryChangedFiles(assistantMessage)])].sort()
+    const changedFiles = [...new Set([...(status === 'completed' ? completionRecord?.changedFiles ?? [] : []), ...summaryChangedFiles(assistantMessage)])].sort()
     assistantMessage.requestSummary = {
       changedFiles,
       commandCount: summaryCommandCount(assistantMessage),
