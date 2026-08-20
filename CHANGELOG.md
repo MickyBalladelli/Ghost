@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.83 - 2026-08-20
+
+- Make local provider chat timeout configurable, defaulting to 30 minutes instead of the previous hard-coded 5-minute limit.
+
 ## 1.1.82 - 2026-08-20
 
 - Add idle eye wandering when the pointer leaves the webview.

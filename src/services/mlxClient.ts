@@ -266,7 +266,7 @@ export class MlxClient {
     const endpoint = joinEndpoint(this.apiUrl, 'chat/completions')
     const response = await this.transport.requestWithDiagnostics(endpoint, requestOptions, {
       signal: options.signal,
-      timeoutMs: GHOST_POLICY.provider.requestTimeoutMs
+      timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs
     })
     await throwForHttpError(response)
 

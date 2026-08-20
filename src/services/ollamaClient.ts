@@ -346,7 +346,7 @@ export class OllamaClient {
       const response = await this.transport.requestWithDiagnostics(
         attempt.endpoint,
         this.withTransport(attempt.endpoint, this.getChatRequest(attempt.kind, options, messages, stream), attempt.kind !== 'ollama'),
-        { signal: options.signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
+        { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs }
       )
 
       if (!response.ok) {

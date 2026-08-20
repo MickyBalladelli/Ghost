@@ -20,12 +20,13 @@ const requestWithProviderTransport = (
   settings: OpenAiTransportSettings,
   endpoint: string,
   init: RequestInit,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  timeoutMs?: number
 ): Promise<Response> => (
   new ProviderHttpTransport(
     request,
     target => createOpenAiRequestAgent(target, settings)
-  ).requestWithDiagnostics(endpoint, init, { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs })
+  ).requestWithDiagnostics(endpoint, init, { signal, timeoutMs: timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
 )
 
 interface ModelsResponse {
@@ -267,7 +268,7 @@ class AnthropicClient implements ProviderClient {
         max_tokens: settings.maxTokens,
         stream: true
       })
-    }, options.signal)
+    }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Anthropic returned an empty streaming response')
     yield* streamSseJson<AnthropicResponse>(response.body, payload => payload.content?.find(item => item.type === 'text')?.text)
@@ -345,7 +346,7 @@ class GeminiClient implements ProviderClient {
           ...(generation(options).seed === undefined ? {} : { seed: generation(options).seed })
         }
       })
-    }, options.signal)
+    }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Gemini returned an empty streaming response')
     yield* streamSseJson<GeminiResponse>(response.body, payload => payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join(''))
@@ -410,7 +411,7 @@ class CustomHttpClient implements ProviderClient {
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(renderCustomTemplate(this.requestTemplate, options))
-    }, options.signal)
+    }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (this.responseFormat === 'json') {
       yield customResponseText(await response.json())
@@ -471,7 +472,7 @@ class AzureOpenAiClient implements ProviderClient {
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(buildOpenAiChatBody(options, options.messages, true))
-    }, options.signal)
+    }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
     yield* streamOpenAiTokens(response.body, 'chat-completions')
@@ -485,7 +486,7 @@ class AzureOpenAiClient implements ProviderClient {
       signal: options.signal,
       agent: createOpenAiRequestAgent(endpoint, openAiTransport(this.settings)),
       body: JSON.stringify(buildOpenAiChatBody(options, options.messages, true))
-    }, options.signal)
+    }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
     yield* streamOpenAiEvents(response.body, 'chat-completions')

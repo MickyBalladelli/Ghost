@@ -1229,6 +1229,9 @@ export function createChatParticipantHandler(
 
     const requestStartedAt = Date.now()
     const settings = configuration.getSettings()
+    const providerRequestTimeoutMinutes = Number.isFinite(settings.providerRequestTimeoutMinutes)
+      ? Math.max(1, Math.floor(settings.providerRequestTimeoutMinutes))
+      : 30
     const requestOptions = getRequestOptions(request)
     const conversationalPrompt = isLikelyConversationalPrompt(request.prompt)
     const contextOptions = conversationalPrompt
@@ -1367,6 +1370,7 @@ export function createChatParticipantHandler(
             provider: modelSettings.provider,
             model: modelSettings.model,
             messages: redactSensitiveValue(preparedContext.messages),
+            timeoutMs: providerRequestTimeoutMinutes * 60 * 1000,
             generation: {
               temperature: Math.min(2, Math.max(0, modelSettings.temperature ?? DEFAULT_TEMPERATURE)),
               topP: Math.min(1, Math.max(0, modelSettings.topP)),

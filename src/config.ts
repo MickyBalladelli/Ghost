@@ -68,6 +68,7 @@ export interface GhostSettings {
   openaiTlsKeyFile: string
   chatModel: string
   autocompleteModel: string
+  providerRequestTimeoutMinutes: number
   inlineCompletionTimeoutMs: number
   requestTimeLimitMinutes: number
   jsonMode: boolean
@@ -128,6 +129,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiTlsKeyFile: '',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
+  providerRequestTimeoutMinutes: 30,
   inlineCompletionTimeoutMs: 30000,
   requestTimeLimitMinutes: 120,
   jsonMode: false,
@@ -252,6 +254,7 @@ export class GhostConfig {
       openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
+      providerRequestTimeoutMinutes: configuration.get('providerRequestTimeoutMinutes', DEFAULT_GHOST_SETTINGS.providerRequestTimeoutMinutes),
       inlineCompletionTimeoutMs: configuration.get('inlineCompletionTimeoutMs', DEFAULT_GHOST_SETTINGS.inlineCompletionTimeoutMs),
       requestTimeLimitMinutes: configuration.get('requestTimeLimitMinutes', DEFAULT_GHOST_SETTINGS.requestTimeLimitMinutes),
       jsonMode: configuration.get('jsonMode', DEFAULT_GHOST_SETTINGS.jsonMode),

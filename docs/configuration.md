@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.1.19`.
+Package version: `1.1.83`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -30,6 +30,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openaiTlsCaFile` | string | empty | Optional path to a PEM CA file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsCertFile` | string | empty | Optional path to a client certificate PEM file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsKeyFile` | string | empty | Optional path to a client private key PEM file for OpenAI-compatible HTTPS. |
+| `ghost.providerRequestTimeoutMinutes` | integer; min 1; max 1440 | `30` | Maximum minutes to wait for one chat request to return from the local model provider. |
 | `ghost.provider` | string; one of `ollama`, `mlx-vlm`, `openai-compatible` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
 | `ghost.mlxUrl` | string | `http://localhost:8000` | MLX VLM server URL. |
 

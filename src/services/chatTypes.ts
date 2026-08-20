@@ -57,6 +57,7 @@ export interface ChatVisionImage {
 export interface ChatRequestOptions {
   model: string
   messages: ChatMessage[]
+  timeoutMs?: number
   generation?: GenerationSettings
   tools?: ChatToolDefinition[]
   toolChoice?: 'auto' | 'none' | 'required'
