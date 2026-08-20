@@ -1943,6 +1943,32 @@ const messageText = (message: ChatMessage): string => (
     .join('')
 )
 
+const buildConversationContext = (messages: ChatMessage[]): string => {
+  const history = messages
+    .map(message => {
+      const text = messageText(message).trim()
+      const toolResults = message.parts
+        .filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
+        .map(part => {
+          const result = part.toolCall.result?.trim()
+          return result
+            ? `Tool ${part.toolCall.name} result:\n${result}`
+            : `Tool ${part.toolCall.name} status: ${part.toolCall.status}`
+        })
+      const content = [text, ...toolResults].filter(Boolean).join('\n\n')
+      return content ? `${message.role === 'assistant' ? 'Ghost' : 'User'}:\n${content}` : ''
+    })
+    .filter(Boolean)
+    .slice(-12)
+
+  if (history.length === 0) {
+    return ''
+  }
+
+  const context = `Previous conversation (use this to understand follow-up prompts):\n\n${history.join('\n\n')}`
+  return redactSensitiveText(context).slice(-24000)
+}
+
 const appendTextPart = (message: ChatMessage, delta: string): void => {
   delta = redactSensitiveText(delta).slice(0, Math.max(0, 120000 - message.content.length))
   const lastPart = message.parts[message.parts.length - 1]
@@ -2868,6 +2894,7 @@ const submitPrompt = (rawPrompt: string, options: { setupTest?: boolean } = {}) 
   }
 
   const conversation = getActiveConversation()
+  const previousConversationContext = options.setupTest ? '' : buildConversationContext(conversation.messages)
   const userMessage = createMessage('user', prompt)
   const requestId = createId('request')
   const assistantMessage = createMessage('assistant', '', requestId)
@@ -2915,6 +2942,9 @@ const submitPrompt = (rawPrompt: string, options: { setupTest?: boolean } = {}) 
       openFiles: false,
       tools: false
     }
+  }
+  if (previousConversationContext) {
+    requestOptions.additionalContext = previousConversationContext
   }
   post('submit', {
     requestId,

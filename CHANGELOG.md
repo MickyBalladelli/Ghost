@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.85 - 2026-08-20
+
+- Preserve bounded conversation history between Ghost prompts so short follow-ups like "yes" retain context.
+
 ## 1.1.84 - 2026-08-20
 
 - Remove the duplicate tool-result copy action so each tool message shows only one copy control.

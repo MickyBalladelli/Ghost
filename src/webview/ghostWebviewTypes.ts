@@ -293,5 +293,6 @@ export interface WebviewRequestOptions {
   showReasoning: boolean
   customSystemInstructions: string
   workspaceRoot?: string
+  additionalContext?: string
   context: { workspace: boolean; folders: boolean; activeFile: boolean; selection: boolean; openFiles: boolean; tools: boolean }
 }

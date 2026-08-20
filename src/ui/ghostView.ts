@@ -430,7 +430,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         if (attachment.content) return [{ data: attachment.content, mimeType: attachment.mimeType }]
         return []
       }),
-      additionalContext: [continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
+      additionalContext: [options.additionalContext, continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
       confirmBudgetContinue: reason => this.confirmBudgetContinue(requestId, request, reason),
