@@ -275,6 +275,19 @@ function isStaleEditConflict(value: string): boolean {
   return /old text does not match|content hash does not match|preceding context does not match|following context does not match|file changed externally|edit expected different file content|refresh and rebase/i.test(value)
 }
 
+function finishAfterSuccessfulWorkspaceChange(
+  response: vscode.ChatResponseStream,
+  successfulWorkspaceChange: boolean,
+  taskPlanRequiresExecution: boolean
+): boolean {
+  if (!successfulWorkspaceChange || taskPlanRequiresExecution) {
+    return false
+  }
+  response.progress('Workspace change already applied. Ignoring invalid follow-up tool arguments.')
+  response.markdown('Workspace change applied successfully. The model sent invalid follow-up tool arguments, so Ghost stopped safely after the completed edit.')
+  return true
+}
+
 function isFileEditTool(name: LocalToolCall['name']): boolean {
   return name === 'ghost_write_file' || name === 'ghost_apply_edit' || name === 'ghost_apply_transaction'
 }
@@ -1544,6 +1557,9 @@ export function createChatParticipantHandler(
 
         const toolArgumentError = getToolArgumentError(toolCall)
         if (toolArgumentError) {
+          if (finishAfterSuccessfulWorkspaceChange(response, successfulWorkspaceChange, taskPlanRequiresExecution)) {
+            return
+          }
           invalidToolRetries += 1
           response.progress(`Invalid tool call: ${toolArgumentError}`)
           if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
@@ -1582,6 +1598,9 @@ export function createChatParticipantHandler(
         }
         const approvedToolArgumentError = getToolArgumentError(toolCall)
         if (approvedToolArgumentError) {
+          if (finishAfterSuccessfulWorkspaceChange(response, successfulWorkspaceChange, taskPlanRequiresExecution)) {
+            return
+          }
           invalidToolRetries += 1
           response.progress(`Invalid tool call: ${approvedToolArgumentError}`)
           if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
@@ -1716,6 +1735,7 @@ export function createChatParticipantHandler(
           response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
           return
         }
+        invalidToolRetries = 0
         if (editPath && editNoOp) {
           if (editPaths.some(path => staleEditRecoveryPaths.has(path))) {
             response.markdown(`The requested change is already present in ${editPaths.join(', ')}. Keeping the current file.`)

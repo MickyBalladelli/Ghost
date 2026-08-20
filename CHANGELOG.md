@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.92 - 2026-08-20
+
+- Preserve successful workspace changes when the model emits invalid follow-up tool arguments.
+
 ## 1.1.90 - 2026-08-20
 
 - Rebase multi-hunk edits by exact text, context, and nearest line position.
