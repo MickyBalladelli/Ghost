@@ -308,43 +308,6 @@ Check the API mode and endpoint suffix. Most OpenAI-compatible servers use `/v1`
 
 Read the file again before retrying. Make sure the path is inside the open workspace and that unsaved editor changes are accounted for. An edit can fail when its old text, expected content, hash, line range, or context is stale; when hunks overlap or are malformed; when it is a no-op; or when the edit-loop guard sees a repeated or inverse change. Retry with a fresh read and smaller, non-overlapping hunks. For a staged edit, use **Open Diff**, then **Accept Ghost edit**, **Reject Ghost edit**, or **Restore**. A failed transaction rolls back its changes; inspect the first reported conflict before retrying. If the tool is blocked, check the allowlist, asklist, denylist, and approval scope.
 
-## Development
-
-```bash
-npm install
-npm run compile
-```
-
-Create and install a local VSIX with:
-
-```bash
-./create-vsix.sh
-```
-
-The script increments the patch version, compiles Ghost, creates `<package-name>-<version>.vsix`, and installs it in VS Code. Publish an already-created matching VSIX with:
-
-```bash
-./publish.sh
-```
-
-`publish.sh` reads the package name and version from `package.json`, requires the matching `<package-name>-<version>.vsix`, and publishes that exact package through `vsce`.
-
-Before a release, run `npm run release:check` after packaging. It checks the package and lockfile versions, the README marker, the latest changelog heading, and every root VSIX artifact.
-
-Run the fast suite with `npm run test:fast`. Run the VS Code extension-host suite with `npm run test:host` in a VS Code-capable environment. `npm test` compiles and runs both suites. See [docs/architecture.md](docs/architecture.md) for the extension host, webview, providers, persistence, tools, and approval flow.
-
-## Project structure
-
-```text
-src/
-├── agent/       Chat participant, context injection, and local tool calls
-├── providers/   Inline completion provider
-├── services/    Ollama, MLX/VLM, and OpenAI-compatible clients
-├── tools/       Workspace files, terminal, edits, and tool registration
-├── ui/          VS Code webview host, protocol, state, and status bar
-└── webview/     Chat interface and interaction logic
-```
-
 ## License
 
 MIT. See [LICENSE](LICENSE).

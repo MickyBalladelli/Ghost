@@ -2405,6 +2405,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         --ghost-accent: var(--vscode-textLink-foreground, #3794ff);
         --ghost-border: var(--vscode-panel-border, var(--vscode-widget-border, transparent));
         --ghost-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        --ghost-eye-background: #f8fafc;
+        --ghost-pupil-background: #1d568f;
         --ghost-gradient-red: var(--vscode-charts-red, #ff5f6d);
         --ghost-gradient-yellow: var(--vscode-charts-yellow, #ffc371);
         --ghost-gradient-green: var(--vscode-charts-green, #64f38c);
@@ -2483,14 +2485,59 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
 
       .ghost-face {
+        --ghost-eye-x: 0px;
+        --ghost-eye-y: 0px;
         overflow: hidden;
+        position: relative;
       }
 
       .ghost-face img {
         display: block;
+        inset: 0;
         height: 100%;
         position: absolute;
         width: 100%;
+      }
+
+      .ghost-eye {
+        background: linear-gradient(145deg, #fff 0%, var(--ghost-eye-background) 100%);
+        border-radius: 50%;
+        height: 34%;
+        overflow: hidden;
+        position: absolute;
+        top: 14%;
+        width: 34%;
+        z-index: 1;
+      }
+
+      .ghost-eye-left {
+        left: 27%;
+      }
+
+      .ghost-eye-right {
+        left: 64%;
+      }
+
+      .ghost-pupil {
+        background: radial-gradient(circle at 62% 62%, #286aa5 0%, var(--ghost-pupil-background) 72%, #153e6b 100%);
+        border-radius: 50%;
+        height: 53%;
+        left: 50%;
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%) translate(var(--ghost-eye-x), var(--ghost-eye-y));
+        width: 53%;
+      }
+
+      .ghost-pupil::after {
+        background: #fff;
+        border-radius: 50%;
+        content: '';
+        height: 27%;
+        position: absolute;
+        right: 10%;
+        top: 10%;
+        width: 27%;
       }
 
       .title {
@@ -4348,6 +4395,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           --ghost-accent: Highlight;
           --ghost-border: CanvasText;
           --ghost-surface: Canvas;
+          --ghost-eye-background: Canvas;
+          --ghost-pupil-background: CanvasText;
         }
 
         button,
@@ -4381,6 +4430,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           text-shadow: none;
         }
 
+        .ghost-pupil::after {
+          background: Canvas;
+        }
+
         :focus-visible {
           outline-color: Highlight;
         }
@@ -4394,6 +4447,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           animation-iteration-count: 1 !important;
           scroll-behavior: auto !important;
           transition-duration: 0.01ms !important;
+        }
+
+        .ghost-pupil {
+          transform: translate(-50%, -50%) !important;
         }
 
       }

@@ -78,7 +78,9 @@ const closeButton = (modalId: string, labelText: string): HTMLButtonElement =>
 
 const ghostFace = (iconUri: string, className: string): HTMLSpanElement =>
   createElement('span', { className, 'aria-hidden': 'true' }, [
-    createElement('img', { src: iconUri, alt: '' })
+    createElement('img', { src: iconUri, alt: '' }),
+    createElement('span', { className: 'ghost-eye ghost-eye-left' }, [createElement('span', { className: 'ghost-pupil' })]),
+    createElement('span', { className: 'ghost-eye ghost-eye-right' }, [createElement('span', { className: 'ghost-pupil' })])
   ])
 
 const modal = (id: string, title: string, titleId: string, content: Node, footer: Node): HTMLDivElement =>

@@ -638,6 +638,22 @@ const setPresetSaveState = (saved: boolean): void => {
   savePresetElement.textContent = saved ? 'Saved' : 'Save'
 }
 
+const updateGhostEyes = (event: PointerEvent): void => {
+  document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => {
+    const bounds = face.getBoundingClientRect()
+    if (bounds.width === 0 || bounds.height === 0) {
+      return
+    }
+    const horizontal = (event.clientX - (bounds.left + bounds.width / 2)) / (bounds.width / 2)
+    const vertical = (event.clientY - (bounds.top + bounds.height / 2)) / (bounds.height / 2)
+    const clamp = (value: number): number => Math.max(-1, Math.min(1, value))
+    face.style.setProperty('--ghost-eye-x', `${clamp(horizontal) * bounds.width * 0.08}px`)
+    face.style.setProperty('--ghost-eye-y', `${clamp(vertical) * bounds.height * 0.08}px`)
+  })
+}
+
+window.addEventListener('pointermove', updateGhostEyes, { passive: true })
+
 const post = (type: string, details: Record<string, unknown> = {}): void => {
   protocolClient.post(vscode, type, details)
 }

@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.79 - 2026-08-20
+
+- Restore pointer-following eyes using the new Ghost icon face.
+
 ## 1.1.78 - 2026-08-20
 
 - Keep live progress and approval sections in one current block, preventing stale approval cards from appearing before newer progress output or after session approval.
