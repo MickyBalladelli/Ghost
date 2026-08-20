@@ -115,6 +115,40 @@ function detectLineEnding(value: string): string {
   return value.match(/\r\n|\n|\r/)?.[0] ?? '\n'
 }
 
+function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostEditHunk {
+  if (hunk.oldText === undefined) {
+    return hunk
+  }
+
+  const currentText = lines.slice(hunk.startLine - 1, hunk.endLine).join('\n')
+  if (normalizeLineEndings(currentText) === normalizeLineEndings(hunk.oldText)) {
+    return hunk
+  }
+
+  const oldLines = splitLines(normalizeLineEndings(hunk.oldText))
+  const candidates: GhostEditHunk[] = []
+  for (let start = 0; start <= lines.length - oldLines.length; start += 1) {
+    const candidateText = lines.slice(start, start + oldLines.length).join('\n')
+    if (normalizeLineEndings(candidateText) === normalizeLineEndings(hunk.oldText)) {
+      candidates.push({ ...hunk, startLine: start + 1, endLine: start + oldLines.length })
+    }
+  }
+
+  if (candidates.length === 1) {
+    return candidates[0]
+  }
+
+  const contextualCandidates = candidates.filter(candidate => {
+    try {
+      validateHunkContext(lines, candidate, index)
+      return true
+    } catch {
+      return false
+    }
+  })
+  return contextualCandidates.length === 1 ? contextualCandidates[0] : hunk
+}
+
 function validateHunkContext(lines: string[], hunk: GhostEditHunk, index: number): void {
   const actualText = lines.slice(hunk.startLine - 1, hunk.endLine).join('\n')
   if (hunk.oldText !== undefined && normalizeLineEndings(actualText) !== normalizeLineEndings(hunk.oldText)) {
@@ -136,10 +170,13 @@ function validateHunkContext(lines: string[], hunk: GhostEditHunk, index: number
 export function applyGhostEdit(content: string, edit: GhostFileEdit, selectedHunkIndexes?: Set<number>): string {
   const lines = splitLines(content)
   const lineEnding = detectLineEnding(content)
+  const effectiveHunks = edit.hunks.map((hunk, index) => (
+    selectedHunkIndexes && !selectedHunkIndexes.has(index) ? hunk : rebaseHunk(lines, hunk, index)
+  ))
   const selected = selectedHunkIndexes
-    ? edit.hunks.filter((_hunk, index) => selectedHunkIndexes.has(index))
-    : edit.hunks
-  for (const [index, hunk] of edit.hunks.entries()) {
+    ? effectiveHunks.filter((_hunk, index) => selectedHunkIndexes.has(index))
+    : effectiveHunks
+  for (const [index, hunk] of effectiveHunks.entries()) {
     if (!selectedHunkIndexes || selectedHunkIndexes.has(index)) {
       validateHunkContext(lines, hunk, index)
     }
