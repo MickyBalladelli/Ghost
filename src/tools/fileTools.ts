@@ -8,7 +8,7 @@ import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEditChange, createWorkspaceFileChange, readFileMutation } from './fileMutationWorkflow'
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
-import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
+import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, readFreshWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
 import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface ReadFileInput {
@@ -479,7 +479,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
       )
     }
 
-    const bytes = await readCachedWorkspaceFile(uri, token)
+    const bytes = await readFreshWorkspaceFile(uri, token)
     assertNotCancelled(token)
     let content: string
     try {

@@ -316,14 +316,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       markdown: (delta: string) => {
         if (pendingTool) {
           this.finishToolExecution(request, pendingTool.toolCallId)
-          this.markRecoveryApplied(pendingTool.toolCallId, `${pendingTool.name} completed`)
-          this.failedToolRetries.delete(pendingTool.toolCallId)
+          this.markRecoveryApplied(pendingTool.toolCallId, `Tool failed: ${pendingTool.name} ended before a result was received`)
           this.postStreamEvent(requestId, request, {
             type: 'tool-result',
             tool: pendingTool.name,
-            detail: `${pendingTool.name} completed`,
+            detail: `Tool failed: ${pendingTool.name} ended before a result was received`,
             toolCallId: pendingTool.toolCallId,
-            resultStatus: 'completed',
+            resultStatus: 'failed',
             phase: 'tool'
           })
           pendingTool = undefined
@@ -353,9 +352,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         }
         if (progress.startsWith('Tool result:')) {
           const result = /^Tool result:\s*([^:]+):\s*(.*)$/s.exec(progress)
-          if (pendingTool && result) {
-            this.finishToolExecution(request, pendingTool.toolCallId)
-            this.markRecoveryApplied(pendingTool.toolCallId, result[2])
+          const resultTool = pendingTool ?? request.pendingTool
+          if (resultTool && result) {
+            this.finishToolExecution(request, resultTool.toolCallId)
+            this.markRecoveryApplied(resultTool.toolCallId, result[2])
             const taskPlan = parseTaskPlanMarker(result[2])
             if (taskPlan) {
               this.postStreamEvent(requestId, request, {
@@ -376,12 +376,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
                   ? 'failed'
                   : 'completed'
             if (resultStatus === 'completed') {
-              this.failedToolRetries.delete(pendingTool.toolCallId)
+              this.failedToolRetries.delete(resultTool.toolCallId)
             }
             this.postStreamEvent(requestId, request, {
               type: 'tool-result',
-              tool: pendingTool.name,
-              toolCallId: pendingTool.toolCallId,
+              tool: resultTool.name,
+              toolCallId: resultTool.toolCallId,
               detail: taskPlan ? 'Task plan updated.' : result[2],
               resultStatus,
               phase: 'tool'

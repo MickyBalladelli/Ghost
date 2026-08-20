@@ -198,9 +198,9 @@ Roadmap from the full project review. Order matters: protect user files first, t
 
 ## Done means
 
-- [ ] Every file mutation is reviewable, conflict-safe, undoable, and verified.
+- [x] Every file mutation is reviewable, conflict-safe, undoable, and verified.
 - [ ] Every provider reports capabilities and gives a useful error when a feature is unsupported.
 - [ ] Long requests stay within a measured context and tool budget without silently losing the user’s task.
-- [ ] The UI says what Ghost is doing, what failed, and what the user can do next.
+- [x] The UI says what Ghost is doing, what failed, and what the user can do next.
 - [ ] Tests cover the failure cases that caused the current tool/edit bugs.
 - [ ] Docs, settings, package metadata, changelog, and release artifacts agree.

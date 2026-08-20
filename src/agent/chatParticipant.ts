@@ -1676,13 +1676,13 @@ export function createChatParticipantHandler(
           }
           completedReadCalls.clear()
           response.progress(`Tool result: ${toolCall.name}: ${toolResult}`)
-          response.progress('Edit was stale. Asking Ghost to refresh the file and rebase the change.')
+          response.progress('Edit was stale. Asking Ghost to read the current file and create a fresh edit from its exact contents.')
           messages.push({
             role: 'assistant',
             content: generated
           }, {
             role: 'user',
-            content: `Tool result for ${toolCall.name}:\n${toolResult}\nThe edit is stale. Do not retry the same hunk. Use ghost_read_file on the current file, then create a fresh small ghost_apply_edit with new oldText, oldHash, beforeContext, or afterContext. Preserve the user’s existing changes.`
+            content: `Tool result for ${toolCall.name}:\n${toolResult}\nThe edit is stale. Do not repeat the previous edit JSON. First call ghost_read_file for the same path with the current file range. Then use the exact text returned by that read to create a fresh small ghost_apply_edit. Recalculate startLine, endLine, oldText, oldHash, beforeContext, and afterContext from the fresh read. Preserve the user’s existing changes.`
           })
           continue
         }

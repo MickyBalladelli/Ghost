@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { throwIfCancelled } from './cancellation'
-import { readCachedWorkspaceFile } from './workspaceCache'
+import { readFreshWorkspaceFile } from './workspaceCache'
 import { GhostFileSystem, vscodeFileSystem } from '../runtimeDependencies'
 
 export interface WorkspaceFileSnapshot {
@@ -13,10 +13,10 @@ export function isFileNotFound(error: unknown): boolean {
 }
 
 export async function readWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken, filesystem: GhostFileSystem = vscodeFileSystem): Promise<WorkspaceFileSnapshot> {
-  throwIfCancelled(token)
-  try {
-    const bytes = filesystem === vscodeFileSystem
-      ? await readCachedWorkspaceFile(uri, token)
+    throwIfCancelled(token)
+    try {
+      const bytes = filesystem === vscodeFileSystem
+      ? await readFreshWorkspaceFile(uri, token)
       : await filesystem.readFile(uri)
     return {
       exists: true,

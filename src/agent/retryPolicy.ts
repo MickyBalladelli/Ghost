@@ -11,7 +11,7 @@ export const GHOST_RETRY_POLICIES = {
   missingTool: { maxRetries: 2 },
   invalidToolArguments: { maxRetries: 2 },
   splitEdit: { maxRetries: 1 },
-  staleEdit: { maxRetries: 2 },
+  staleEdit: { maxRetries: 3 },
   failedTool: { maxRetries: 2 }
 } as const satisfies Record<string, RetryPolicy>
 

@@ -2,6 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.89 - 2026-08-20
+
+- Force fresh workspace reads during tool inspection and edit validation.
+
+## 1.1.88 - 2026-08-20
+
+- Improve stale edit recovery, exact-text rebasing, and failed tool status reporting.
+
 ## 1.1.87 - 2026-08-20
 
 - Recover stale edits with correctly labeled tool results and report only successfully changed files.

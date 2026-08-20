@@ -18,18 +18,22 @@ const directoryCache = new Map<string, CachedDirectory>()
 
 const cacheKey = (uri: vscode.Uri): string => uri.toString()
 
-export async function readCachedWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken): Promise<Uint8Array> {
+export async function readCachedWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken, forceRefresh = false): Promise<Uint8Array> {
   throwIfCancelled(token)
   const key = cacheKey(uri)
   const stat = await vscode.workspace.fs.stat(uri)
   const cached = fileCache.get(key)
-  if (cached && cached.mtime === stat.mtime && cached.size === stat.size) {
+  if (!forceRefresh && cached && cached.mtime === stat.mtime && cached.size === stat.size) {
     return cached.bytes.slice()
   }
 
   const bytes = Uint8Array.from(await awaitCancellable(vscode.workspace.fs.readFile(uri), token))
   fileCache.set(key, { mtime: stat.mtime, size: stat.size, bytes })
   return bytes.slice()
+}
+
+export async function readFreshWorkspaceFile(uri: vscode.Uri, token?: vscode.CancellationToken): Promise<Uint8Array> {
+  return readCachedWorkspaceFile(uri, token, true)
 }
 
 export async function readCachedWorkspaceDirectory(uri: vscode.Uri, token?: vscode.CancellationToken): Promise<[string, vscode.FileType][]> {

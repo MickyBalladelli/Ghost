@@ -122,7 +122,12 @@ function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostE
 
   const currentText = lines.slice(hunk.startLine - 1, hunk.endLine).join('\n')
   if (normalizeLineEndings(currentText) === normalizeLineEndings(hunk.oldText)) {
-    return hunk
+    try {
+      validateHunkContext(lines, hunk, index)
+      return hunk
+    } catch {
+      // The exact text is still present, but surrounding lines moved. Rebase below.
+    }
   }
 
   const oldLines = splitLines(normalizeLineEndings(hunk.oldText))
@@ -146,7 +151,14 @@ function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostE
       return false
     }
   })
-  return contextualCandidates.length === 1 ? contextualCandidates[0] : hunk
+  const candidate = contextualCandidates.length === 1
+    ? contextualCandidates[0]
+    : candidates.length === 1
+      ? candidates[0]
+      : undefined
+  return candidate
+    ? { ...candidate, oldHash: undefined, beforeContext: undefined, afterContext: undefined }
+    : hunk
 }
 
 function validateHunkContext(lines: string[], hunk: GhostEditHunk, index: number): void {
