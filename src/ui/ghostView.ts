@@ -101,8 +101,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private get recoveryRecords() { return this.stateStore.recoveryRecords }
   private get failedToolRetries() { return this.stateStore.failedToolRetries }
   private get sessionApprovedTools() { return this.stateStore.sessionApprovedTools }
+  private get persistentApprovedTools() { return this.stateStore.persistentApprovedTools }
   private get sessionApprovedFileEdits() { return this.stateStore.sessionApprovedFileEdits }
   private set sessionApprovedFileEdits(value: boolean) { this.stateStore.sessionApprovedFileEdits = value }
+  private get persistentApprovedFileEdits() { return this.stateStore.persistentApprovedFileEdits }
+  private set persistentApprovedFileEdits(value: boolean) { this.stateStore.persistentApprovedFileEdits = value }
   private get workspaceApprovedFileEdits() { return this.stateStore.workspaceApprovedFileEdits }
   private set workspaceApprovedFileEdits(value: boolean) { this.stateStore.workspaceApprovedFileEdits = value }
   private get globalState() { return this.stateStore.globalState }
@@ -1199,8 +1202,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       (fileEditPaths.length > 0 && fileEditPaths.every(filePath => request.approvedFilePaths?.has(filePath)))
     )
     const needsInteractiveApproval = requiresApproval && (fileEditTool
-      ? !(requestApproved || this.sessionApprovedFileEdits || this.workspaceApprovedFileEdits)
-      : !this.sessionApprovedTools.has(call.name))
+      ? !(requestApproved || this.sessionApprovedFileEdits || this.workspaceApprovedFileEdits || this.persistentApprovedFileEdits)
+      : !(this.sessionApprovedTools.has(call.name) || this.persistentApprovedTools.has(call.name)))
     const diffPreview = needsInteractiveApproval
       ? await this.getDiffPreview(call, {
           requestId,
@@ -1329,6 +1332,15 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.sessionApprovedFileEdits = true
       } else {
         this.sessionApprovedTools.add(pending.call.name)
+      }
+    }
+    if (approval.decision === 'always') {
+      if (isFileEditTool(pending.call.name)) {
+        this.persistentApprovedFileEdits = true
+        void this.globalState?.update('ghost.global.approvedFileEdits', true)
+      } else {
+        this.persistentApprovedTools.add(pending.call.name)
+        void this.globalState?.update('ghost.global.approvedTools', [...this.persistentApprovedTools])
       }
     }
     if (isFileEditTool(pending.call.name)) {

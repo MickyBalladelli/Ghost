@@ -23,7 +23,7 @@ export type { GhostStopReason }
 export type { GhostModelMetadata }
 export type { GhostModelAliases, GhostModelProfiles, GhostModelRole }
 
-export type GhostToolApprovalDecision = 'once' | 'file' | 'request' | 'session' | 'workspace' | 'reject'
+export type GhostToolApprovalDecision = 'once' | 'file' | 'request' | 'session' | 'workspace' | 'always' | 'reject'
 
 export interface GhostToolArguments {
   [key: string]: unknown
@@ -527,7 +527,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return true
   }
   if (value.type === 'approve-tool') {
-    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && ['once', 'file', 'request', 'session', 'workspace'].includes(value.decision as string) && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && ['once', 'file', 'request', 'session', 'workspace', 'always'].includes(value.decision as string) && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
   }
   if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0

@@ -2,12 +2,13 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.68 - 2026-08-20
+## 1.1.69 - 2026-08-20
 
 - Keep live progress and approval sections in one current block, preventing stale approval cards from appearing before newer progress output or after session approval.
 - Hide Send while a request is running so Stop is the only visible composer action.
 - Accept valid edits from CRLF files without converting their line endings.
 - Rebase an edit when its exact old text moved to one unambiguous line range.
+- Reduce tool approval choices to Approve now, Approve for session, and Approve forever; persist forever approvals.
 
 ## 1.1.64 - 2026-08-19
 

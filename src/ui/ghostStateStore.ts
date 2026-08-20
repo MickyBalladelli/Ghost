@@ -114,10 +114,12 @@ export class GhostStateStore {
   readonly recoveryRecords = new Map<string, RecoveryRecord>()
   readonly failedToolRetries = new Map<string, FailedToolRetry>()
   readonly sessionApprovedTools = new Set<string>()
+  readonly persistentApprovedTools = new Set<string>()
   readonly globalState?: GhostStorage
   readonly workspaceState?: GhostStorage
 
   sessionApprovedFileEdits = false
+  persistentApprovedFileEdits = false
   workspaceApprovedFileEdits = false
   private _status: GhostViewStatus = 'ready'
   controlsStateGeneration = 0
@@ -138,6 +140,15 @@ export class GhostStateStore {
     this.settings = options.settings
     this.globalState = options.globalState
     this.workspaceState = options.workspaceState
+    const persistentTools = options.globalState?.get<unknown>('ghost.global.approvedTools')
+    if (Array.isArray(persistentTools)) {
+      for (const tool of persistentTools) {
+        if (typeof tool === 'string' && tool.trim()) {
+          this.persistentApprovedTools.add(tool)
+        }
+      }
+    }
+    this.persistentApprovedFileEdits = options.globalState?.get<boolean>('ghost.global.approvedFileEdits') === true
     this.workspaceApprovedFileEdits = options.workspaceState?.get<boolean>('ghost.workspace.approvedFileEdits') === true
   }
 
