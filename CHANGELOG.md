@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.90 - 2026-08-20
+
+- Rebase multi-hunk edits by exact text, context, and nearest line position.
+
 ## 1.1.89 - 2026-08-20
 
 - Force fresh workspace reads during tool inspection and edit validation.

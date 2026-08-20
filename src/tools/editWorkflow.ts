@@ -139,10 +139,6 @@ function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostE
     }
   }
 
-  if (candidates.length === 1) {
-    return candidates[0]
-  }
-
   const contextualCandidates = candidates.filter(candidate => {
     try {
       validateHunkContext(lines, candidate, index)
@@ -151,11 +147,17 @@ function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostE
       return false
     }
   })
-  const candidate = contextualCandidates.length === 1
-    ? contextualCandidates[0]
-    : candidates.length === 1
-      ? candidates[0]
-      : undefined
+  const rankedCandidates = contextualCandidates.length > 0 ? contextualCandidates : candidates
+  const nearestCandidates = rankedCandidates
+    .map(candidate => ({
+      candidate,
+      distance: Math.abs(candidate.startLine - hunk.startLine)
+    }))
+    .sort((left, right) => left.distance - right.distance)
+  const candidate = nearestCandidates.length > 0
+    && (nearestCandidates.length === 1 || nearestCandidates[0].distance < nearestCandidates[1].distance)
+    ? nearestCandidates[0].candidate
+    : undefined
   return candidate
     ? { ...candidate, oldHash: undefined, beforeContext: undefined, afterContext: undefined }
     : hunk
