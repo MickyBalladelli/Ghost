@@ -2,9 +2,14 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.82 - 2026-08-20
+
+- Add idle eye wandering when the pointer leaves the webview.
+
 ## 1.1.79 - 2026-08-20
 
 - Restore pointer-following eyes using the new Ghost icon face.
+- Halve result-area status and task-plan icon sizes while keeping the top and bottom Ghost icons unchanged.
 
 ## 1.1.78 - 2026-08-20
 

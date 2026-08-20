@@ -2540,6 +2540,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         width: 27%;
       }
 
+      .ghost-face.idle-wandering .ghost-pupil {
+        transition: transform 1.1s ease-in-out;
+      }
+
       .title {
         font-weight: 600;
       }
@@ -3893,21 +3897,21 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
       .tool-status-icon {
         display: inline-block;
-        font-size: 3.6em;
+        font-size: 1.8em;
         font-weight: 700;
         line-height: 0.8;
         margin-right: 4px;
-        min-width: 1.25em;
+        min-width: 0.625em;
         text-align: center;
         vertical-align: -0.08em;
       }
 
       .task-plan-step-icon {
         display: inline-block;
-        font-size: 3.6em;
+        font-size: 1.8em;
         font-weight: 700;
         line-height: 0.8;
-        min-width: 1.25em;
+        min-width: 0.625em;
         text-align: center;
         vertical-align: -0.08em;
       }

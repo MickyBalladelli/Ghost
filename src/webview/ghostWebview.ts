@@ -638,7 +638,43 @@ const setPresetSaveState = (saved: boolean): void => {
   savePresetElement.textContent = saved ? 'Saved' : 'Save'
 }
 
+let ghostWanderTimer: number | undefined
+
+const setGhostEyeOffset = (face: HTMLElement, horizontal: number, vertical: number): void => {
+  const bounds = face.getBoundingClientRect()
+  if (bounds.width === 0 || bounds.height === 0) {
+    return
+  }
+  const clamp = (value: number): number => Math.max(-1, Math.min(1, value))
+  face.style.setProperty('--ghost-eye-x', `${clamp(horizontal) * bounds.width * 0.08}px`)
+  face.style.setProperty('--ghost-eye-y', `${clamp(vertical) * bounds.height * 0.08}px`)
+}
+
+const stopGhostWandering = (): void => {
+  if (ghostWanderTimer !== undefined) {
+    window.clearInterval(ghostWanderTimer)
+    ghostWanderTimer = undefined
+  }
+  document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => face.classList.remove('idle-wandering'))
+}
+
+const wanderGhostEyes = (): void => {
+  document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => {
+    setGhostEyeOffset(face, Math.random() * 2 - 1, Math.random() * 2 - 1)
+  })
+}
+
+const startGhostWandering = (): void => {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || ghostWanderTimer !== undefined) {
+    return
+  }
+  document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => face.classList.add('idle-wandering'))
+  wanderGhostEyes()
+  ghostWanderTimer = window.setInterval(wanderGhostEyes, 1800)
+}
+
 const updateGhostEyes = (event: PointerEvent): void => {
+  stopGhostWandering()
   document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => {
     const bounds = face.getBoundingClientRect()
     if (bounds.width === 0 || bounds.height === 0) {
@@ -646,13 +682,14 @@ const updateGhostEyes = (event: PointerEvent): void => {
     }
     const horizontal = (event.clientX - (bounds.left + bounds.width / 2)) / (bounds.width / 2)
     const vertical = (event.clientY - (bounds.top + bounds.height / 2)) / (bounds.height / 2)
-    const clamp = (value: number): number => Math.max(-1, Math.min(1, value))
-    face.style.setProperty('--ghost-eye-x', `${clamp(horizontal) * bounds.width * 0.08}px`)
-    face.style.setProperty('--ghost-eye-y', `${clamp(vertical) * bounds.height * 0.08}px`)
+    setGhostEyeOffset(face, horizontal, vertical)
   })
 }
 
 window.addEventListener('pointermove', updateGhostEyes, { passive: true })
+window.addEventListener('blur', startGhostWandering)
+window.addEventListener('focus', stopGhostWandering)
+document.documentElement.addEventListener('pointerleave', startGhostWandering, { passive: true })
 
 const post = (type: string, details: Record<string, unknown> = {}): void => {
   protocolClient.post(vscode, type, details)
