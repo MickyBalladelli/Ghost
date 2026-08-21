@@ -7,6 +7,7 @@ import * as vscode from 'vscode'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
+import { assertLanguageModelToolAllowed, prepareLanguageModelToolInvocation } from './languageModelToolPolicy'
 
 export interface SearchWorkspaceInput {
   query: string
@@ -167,6 +168,7 @@ export class SearchWorkspaceTool implements vscode.LanguageModelTool<SearchWorks
     options: vscode.LanguageModelToolInvocationOptions<SearchWorkspaceInput>,
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
+    assertLanguageModelToolAllowed('ghost_search_workspace', options.input)
     const query = options.input.query.trim()
     if (!query) throw new Error('Search query cannot be empty')
     if (query.length > MAX_QUERY_LENGTH) throw new Error(`Search query cannot exceed ${MAX_QUERY_LENGTH} characters`)
@@ -193,7 +195,9 @@ export class SearchWorkspaceTool implements vscode.LanguageModelTool<SearchWorks
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<SearchWorkspaceInput>): vscode.PreparedToolInvocation {
-    return { invocationMessage: `Searching workspace for ${options.input.query}` }
+    return prepareLanguageModelToolInvocation('ghost_search_workspace', options.input, () => ({
+      invocationMessage: `Searching workspace for ${options.input.query}`
+    }))
   }
 }
 

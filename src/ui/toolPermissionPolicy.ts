@@ -73,3 +73,35 @@ export function resolveToolPermission(
     needsInteractiveApproval: requiresApproval && !alreadyApproved
   }
 }
+
+export const deniedToolMessage = (toolName: string): string => (
+  `Tool '${toolName}' is denied by Ghost's workspace policy. Choose Allow or Ask first in Tool permissions.`
+)
+
+export function languageModelAutoAcceptScope(scope: AutoAcceptFileEditState['scope']): AutoAcceptFileEditState['scope'] {
+  if (scope === 'session' || scope === 'one-edit' || scope === 'current-file') {
+    return 'confirm'
+  }
+  return scope
+}
+
+export function resolveLanguageModelToolPermission(
+  toolName: string,
+  settings: {
+    allowlist?: string[]
+    asklist?: string[]
+    denylist?: string[]
+    autoAcceptScope: AutoAcceptFileEditState['scope']
+  },
+  call: AutoAcceptToolCall
+): ToolPermissionDecision {
+  return resolveToolPermission(toolName, {
+    allowlist: settings.allowlist,
+    asklist: settings.asklist,
+    denylist: settings.denylist,
+    autoAccept: {
+      scope: languageModelAutoAcceptScope(settings.autoAcceptScope),
+      sessionActive: false
+    }
+  }, call)
+}

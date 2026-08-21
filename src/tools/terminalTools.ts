@@ -5,6 +5,7 @@ import { redactSensitiveText } from '../privacy/redact'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
+import { assertLanguageModelToolAllowed, prepareLanguageModelToolInvocation } from './languageModelToolPolicy'
 
 export interface RunTerminalCommandInput {
   command: string
@@ -290,6 +291,7 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
     options: vscode.LanguageModelToolInvocationOptions<RunTerminalCommandInput>,
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
+    assertLanguageModelToolAllowed('ghost_run_terminal_command', options.input)
     if (!options.input.command.trim()) {
       throw new Error('Command cannot be empty')
     }
@@ -307,14 +309,16 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<RunTerminalCommandInput>): vscode.PreparedToolInvocation {
-    const audit = auditTerminalCommand(options.input.command)
-    return {
-      invocationMessage: `Audited terminal command: ${audit.summary}`,
-      confirmationMessages: {
-        title: 'Allow Ghost to run this terminal command?',
-        message: new vscode.MarkdownString(`${formatTerminalAudit(audit)}\n\nRun this command?\n\n\`\`\`sh\n${options.input.command}\n\`\`\``)
+    return prepareLanguageModelToolInvocation('ghost_run_terminal_command', options.input, () => {
+      const audit = auditTerminalCommand(options.input.command)
+      return {
+        invocationMessage: `Audited terminal command: ${audit.summary}`,
+        confirmationMessages: {
+          title: 'Allow Ghost to run this terminal command?',
+          message: new vscode.MarkdownString(`${formatTerminalAudit(audit)}\n\nRun this command?\n\n\`\`\`sh\n${options.input.command}\n\`\`\``)
+        }
       }
-    }
+    })
   }
 }
 

@@ -12,9 +12,11 @@ export type {
 } from './autoAcceptPolicy'
 
 export {
+  deniedToolMessage,
   isConversationStateTool,
   isFileEditTool,
   requiresToolApproval,
+  resolveLanguageModelToolPermission,
   resolveToolPermission
 } from './toolPermissionPolicy'
 export type {

@@ -5,6 +5,7 @@ import * as vscode from 'vscode'
 import { getWorkspaceRoot, resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { GhostProcessRunner, systemProcessRunner } from '../runtimeDependencies'
+import { assertLanguageModelToolAllowed, prepareLanguageModelToolInvocation } from './languageModelToolPolicy'
 
 export interface GitContextInput {
   operation: 'status' | 'diff' | 'stagedDiff' | 'branch' | 'history'
@@ -151,6 +152,7 @@ export class GitContextTool implements vscode.LanguageModelTool<GitContextInput>
     if (token.isCancellationRequested) {
       throw new Error('Git context request cancelled')
     }
+    assertLanguageModelToolAllowed('ghost_git_context', options.input)
 
     const input = options.input
     if (!['status', 'diff', 'stagedDiff', 'branch', 'history'].includes(input.operation)) {
@@ -193,9 +195,9 @@ export class GitContextTool implements vscode.LanguageModelTool<GitContextInput>
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<GitContextInput>): vscode.PreparedToolInvocation {
-    return {
+    return prepareLanguageModelToolInvocation('ghost_git_context', options.input, () => ({
       invocationMessage: `Reading Git ${options.input.operation}`
-    }
+    }))
   }
 }
 

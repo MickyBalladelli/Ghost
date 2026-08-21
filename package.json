@@ -615,7 +615,7 @@
             "ghost_run_terminal_command",
             "ghost_list_directory"
           ],
-          "description": "Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied."
+          "description": "Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. Applies to the Ghost view, @local chat, and registered Language Model tools."
         },
         "ghost.toolAsklist": {
           "type": "array",
@@ -636,7 +636,7 @@
             ]
           },
           "default": [],
-          "description": "Tools Ghost must ask about before use. Deny rules override this list."
+          "description": "Tools Ghost must ask about before use. Deny rules override this list. Applies to the Ghost view, @local chat, and registered Language Model tools."
         },
         "ghost.toolDenylist": {
           "type": "array",
@@ -657,7 +657,7 @@
             ]
           },
           "default": [],
-          "description": "Tools Ghost must never use. Deny rules override allow and ask rules."
+          "description": "Tools Ghost must never use. Deny rules override allow and ask rules, including Copilot and other clients that invoke Ghost's registered Language Model tools."
         },
         "ghost.terminalEnvironmentAllowlist": {
           "type": "array",

@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { resolveWorkspacePath } from './workspacePath'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { assertLanguageModelToolAllowed, prepareLanguageModelToolInvocation } from './languageModelToolPolicy'
 
 export interface DiagnosticsInput {
   path?: string
@@ -80,6 +81,7 @@ export class DiagnosticsTool implements vscode.LanguageModelTool<DiagnosticsInpu
     if (token.isCancellationRequested) {
       throw new Error('Diagnostics request cancelled')
     }
+    assertLanguageModelToolAllowed('ghost_get_diagnostics', options.input)
 
     const input = options.input
     let selectedUri: vscode.Uri | undefined
@@ -132,9 +134,9 @@ export class DiagnosticsTool implements vscode.LanguageModelTool<DiagnosticsInpu
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<DiagnosticsInput>): vscode.PreparedToolInvocation {
-    return {
+    return prepareLanguageModelToolInvocation('ghost_get_diagnostics', options.input, () => ({
       invocationMessage: options.input.path ? `Reading diagnostics for ${options.input.path}` : 'Reading workspace diagnostics'
-    }
+    }))
   }
 }
 

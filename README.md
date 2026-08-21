@@ -184,12 +184,12 @@ For parameter names, provider differences, and tuning examples, see [OLLAMA_PARA
 | --- | --- | --- |
 | `ghost.toolAllowlist` | All tools | Tools Ghost may use automatically. Tools not listed ask for approval. |
 | `ghost.toolAsklist` | `[]` | Tools Ghost must ask about before use. |
-| `ghost.toolDenylist` | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |
+| `ghost.toolDenylist` | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules, including Copilot and other clients that invoke Ghost's registered Language Model tools. |
 | `ghost.terminalEnvironmentAllowlist` | Safe common variables | Environment variables passed to approved terminal commands without asking. |
 | `ghost.terminalEnvironmentAsklist` | `[]` | Environment variables passed only after terminal approval. |
 | `ghost.fileEditApproval` | `confirm` | Legacy mirror of `ghost.autoAcceptScope`. Prefer the scope setting. `auto` means request-scoped auto-accept, not always. |
 
-File-edit auto-accept scopes are `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, and `always`. `one-edit` accepts one edit; `current-file` stays on the first file; `request` lasts for the current request; `session` lasts for the Ghost session; `workspace` applies to this workspace; `always` applies file edits without asking. Terminal and other dangerous tools still require their own approval. Deny rules always win.
+File-edit auto-accept scopes are `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, and `always`. `one-edit` accepts one edit; `current-file` stays on the first file; `request` lasts for the current request; `session` lasts for the Ghost session; `workspace` applies to this workspace; `always` applies file edits without asking. Terminal and other dangerous tools still require their own approval. Deny rules always win. Language Model tools honor the same allow/ask/deny lists; `request`, `workspace`, and `always` can skip their confirmation prompts. `session`, `one-edit`, and `current-file` still ask outside the Ghost view because those scopes are Ghost-session state.
 
 ### Persistence and diagnostics
 

@@ -81,8 +81,8 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `ghost.settingsSchemaVersion` | integer | `3` | Internal Ghost settings schema version. Ghost migrates older settings automatically. |
-| `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. |
-| `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. |
-| `ghost.toolDenylist` | array | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |
+| `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. Applies to the Ghost view, @local chat, and registered Language Model tools. |
+| `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. Applies to the Ghost view, @local chat, and registered Language Model tools. |
+| `ghost.toolDenylist` | array | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules, including Copilot and other clients that invoke Ghost's registered Language Model tools. |
 | `ghost.terminalEnvironmentAllowlist` | array | `["PATH","HOME","USER","USERNAME","SHELL","ComSpec","SystemRoot","TMPDIR","TMP","TEMP","LANG","LC_ALL","TERM","CI","PWD"]` | Environment variables Ghost passes to approved terminal commands without asking. Secret-looking names are always excluded. |
 | `ghost.terminalEnvironmentAsklist` | array | `[]` | Environment variables Ghost passes to approved terminal commands after asking. Secret-looking names are always excluded. |

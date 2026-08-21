@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert'
 
 import { shouldAutoAcceptFileEdit } from '../../ui/autoAcceptPolicy'
 import type { AutoAcceptToolCall } from '../../ui/autoAcceptPolicy'
-import { resolveToolPermission } from '../../ui/toolPermissionPolicy'
+import { resolveLanguageModelToolPermission, resolveToolPermission } from '../../ui/toolPermissionPolicy'
 
 const writeCall = (path = 'src/app.ts'): AutoAcceptToolCall => ({
   name: 'ghost_write_file',
@@ -156,6 +156,56 @@ suite('Shared tool permission policy', () => {
       autoAccept: { scope: 'always' }
     }, writeCall())
     assert.equal(decision.autoAcceptedFileEdit, true)
+    assert.equal(decision.needsInteractiveApproval, false)
+  })
+})
+
+suite('Language Model tool permission policy', () => {
+  test('denylist blocks writes even when auto-accept is always', () => {
+    const decision = resolveLanguageModelToolPermission('ghost_write_file', {
+      denylist: ['ghost_write_file'],
+      autoAcceptScope: 'always'
+    }, writeCall())
+    assert.equal(decision.blockedByPolicy, true)
+    assert.equal(decision.needsInteractiveApproval, false)
+    assert.equal(decision.autoAcceptedFileEdit, false)
+  })
+
+  test('denylist blocks inspection tools', () => {
+    const decision = resolveLanguageModelToolPermission('ghost_read_file', {
+      denylist: ['ghost_read_file'],
+      autoAcceptScope: 'confirm'
+    }, { name: 'ghost_read_file', arguments: { path: 'src/app.ts' } })
+    assert.equal(decision.blockedByPolicy, true)
+    assert.equal(decision.needsInteractiveApproval, false)
+  })
+
+  test('session, one-edit, and current-file still require confirmation outside the Ghost view', () => {
+    for (const autoAcceptScope of ['session', 'one-edit', 'current-file'] as const) {
+      const decision = resolveLanguageModelToolPermission('ghost_write_file', {
+        autoAcceptScope
+      }, writeCall())
+      assert.equal(decision.needsInteractiveApproval, true, autoAcceptScope)
+      assert.equal(decision.autoAcceptedFileEdit, false, autoAcceptScope)
+    }
+  })
+
+  test('request, workspace, and always skip confirmation for file edits', () => {
+    for (const autoAcceptScope of ['request', 'workspace', 'always'] as const) {
+      const decision = resolveLanguageModelToolPermission('ghost_write_file', {
+        autoAcceptScope
+      }, writeCall())
+      assert.equal(decision.autoAcceptedFileEdit, true, autoAcceptScope)
+      assert.equal(decision.needsInteractiveApproval, false, autoAcceptScope)
+    }
+  })
+
+  test('conversation-state tools ignore the denylist', () => {
+    const decision = resolveLanguageModelToolPermission('ghost_update_task_plan', {
+      denylist: ['ghost_update_task_plan'],
+      autoAcceptScope: 'confirm'
+    }, { name: 'ghost_update_task_plan', arguments: {} })
+    assert.equal(decision.blockedByPolicy, false)
     assert.equal(decision.needsInteractiveApproval, false)
   })
 })

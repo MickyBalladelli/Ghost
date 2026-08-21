@@ -18,7 +18,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **`@local` chat bypasses Ghost approval policy.** `createChatParticipant()` now passes `GhostViewProvider.approveChatTool()`. Native Chat uses the same allow/ask/deny lists, auto-accept scopes, and session/workspace/forever memory as the Ghost view. Interactive approvals use a VS Code modal (Approve now / session / forever) instead of sidebar cards and editor staging.
 
-- [ ] **Registered Language Model tools ignore Ghost denylist/allowlist.** `WriteFileTool` / `ApplyEditTool` / terminal tools in `src/tools/fileTools.ts` and `src/tools/terminalTools.ts` only set VS Code `confirmationMessages` in `prepareInvocation`. `ghost.toolDenylist` is enforced in `ghostView.requestToolApproval()` only. Invoke the same policy helper from LM `prepareInvocation`/`invoke` so Deny always wins on every entry point.
+- [x] **Registered Language Model tools ignore Ghost denylist/allowlist.** `prepareInvocation` and `invoke` on registered LM tools now use `resolveLanguageModelToolPermission()`. Deny blocks the tool before it runs. Allow/ask lists control VS Code confirmation. Persisted `request` / `workspace` / `always` auto-accept can skip file-edit confirmation; `session` / `one-edit` / `current-file` still ask outside the Ghost view.
 
 - [ ] **A failed inspection tool aborts the whole request.** In `src/agent/chatParticipant.ts`, `editFailed` is true for any tool whose status is `failed` / `denied` / `blocked` or whose text matches `/^Tool error:/`. After two path-recovery retries, a missing-file `ghost_read_file` (or a failed search / list) stops the agent instead of letting it list the tree and try another path. `GHOST_RETRY_POLICIES.failedTool` exists and is unused. Continue after recoverable inspection failures; stop only on denied/blocked mutations, user rejection, or exhausted edit retries.
 
@@ -145,11 +145,10 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 ## Suggested order of work
 
 1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Route Language Model tools through the same allow/deny/approval policy as the Ghost view.
-3. Soften the agent stop policy (failed reads, overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
-4. Reduce default context pressure (prompt size + 4096 output reserve).
-5. Tighten `describesWorkspaceChange` and native tool schemas.
-6. Remove Hello World, fix `watch`, add ESLint or drop it.
-7. Stop `create-vsix.sh` from drifting versions; sync README/changelog; add CI.
+2. Soften the agent stop policy (failed reads, overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
+3. Reduce default context pressure (prompt size + 4096 output reserve).
+4. Tighten `describesWorkspaceChange` and native tool schemas.
+5. Remove Hello World, fix `watch`, add ESLint or drop it.
+6. Stop `create-vsix.sh` from drifting versions; sync README/changelog; add CI.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

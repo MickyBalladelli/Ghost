@@ -10,6 +10,7 @@ import { assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEdi
 import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { readCachedWorkspaceDirectory, readCachedWorkspaceFile, readFreshWorkspaceFile, registerWorkspaceCache } from './workspaceCache'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { assertLanguageModelToolAllowed, prepareLanguageModelToolInvocation } from './languageModelToolPolicy'
 
 export interface ReadFileInput {
   path: string
@@ -427,6 +428,7 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
+    assertLanguageModelToolAllowed('ghost_read_file', options.input)
     const uri = await resolveReadableFilePath(options.input.path, token)
     if (options.input.source !== undefined && !['editor', 'disk'].includes(options.input.source)) {
       throw new Error("source must be 'editor' or 'disk'")
@@ -496,9 +498,9 @@ export class ReadFileTool implements vscode.LanguageModelTool<ReadFileInput> {
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileInput>): vscode.PreparedToolInvocation {
-    return {
+    return prepareLanguageModelToolInvocation('ghost_read_file', options.input, () => ({
       invocationMessage: `Reading ${options.input.path}`
-    }
+    }))
   }
 }
 
@@ -508,6 +510,7 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
+    assertLanguageModelToolAllowed('ghost_write_file', options.input)
     assertFileMutationAllowed([options.input.path])
     const { uri, snapshot: current } = await readFileMutation(options.input.path, token)
     const change = createWorkspaceFileChange(current, options.input.content)
@@ -517,13 +520,13 @@ export class WriteFileTool implements vscode.LanguageModelTool<WriteFileInput> {
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<WriteFileInput>): vscode.PreparedToolInvocation {
-    return {
+    return prepareLanguageModelToolInvocation('ghost_write_file', options.input, () => ({
       invocationMessage: `Writing ${options.input.path}`,
       confirmationMessages: {
         title: 'Allow Ghost to write this file?',
         message: new vscode.MarkdownString(`Write the complete contents of **${options.input.path}**?`)
       }
-    }
+    }))
   }
 }
 
@@ -533,6 +536,7 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
+    assertLanguageModelToolAllowed('ghost_apply_edit', options.input)
     const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
     assertFileMutationAllowed([edit.path])
     const { uri, snapshot: current } = await readFileMutation(edit.path, token)
@@ -545,14 +549,16 @@ export class ApplyEditTool implements vscode.LanguageModelTool<ApplyEditInput> {
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ApplyEditInput>): vscode.PreparedToolInvocation {
-    const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
-    return {
-      invocationMessage: `Applying ${edit.path}`,
-      confirmationMessages: {
-        title: 'Allow Ghost to apply this edit?',
-        message: new vscode.MarkdownString(summarizeGhostEdit(edit))
+    return prepareLanguageModelToolInvocation('ghost_apply_edit', options.input, () => {
+      const edit = parseGhostEdit(options.input as unknown as Record<string, unknown>)
+      return {
+        invocationMessage: `Applying ${edit.path}`,
+        confirmationMessages: {
+          title: 'Allow Ghost to apply this edit?',
+          message: new vscode.MarkdownString(summarizeGhostEdit(edit))
+        }
       }
-    }
+    })
   }
 }
 
@@ -562,6 +568,7 @@ export class ApplyTransactionTool implements vscode.LanguageModelTool<FileTransa
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
+    assertLanguageModelToolAllowed('ghost_apply_transaction', options.input)
     const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
     assertFileMutationAllowed(transaction.edits.map(edit => edit.path))
     const applied = await applyFileTransaction(transaction, undefined, token)
@@ -569,14 +576,16 @@ export class ApplyTransactionTool implements vscode.LanguageModelTool<FileTransa
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<FileTransactionInput>): vscode.PreparedToolInvocation {
-    const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
-    return {
-      invocationMessage: `Applying ${transaction.edits.length} files as one transaction`,
-      confirmationMessages: {
-        title: 'Allow Ghost to apply this file transaction?',
-        message: new vscode.MarkdownString(`Apply and verify **${transaction.edits.length} files** together?`)
+    return prepareLanguageModelToolInvocation('ghost_apply_transaction', options.input, () => {
+      const transaction = parseFileTransaction(options.input as unknown as Record<string, unknown>)
+      return {
+        invocationMessage: `Applying ${transaction.edits.length} files as one transaction`,
+        confirmationMessages: {
+          title: 'Allow Ghost to apply this file transaction?',
+          message: new vscode.MarkdownString(`Apply and verify **${transaction.edits.length} files** together?`)
+        }
       }
-    }
+    })
   }
 }
 
@@ -646,6 +655,7 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     assertNotCancelled(token)
+    assertLanguageModelToolAllowed('ghost_list_directory', options.input)
     const uri = resolveWorkspacePath(options.input.path)
     const workspaceRoot = getWorkspaceRoot()
     const relativePrefix = path.relative(workspaceRoot.fsPath, uri.fsPath)
@@ -692,9 +702,9 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
   }
 
   prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ListDirectoryInput>): vscode.PreparedToolInvocation {
-    return {
+    return prepareLanguageModelToolInvocation('ghost_list_directory', options.input, () => ({
       invocationMessage: `Listing ${options.input.path}`
-    }
+    }))
   }
 }
 
