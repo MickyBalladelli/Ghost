@@ -69,7 +69,7 @@ Capability values are defaults in `providerAdapter.ts`. A client without `fetchF
 | `mlx-vlm` | MLX OpenAI-compatible chat | No | No | Yes | No | temperature, top P, presence |
 | `openai-compatible` | OpenAI chat completions | Yes | Yes | No by default | Client-dependent | temperature, top P, presence |
 
-All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields.
+All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX has no native tools, so Agent mode depends on JSON-in-text parsing and is unreliable; prefer Ollama or OpenAI-compatible for workspace edits.
 
 ## Provider-neutral request types
 

@@ -38,27 +38,27 @@ These are concrete defects. Fix them before adding features.
 
 Ghost already has strong edit safety (workspace jail, hunk context, rebase, atomic writes, approval). The remaining execution problems are mostly “the loop gives up” and “the model is asked to do too much with too little context.”
 
-- [ ] **Shrink the default system prompt.** `SYSTEM_PROMPT` in `src/agent/chatParticipant.ts` concatenates the full tool catalog, JSON-escaping rules, path rules, diagnostics, git, task-plan, and completion-record instructions on every request. Local 7B models spend a large fraction of an 8k window on instructions. Split into a short always-on prompt plus tool schemas only when native tools are off; keep per-tool details in `GHOST_NATIVE_TOOL_DEFINITIONS`.
+- [x] **Shrink the default system prompt.** `SYSTEM_PROMPT` in `src/agent/chatParticipant.ts` concatenates the full tool catalog, JSON-escaping rules, path rules, diagnostics, git, task-plan, and completion-record instructions on every request. Local 7B models spend a large fraction of an 8k window on instructions. Split into a short always-on prompt plus tool schemas only when native tools are off; keep per-tool details in `GHOST_NATIVE_TOOL_DEFINITIONS`.
 
-- [ ] **Stop reserving 4096 output tokens from an 8192 context by default.** `MIN_TOOL_CALL_TOKENS` in `src/ghostPolicy.ts` / `budgetPolicy.ts` forces a 4096-token output reserve whenever tools are on. `ContextBudgetManager` then has ~4k for system + files + history, so compaction fires early and the model loses the file it just read. Scale the reserve from `maxContextTokens` (for example 25%, min 1024, max 4096) or from the model profile’s `maxTokens`.
+- [x] **Stop reserving 4096 output tokens from an 8192 context by default.** `MIN_TOOL_CALL_TOKENS` in `src/ghostPolicy.ts` / `budgetPolicy.ts` forces a 4096-token output reserve whenever tools are on. `ContextBudgetManager` then has ~4k for system + files + history, so compaction fires early and the model loses the file it just read. Scale the reserve from `maxContextTokens` (for example 25%, min 1024, max 4096) or from the model profile’s `maxTokens`.
 
-- [ ] **`describesWorkspaceChange()` is far too broad.** The regex matches `add`, `change`, `fix`, `update`, `create`, `write`, … in almost any coding sentence. Combined with default `ghost.mode = agent`, Ghost then *demands* a tool call when the model only explained something (`expectsWorkspaceTool`). That causes extra retries, false “you must edit the workspace” loops, and wasted budget. Match explicit edit intent (or the active mode), not those verbs in isolation. Add tests; there are none today.
+- [x] **`describesWorkspaceChange()` is far too broad.** The regex matches `add`, `change`, `fix`, `update`, `create`, `write`, … in almost any coding sentence. Combined with default `ghost.mode = agent`, Ghost then *demands* a tool call when the model only explained something (`expectsWorkspaceTool`). That causes extra retries, false “you must edit the workspace” loops, and wasted budget. Match explicit edit intent (or the active mode), not those verbs in isolation. Add tests; there are none today.
 
-- [ ] **Native Ollama tool schemas are weaker than the real validators.** `GHOST_NATIVE_TOOL_DEFINITIONS` marks `ghost_apply_edit` hunks as `{ additionalProperties: true }` and omits `oldText` / `oldHash` / context, `allowSpecialFile`, byte ranges, and several read modes. Models that use native tools then fail `validateLocalToolCall` / `parseGhostEdit`. Mirror `package.json` `languageModelTools` and `src/agent/toolSchema.ts` so the model is asked for the same shape that execution requires.
+- [x] **Native Ollama tool schemas are weaker than the real validators.** `GHOST_NATIVE_TOOL_DEFINITIONS` marks `ghost_apply_edit` hunks as `{ additionalProperties: true }` and omits `oldText` / `oldHash` / context, `allowSpecialFile`, byte ranges, and several read modes. Models that use native tools then fail `validateLocalToolCall` / `parseGhostEdit`. Mirror `package.json` `languageModelTools` and `src/agent/toolSchema.ts` so the model is asked for the same shape that execution requires.
 
-- [ ] **JSON-in-the-reply remains the fallback for too many models.** Native tool calling is enabled for every Ollama model and for generic OpenAI-chat profiles, even when the model cannot emit tool calls. Small coder models dump truncated JSON, hit `splitEdit` / `malformed-json` retries, then stop. Detect tool support from model metadata when Ollama provides it; otherwise keep the JSON protocol but add a one-tool-per-turn reminder only after a parse failure.
+- [x] **JSON-in-the-reply remains the fallback for too many models.** Native tool calling is enabled for every Ollama model and for generic OpenAI-chat profiles, even when the model cannot emit tool calls. Small coder models dump truncated JSON, hit `splitEdit` / `malformed-json` retries, then stop. Detect tool support from model metadata when Ollama provides it; otherwise keep the JSON protocol but add a one-tool-per-turn reminder only after a parse failure.
 
-- [ ] **Do not stop on no-op edits during stale-edit recovery except when the change is already present.** The no-op path already special-cases `staleEditRecoveryPaths`. Extend that: if the requested replacement is already in the file, treat it as success and continue (or finish), instead of `Ghost stopped because it found no changes`.
+- [x] **Do not stop on no-op edits during stale-edit recovery except when the change is already present.** The no-op path already special-cases `staleEditRecoveryPaths`. Extend that: if the requested replacement is already in the file, treat it as success and continue (or finish), instead of `Ghost stopped because it found no changes`.
 
-- [ ] **Task-plan + completion-record tools compete with real work.** Small models burn rounds on `ghost_update_task_plan` / `ghost_record_completion` instead of reading and editing. Keep them, but make the prompt say they are optional bookkeeping, never a substitute for a file tool, and do not require `ghost_record_completion` before the final answer unless files actually changed.
+- [x] **Task-plan + completion-record tools compete with real work.** Small models burn rounds on `ghost_update_task_plan` / `ghost_record_completion` instead of reading and editing. Keep them, but make the prompt say they are optional bookkeeping, never a substitute for a file tool, and do not require `ghost_record_completion` before the final answer unless files actually changed.
 
-- [ ] **Read-result cache should invalidate on file change, not only on a later edit tool.** `completedReadCalls` is keyed by path+options and reused even if the user saved the file in the editor. Changelog 1.1.89 already forces fresh reads in some inspection paths; make the cache honor editor version / mtime, or drop it after any document-change event for that path.
+- [x] **Read-result cache should invalidate on file change, not only on a later edit tool.** `completedReadCalls` is keyed by path+options and reused even if the user saved the file in the editor. Changelog 1.1.89 already forces fresh reads in some inspection paths; make the cache honor editor version / mtime, or drop it after any document-change event for that path.
 
-- [ ] **Default mode is Agent.** That is reasonable for a coding assistant, but first-run users can be surprised by write/terminal approvals. Keep Agent as default, and make the first-run setup state clearly: Ask vs Edit vs Agent, and that file writes need approval.
+- [x] **Default mode is Agent.** That is reasonable for a coding assistant, but first-run users can be surprised by write/terminal approvals. Keep Agent as default, and make the first-run setup state clearly: Ask vs Edit vs Agent, and that file writes need approval.
 
-- [ ] **The agent loop can exit after streamed prose and skip the next tool.** In `src/agent/chatParticipant.ts`, after a successful workspace change the loop returns as soon as a turn streamed any text (`turn.streamed && successfulWorkspaceChange`). A short “done” sentence then prevents a follow-up read, diagnostic check, or `ghost_record_completion`. Only exit on cancellation, an explicit stop reason, or a turn that is both streamed **and** classified as a final non-tool answer after the completion policy is satisfied.
+- [x] **The agent loop can exit after streamed prose and skip the next tool.** In `src/agent/chatParticipant.ts`, after a successful workspace change the loop returns as soon as a turn streamed any text (`turn.streamed && successfulWorkspaceChange`). A short “done” sentence then prevents a follow-up read, diagnostic check, or `ghost_record_completion`. Only exit on cancellation, an explicit stop reason, or a turn that is both streamed **and** classified as a final non-tool answer after the completion policy is satisfied.
 
-- [ ] **MLX has no native tool calling.** `providerAdapter.ts` reports `supportsTools: false` for MLX/VLM, so agent work depends on JSON-in-text parsing. Document that Agent mode is unreliable on MLX, keep the JSON parser resilient, and prefer Ollama/OpenAI-compatible when the user enables tools.
+- [x] **MLX has no native tool calling.** `providerAdapter.ts` reports `supportsTools: false` for MLX/VLM, so agent work depends on JSON-in-text parsing. Document that Agent mode is unreliable on MLX, keep the JSON parser resilient, and prefer Ollama/OpenAI-compatible when the user enables tools.
 
 ---
 
@@ -144,10 +144,8 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 
 ## Suggested order of work
 
-1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Soften remaining agent stop policy (early return after streamed text) in `chatParticipant.ts`.
-3. Reduce default context pressure (prompt size + 4096 output reserve).
-4. Tighten `describesWorkspaceChange` and native tool schemas.
-5. Remove Hello World, fix `watch`, add ESLint or drop it.
+1. Split the remaining god objects (`ghostView.ts`, `ghostWebview.ts`) and protocol types.
+2. Remove Hello World, fix `watch`, add ESLint or drop it.
+3. Optional GitHub Actions and remaining P3 polish.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

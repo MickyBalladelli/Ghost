@@ -64,7 +64,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `ghost.requestTimeLimitMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes a local Ghost request may run before its safety budget stops it. |
-| `ghost.mode` | string; one of `ask`, `edit`, `agent`, `explain`, `inline` | `agent` | Default workflow mode for the Ghost interface. |
+| `ghost.mode` | string; one of `ask`, `edit`, `agent`, `explain`, `inline` | `agent` | Default workflow mode. Ask answers without editing. Edit proposes file changes. Agent implements approved workspace changes; writes still need approval. |
 | `ghost.fileEditApproval` | string; one of `confirm`, `auto` | `confirm` | Legacy mirror of ghost.autoAcceptScope. Use autoAcceptScope. auto means request-scoped auto-accept, not always. |
 | `ghost.autoAcceptScope` | string; one of `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, `always` | `confirm` | Scope for automatic file-edit approval. Terminal and other dangerous tools always require explicit approval. |
 

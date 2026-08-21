@@ -61,6 +61,7 @@ export class ProviderError extends GhostError {
 export interface ProviderClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
   listModels?(signal?: AbortSignal): Promise<string[]>
+  modelSupportsTools?(model: string, signal?: AbortSignal): Promise<boolean>
   streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string>
   streamChatEvents?(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
   fetchFimCompletion?(options: FimCompletionOptions): Promise<string>

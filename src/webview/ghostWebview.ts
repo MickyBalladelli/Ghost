@@ -1103,7 +1103,7 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
   const features = [
     metadata.supportsStreaming ? 'streaming' : 'no streaming',
     metadata.supportsVision ? 'vision' : 'no vision',
-    metadata.supportsTools ? 'native tools' : 'native tools unavailable',
+    metadata.supportsTools ? 'native tools' : 'native tools unavailable; Agent mode unreliable',
     metadata.supportsJsonMode ? 'JSON mode' : 'JSON mode unavailable',
     metadata.supportsFIM ? 'FIM' : 'FIM unavailable'
   ]
@@ -1161,7 +1161,7 @@ const renderFirstRunSetup = (): void => {
   }
   const metadata = availableModelMetadata.find(item => item.id === controls.chatModel)
   setupCapabilitiesElement.textContent = metadata
-    ? `Selected model: ${controls.chatModel}. ${metadata.supportsTools ? 'Tools supported.' : 'Tools unavailable; Ghost can still chat.'} ${metadata.supportsVision ? 'Vision supported.' : 'Vision unavailable.'} ${metadata.supportsStreaming ? 'Streaming supported.' : 'Streaming unavailable.'}`
+    ? `Selected model: ${controls.chatModel}. ${metadata.supportsTools ? 'Tools supported.' : 'Tools unavailable; Agent mode is unreliable here because Ghost must parse JSON from the reply. Prefer Ollama or an OpenAI-compatible server for workspace tools. Ghost can still chat.'} ${metadata.supportsVision ? 'Vision supported.' : 'Vision unavailable.'} ${metadata.supportsStreaming ? 'Streaming supported.' : 'Streaming unavailable.'}`
     : 'Capability details will appear after model discovery.'
   setupTestRequestElement.disabled = Boolean(activeRequest) || connection === 'offline' || !controls.chatModel
 }

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import * as fs from 'node:fs'
 import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
@@ -29,32 +30,14 @@ import { createToolErrorResult, replaceToolResultText, ToolResult } from '../too
 import { limitToolResultText } from '../tools/toolResultLimits'
 import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
 import { argumentsWithCanonicalPath, canonicalizeEditPath, getCanonicalEditPath, getCanonicalEditPaths } from './editPaths'
-import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, MIN_TOOL_CALL_TOKENS, outputTokenBudget } from './budgetPolicy'
+import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, outputTokenBudget } from './budgetPolicy'
 import { parseTaskPlanMarker } from './taskPlan'
+import { describesWorkspaceChange } from './workspaceChangeIntent'
+import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
+import { shouldUseNativeToolCalling } from './nativeToolSupport'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
-
-const SYSTEM_PROMPT = [
-  'You are Ghost, a private local coding assistant.',
-  'Use the supplied editor and workspace context when it helps answer the user.',
-  'Be concise. Put code in fenced Markdown blocks with the correct language when useful.',
-  'Do not claim to have changed files or run commands unless a tool actually did it.',
-  'When a tool is needed, output only one JSON object in this exact shape: {"tool":"tool_name","arguments":{...}}.',
-  'Tool JSON must be valid JSON: escape every quote inside a string and encode line breaks as \\n. Never put raw multiline text inside a JSON string.',
-  'When using a tool, do not explain the plan first; emit the tool call as the complete response. Keep each ghost_apply_edit hunk small: do not put an entire large component into one replacement. Include oldText, oldHash, beforeContext, or afterContext in every hunk so line numbers are checked against nearby file content. Split large work into several focused tool calls and inspect the file between them.',
-  'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use cat >, tee, heredocs, redirection, sed -i, or scripts that write files. If a file tool fails, inspect the tool result and retry with ghost_read_file, ghost_apply_edit, ghost_write_file, or ghost_apply_transaction.',
-  'Every file or directory tool call must include a non-empty path inside the current workspace. Always use a path relative to the workspace root when possible, such as src/app.ts. Never copy an absolute path from another workspace, invent a directory, omit path, or use a path outside the workspace. Before writing or editing, read the target file first when it exists. For large files, use ghost_read_file with startLine and endLine and read every relevant chunk before editing.',
-  'Available tools: ghost_read_file({"path":"src/file.ts or absolute workspace path","allowSpecialFile":false,"mode":"head|tail|lines|bytes|symbol|matches","lineCount":200,"startLine":1,"endLine":400,"startByte":0,"endByte":12000,"symbol":"Name","match":"text","caseSensitive":true,"maxMatches":100}), ghost_search_workspace({"query":"text","path":"optional relative or absolute workspace path","glob":"optional glob","maxResults":100}), ghost_write_file({"path":"src/file.ts or absolute workspace path","content":"full text"}), ghost_apply_edit({"path":"src/file.ts or absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text","beforeContext":"nearby line before","afterContext":"nearby line after"}]}), ghost_apply_transaction({"edits":[{"path":"src/one.ts or absolute workspace path","content":"full text"},{"path":"src/two.ts or absolute workspace path","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"existing text"}]}]}), ghost_run_terminal_command({"command":"bash or PowerShell command","cwd":"optional relative or absolute workspace path"}), ghost_list_directory({"path":"src or absolute workspace path","recursive":true,"pageSize":100,"maxDepth":3,"cursor":"0"}).',
-  'Diagnostics tool: ghost_get_diagnostics({"path":"optional relative or absolute workspace file path","severity":"error|warning|information|hint","maxResults":100}) reads compiler and Problems-panel diagnostics. Omit path for the active file or workspace.',
-  'Read source rule: ghost_read_file needs source:"editor" for an open unsaved buffer or source:"disk" for the saved file. If the file is dirty and source is omitted, the tool pauses and asks you to choose. Never edit a file while its editor buffer has unsaved changes; ask the user to save or discard them first.',
-  'Git tool: ghost_git_context({"operation":"status|diff|stagedDiff|branch|history","path":"optional relative or absolute workspace file path","maxEntries":100}) reads non-ignored workspace Git status, selected-file diffs, branch, or selected-file history. Use a path for diff, stagedDiff, and history when no active file is selected.',
-  'Task plan tool: ghost_update_task_plan({"steps":[{"id":"step-1","title":"Do the work","checked":false}],"currentStep":"step-1","blockedReason":"optional","completionEvidence":["optional"]}) persists a bounded plan in the conversation. Use it for multi-step work and update checked steps as work finishes.',
-  'A task plan is progress, not a final answer. After creating or updating an unfinished plan, continue with the first unchecked step and use the workspace tools.',
-  'After a successful file edit, verify the result once if needed. If the requested change is complete, stop and provide the final answer. Do not keep rewriting the same file or undoing and reapplying changes.'
-].join(' ')
-
-const COMPLETION_RECORD_INSTRUCTION = 'Completion tool: ghost_record_completion({"changedFiles":[],"checksRun":[],"failures":[],"remainingWork":[]}) records the final structured completion record for workspace work. Call it before the final answer when you changed files, ran checks, or have remaining work. List only checks actually run and work actually changed.'
 
 const REQUEST_BUDGET_LIMITS = GHOST_POLICY.agent.requestBudget
 
@@ -188,7 +171,7 @@ export class ContextBudgetManager {
     toolsEnabled: boolean,
     tokenizer: ContextTokenizer = tokenizeContext
   ) {
-    const outputReserve = outputTokenBudget(requestedOutputTokens, toolsEnabled) ?? 512
+    const outputReserve = outputTokenBudget(requestedOutputTokens, toolsEnabled, maxContextTokens) ?? 512
     this.inputTokenBudget = Math.max(256, Math.floor(maxContextTokens) - outputReserve)
     this.tokenizer = tokenizer
   }
@@ -252,10 +235,6 @@ function isProviderConnectivityFailure(value: string): boolean {
   return /abort|connection refused|connection reset|econn|enotfound|etimedout|fetch failed|network|socket|timed out|timeout|502|503|504|temporarily unavailable|offline/i.test(value)
 }
 
-function describesWorkspaceChange(value: string): boolean {
-  return /\b(?:fix|edit|change|update|implement|create|write|remove|delete|add|replace|apply|modify|wire|refactor)\b/i.test(value)
-}
-
 function hasPendingWorkspaceTask(value: string | undefined): boolean {
   if (!value?.trim()) {
     return false
@@ -294,6 +273,22 @@ function resolveEditFilePath(filePath: string): string {
   return resolveWorkspacePath(filePath).fsPath
 }
 
+function readFileCacheFingerprint(filePath: string): string {
+  try {
+    const uri = resolveWorkspacePath(filePath)
+    const document = vscode.workspace.textDocuments.find(item => item.uri.fsPath === uri.fsPath)
+    const stats = fs.existsSync(uri.fsPath) ? fs.statSync(uri.fsPath) : undefined
+    return JSON.stringify({
+      editorVersion: document?.version,
+      dirty: document?.isDirty,
+      mtimeMs: stats?.mtimeMs,
+      size: stats?.size
+    })
+  } catch {
+    return 'unknown'
+  }
+}
+
 function readToolCallSignature(call: LocalToolCall): string | undefined {
   if (call.name !== 'ghost_read_file' || typeof call.arguments.path !== 'string') {
     return undefined
@@ -305,7 +300,7 @@ function readToolCallSignature(call: LocalToolCall): string | undefined {
     .sort()
     .map(key => [key, call.arguments[key]])
 
-  return JSON.stringify([filePath, options])
+  return JSON.stringify([filePath, options, readFileCacheFingerprint(filePath)])
 }
 
 function getEditPath(call: LocalToolCall): string | undefined {
@@ -1281,8 +1276,8 @@ export function createChatParticipantHandler(
       maxContextTokens: modelSettings.maxContextTokens
     }
     const images = requestOptions.images ?? []
+    const resolved = await llmFactory.resolve(modelSettings.provider)
     if (images.length > 0) {
-      const resolved = await llmFactory.resolve(modelSettings.provider)
       const capability = resolved.adapter.capabilities(modelSettings.model)
       if (!capability.supportsVision) {
         const message = `The selected ${modelSettings.provider} model does not support image input. Remove the image attachment or choose a vision-capable model.`
@@ -1299,12 +1294,17 @@ export function createChatParticipantHandler(
 
     const toolsEnabled = requestOptions.context?.tools !== false
     const requestToolsEnabled = toolsEnabled && (!conversationalPrompt || keepWorkspaceTools)
-    const nativeToolCalling = requestToolsEnabled && (
-      modelSettings.provider === 'ollama' ||
-      (modelSettings.provider === 'openai-compatible' && profileProtocol(settings.openaiProfile) === 'openai-chat')
-    )
+    const ollamaReportsTools = modelSettings.provider === 'ollama' && typeof resolved.client.modelSupportsTools === 'function'
+      ? await resolved.client.modelSupportsTools(modelSettings.model)
+      : false
+    const nativeToolCalling = shouldUseNativeToolCalling({
+      toolsEnabled: requestToolsEnabled,
+      provider: modelSettings.provider,
+      openaiProtocol: profileProtocol(settings.openaiProfile),
+      ollamaReportsTools
+    })
     const workspaceChangeRequested = describesWorkspaceChange(request.prompt) || pendingWorkspaceTask
-    const completionRecordEnabled = workspaceChangeRequested || requestOptions.mode === 'edit'
+    const completionRecordEnabled = workspaceChangeRequested
     if (!toolsEnabled && workspaceChangeRequested) {
       response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')
       return
@@ -1316,9 +1316,12 @@ export function createChatParticipantHandler(
         : workspaceChangeRequested
           ? '\n\nThe user directly requested a workspace change. Use tools to inspect and edit the real files. Do not answer with a plan. Start with ghost_read_file, then use ghost_apply_edit or ghost_write_file.'
           : ''
-    const baseSystemPrompt = !requestToolsEnabled
-      ? 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
-      : `${SYSTEM_PROMPT}${completionRecordEnabled ? ` ${COMPLETION_RECORD_INSTRUCTION}` : ''}${workflowInstruction}`
+    const baseSystemPrompt = buildAgentSystemPrompt({
+      toolsEnabled: requestToolsEnabled,
+      nativeTools: nativeToolCalling,
+      completionRecordEnabled,
+      workflowInstruction
+    })
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
       : baseSystemPrompt
@@ -1332,7 +1335,7 @@ export function createChatParticipantHandler(
       },
       userMessage
     ]
-    const outputTokens = outputTokenBudget(modelSettings.maxTokens, requestToolsEnabled)
+    const outputTokens = outputTokenBudget(modelSettings.maxTokens, requestToolsEnabled, effectiveSettings.maxContextTokens)
     const contextBudget = new ContextBudgetManager(effectiveSettings.maxContextTokens, outputTokens, requestToolsEnabled)
     let contextCompactionReported = false
     const cancellation = createCancellationSignal(token)
@@ -1427,11 +1430,20 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (token.isCancellationRequested || (turn.streamed && !taskPlanRequiresExecution && (successfulWorkspaceChange || !workspaceChangeRequested))) {
+        const generated = turn.generated || (turn.streamed ? turn.streamedText ?? '' : '')
+        if (token.isCancellationRequested) {
           return
         }
-
-        const generated = turn.generated || (turn.streamed ? turn.streamedText ?? '' : '')
+        if (turn.streamed && !taskPlanRequiresExecution && !turn.toolCall) {
+          const streamedParse = classifyLocalToolResponse(generated)
+          const finalNonToolAnswer = !streamedParse.call
+            && streamedParse.state !== 'malformed-json'
+            && streamedParse.state !== 'truncated-json'
+            && streamedParse.state !== 'unknown-tool'
+          if (finalNonToolAnswer && (successfulWorkspaceChange || !workspaceChangeRequested)) {
+            return
+          }
+        }
 
         if (turn.splitSuggested) {
           if (splitEditRetries < GHOST_RETRY_POLICIES.splitEdit.maxRetries) {
@@ -1501,11 +1513,11 @@ export function createChatParticipantHandler(
             messages.push(
               { role: 'assistant', content: generated },
               { role: 'user', content: parsedResponse.state === 'unknown-tool'
-                ? 'Your previous response used an unknown tool name. Use one of the available Ghost tools and emit exactly one valid JSON tool call now.'
+                ? `Your previous response used an unknown tool name. Use one of the available Ghost tools. ${JSON_TOOL_PARSE_FAILURE_REMINDER}`
                 : parsedResponse.state === 'truncated-json'
-                  ? 'Your previous tool call was truncated. Emit exactly one complete valid JSON tool call now. Do not repeat a large replacement.'
+                  ? `Your previous tool call was truncated. Do not repeat a large replacement. ${JSON_TOOL_PARSE_FAILURE_REMINDER}`
                   : parsedResponse.state === 'malformed-json'
-                    ? 'Your previous tool call was malformed JSON. Emit exactly one complete valid JSON tool call now.'
+                    ? `Your previous tool call was malformed JSON. ${JSON_TOOL_PARSE_FAILURE_REMINDER}`
                     : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
             )
             continue
@@ -1737,14 +1749,15 @@ export function createChatParticipantHandler(
         }
         invalidToolRetries = 0
         if (editPath && editNoOp) {
-          if (editPaths.some(path => staleEditRecoveryPaths.has(path))) {
-            response.markdown(`The requested change is already present in ${editPaths.join(', ')}. Keeping the current file.`)
-            return
+          completedReadCalls.clear()
+          successfulWorkspaceChange = true
+          unfinishedPlanAfterChangeCount = 0
+          if (editState && editRecord && editSignature) {
+            editState.signatures.add(editSignature)
+            editState.history.push(editRecord)
+            fileEditStates.set(editPath, editState)
           }
-          const message = `Ghost stopped because it found no changes to apply to ${editPath}. Review the file and retry with a more specific request.`
-          requestOptions.onStop?.('failed-tool', message)
-          response.markdown(message)
-          return
+          continue
         }
         if (editPath && editState && editRecord && editSignature && !editFailed) {
           editState.signatures.add(editSignature)

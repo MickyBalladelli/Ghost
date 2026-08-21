@@ -1,7 +1,7 @@
 export const GHOST_POLICY = {
   agent: {
     maxToolRounds: 128,
-    minToolCallTokens: 4096,
+    minToolCallTokens: 1024,
     toolResultCharacterLimits: {
       ghost_read_file: 16000,
       ghost_search_workspace: 16000,

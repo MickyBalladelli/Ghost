@@ -4,6 +4,17 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Shrink the always-on agent system prompt and keep JSON tool schemas for models without native tools.
+- Scale the tool output reserve from context size (25%, min 1024, max 4096) instead of reserving 4096 tokens on every 8k model.
+- Demand workspace tools only for explicit edit intent, not isolated verbs like add or change.
+- Mirror native Ollama tool schemas to the validators, including hunk context and read modes.
+- Enable Ollama native tools only when model metadata reports tool support; remind one-tool-per-turn after a parse failure.
+- Treat no-op edits as success when the replacement is already in the file, and keep the agent loop running.
+- Mark task-plan and completion-record tools as optional bookkeeping, required only after files actually changed.
+- Invalidate reused file reads when the editor version or disk mtime changes.
+- Explain Ask vs Edit vs Agent and write approvals in first-run setup.
+- Do not exit the agent loop after streamed prose when the same turn still has a tool call.
+- Document that Agent mode is unreliable on MLX/VLM because that provider has no native tool calling.
 - Stop claiming a GitHub Actions matrix, Dependabot, and `.github/workflows/ci.yml` in release docs. Local compile, tests, `npm run package`, and Marketplace verification are the release gates.
 - Stop `create-vsix.sh` from bumping the patch version on every local install. Packaging now uses the current `package.json` version, syncs README/`docs/release.md` on `npm version`, and runs `release:check` after `npm run package`.
 - Skip inline completion for MLX/VLM instead of sending FIM requests to Ollama.

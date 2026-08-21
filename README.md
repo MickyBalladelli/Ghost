@@ -160,7 +160,7 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
 
-OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent mode is unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need file edits. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
 
 ### Response settings
 
@@ -176,7 +176,7 @@ For parameter names, provider differences, and tuning examples, see [OLLAMA_PARA
 | `ghost.presencePenalty` | `0.0` | Penalizes tokens already used. Positive values encourage new topics; negative values allow reuse. |
 | `ghost.repeatPenalty` | `1.05` | Ollama repeat penalty. `1` disables it; values above `1` penalize repeated text more. |
 | `ghost.responseLength` | `balanced` | Choose `short`, `balanced`, `long`, or `unlimited`. |
-| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. Agent implements approved code changes. |
+| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. Ask answers without editing. Edit proposes file changes. Agent implements approved workspace changes; file writes still need approval. |
 
 ### Agent permissions
 

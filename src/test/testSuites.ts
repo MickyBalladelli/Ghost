@@ -6,6 +6,7 @@ export const FAST_TEST_FILES = [
   'editWorkflow.test.js',
   'ghostApprovalPolicy.test.js',
   'inlineFimPolicy.test.js',
+  'nativeToolSupport.test.js',
   'ollamaClient.test.js',
   'persistenceModel.test.js',
   'propertyFuzz.test.js',
@@ -17,7 +18,8 @@ export const FAST_TEST_FILES = [
   'settingsMigrations.test.js',
   'toolCallParser.test.js',
   'toolFailurePolicy.test.js',
-  'webviewAccessibility.test.js'
+  'webviewAccessibility.test.js',
+  'workspaceChangeIntent.test.js'
 ] as const
 
 export const EXTENSION_HOST_TEST_FILES = [

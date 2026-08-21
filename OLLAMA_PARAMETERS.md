@@ -126,7 +126,7 @@ Ghost sends the standard fields supported by the OpenAI-compatible path:
 
 ### MLX/VLM
 
-Ghost sends `temperature`, `top_p`, and `presence_penalty` to the MLX/VLM OpenAI-compatible endpoint. `top_k`, `min_p`, and `repeat_penalty` are not part of that request format.
+Ghost sends `temperature`, `top_p`, and `presence_penalty` to the MLX/VLM OpenAI-compatible endpoint. `top_k`, `min_p`, and `repeat_penalty` are not part of that request format. MLX does not expose native tool calling, so Agent mode is unreliable; use Ollama or an OpenAI-compatible server when the request needs file tools.
 
 ## Modelfile defaults
 

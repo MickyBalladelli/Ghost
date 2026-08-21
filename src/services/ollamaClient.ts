@@ -17,6 +17,7 @@ import { providerHttpError, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import type { FimCompletionOptions } from './fim'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { ollamaModelReportsTools } from './ollamaToolMetadata'
 
 export type { FimCompletionOptions } from './fim'
 
@@ -228,6 +229,7 @@ export class OllamaClient {
   private readonly mode: OllamaApiMode
   private readonly apiKeyProvider?: () => string | undefined
   private readonly openAiTransport?: OpenAiTransportSettings
+  private readonly toolSupportCache = new Map<string, boolean>()
 
   constructor(
     baseUrl = DEFAULT_OLLAMA_URL,
@@ -326,6 +328,39 @@ export class OllamaClient {
     }
 
     throw lastError ?? new Error('No local model server endpoint is available')
+  }
+
+  async modelSupportsTools(model: string, signal?: AbortSignal): Promise<boolean> {
+    const cached = this.toolSupportCache.get(model)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    try {
+      const endpoint = joinEndpoint(getOllamaBaseUrl(this.baseUrl), 'api/show')
+      const response = await this.transport.requestWithDiagnostics(
+        endpoint,
+        this.withTransport(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...this.authorizationHeaders() },
+          body: JSON.stringify({ name: model })
+        }),
+        { signal, timeoutMs: 5000 }
+      )
+
+      if (!response.ok) {
+        this.toolSupportCache.set(model, false)
+        return false
+      }
+
+      const payload = await response.json() as { capabilities?: string[]; template?: string }
+      const supported = ollamaModelReportsTools(payload)
+      this.toolSupportCache.set(model, supported)
+      return supported
+    } catch {
+      this.toolSupportCache.set(model, false)
+      return false
+    }
   }
 
   async *streamChatCompletion(options: OllamaChatOptions): AsyncGenerator<string> {
