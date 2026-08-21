@@ -194,4 +194,4 @@ Fast plain-Node tests run with `npm run test:fast`; extension-host tests run wit
 - `editSafety.test.ts`, `fakeProviderIntegration.test.ts`, and `fileTools.test.ts`: VS Code filesystem, approval, rollback, provider, and workspace integration behavior.
 - `webviewIntegration.test.ts`: accessible webview markup, multiline requests, attachments, lifecycle events, and duplicate request protection.
 
-CI runs the fast suite on every change, the extension-host suite on Linux, macOS, and Windows, dependency audit checks, package creation, and VSIX install smoke validation.
+Local `npm test` runs compile, the fast suite, and the extension-host suite. `npm run package` then runs `release:check`. There is no GitHub Actions workflow in this repository.
