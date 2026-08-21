@@ -61,6 +61,7 @@ export interface GhostRequestState {
   approvedFilePaths?: Set<string>
   approveAllFileEdits?: boolean
   autoAcceptDisabled?: boolean
+  oneEditConsumed?: boolean
   pendingTool?: { toolCallId: string; name: string }
   timing: RequestTiming
 }
@@ -119,6 +120,8 @@ export class GhostStateStore {
   readonly workspaceState?: GhostStorage
 
   sessionApprovedFileEdits = false
+  sessionAutoAcceptActive = false
+  oneEditConsumed = false
   persistentApprovedFileEdits = false
   workspaceApprovedFileEdits = false
   private _status: GhostViewStatus = 'ready'
@@ -187,6 +190,7 @@ export class GhostStateStore {
     this.failedToolRetries.clear()
     this.sessionApprovedTools.clear()
     this.sessionApprovedFileEdits = false
+    this.sessionAutoAcceptActive = false
     this.emit({ type: 'approval' })
   }
 

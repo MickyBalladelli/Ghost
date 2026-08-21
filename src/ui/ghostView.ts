@@ -103,6 +103,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private get persistentApprovedTools() { return this.stateStore.persistentApprovedTools }
   private get sessionApprovedFileEdits() { return this.stateStore.sessionApprovedFileEdits }
   private set sessionApprovedFileEdits(value: boolean) { this.stateStore.sessionApprovedFileEdits = value }
+  private get sessionAutoAcceptActive() { return this.stateStore.sessionAutoAcceptActive }
+  private set sessionAutoAcceptActive(value: boolean) { this.stateStore.sessionAutoAcceptActive = value }
+  private get oneEditConsumed() { return this.stateStore.oneEditConsumed }
+  private set oneEditConsumed(value: boolean) { this.stateStore.oneEditConsumed = value }
   private get persistentApprovedFileEdits() { return this.stateStore.persistentApprovedFileEdits }
   private set persistentApprovedFileEdits(value: boolean) { this.stateStore.persistentApprovedFileEdits = value }
   private get workspaceApprovedFileEdits() { return this.stateStore.workspaceApprovedFileEdits }
@@ -151,13 +155,16 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.messenger = options.messenger
     this.chatHandler = options.chatHandler ?? createChatParticipantHandler()
     this.debugLog('view provider created')
+    void this.resetPersistedSessionAutoAccept()
     const invalidateWorkspaceContext = (): void => {
       this.workspaceContextCache = undefined
       void this.sendControlsState()
     }
     this.disposables.push(ghostConfig.onDidChange((settings, event) => {
       this.stateStore.updateSettings(settings)
-      if (event.affectsConfiguration('ghost')) {
+      const autoAcceptOnly = event.affectsConfiguration('ghost.autoAcceptScope')
+        || event.affectsConfiguration('ghost.fileEditApproval')
+      if (event.affectsConfiguration('ghost') && !autoAcceptOnly) {
         this.cancelRequests()
       }
       void this.sendControlsState()
@@ -1190,11 +1197,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       })
       return { decision: 'reject', reason: unsavedEditorWarning }
     }
-    const autoAcceptDecision = shouldAutoAcceptFileEdit(settings.autoAcceptScope, request.autoAcceptDisabled === true, request.autoAcceptFilePath, call)
+    const autoAcceptDecision = shouldAutoAcceptFileEdit({
+      scope: this.effectiveAutoAcceptScope(),
+      autoAcceptDisabled: request.autoAcceptDisabled === true,
+      autoAcceptFilePath: request.autoAcceptFilePath,
+      oneEditConsumed: request.oneEditConsumed === true || this.oneEditConsumed,
+      sessionActive: this.sessionAutoAcceptActive,
+      resolveFilePath: filePath => resolveWorkspacePath(filePath).fsPath
+    }, call)
     if (autoAcceptDecision.nextAutoAcceptFilePath) {
       request.autoAcceptFilePath = autoAcceptDecision.nextAutoAcceptFilePath
     }
     const autoAcceptedFileEdit = fileEditTool && !blockedByPolicy && !asksByPolicy && autoAcceptDecision.accepted
+    if (autoAcceptedFileEdit && autoAcceptDecision.consumeOneEdit) {
+      request.oneEditConsumed = true
+      this.oneEditConsumed = true
+      void this.revertOneEditAutoAccept()
+    }
     const requiresApproval = (requiresToolApproval(call.name) || asksByPolicy) && !blockedByPolicy && !autoAcceptedFileEdit
     const argumentsPayload = call.arguments as GhostToolArguments
     const requestApproved = fileEditTool && (
@@ -1889,6 +1908,35 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return snapshot
   }
 
+  private effectiveAutoAcceptScope(): GhostAutoAcceptScope {
+    if (this.sessionAutoAcceptActive) {
+      return 'session'
+    }
+    if (this.settings.autoAcceptScope === 'session') {
+      return 'confirm'
+    }
+    if (this.oneEditConsumed && this.settings.autoAcceptScope === 'one-edit') {
+      return 'confirm'
+    }
+    return this.settings.autoAcceptScope
+  }
+
+  private async resetPersistedSessionAutoAccept(): Promise<void> {
+    if (this.settings.autoAcceptScope !== 'session') {
+      return
+    }
+    await ghostConfig.update('autoAcceptScope', 'confirm')
+    await ghostConfig.update('fileEditApproval', 'confirm')
+  }
+
+  private async revertOneEditAutoAccept(): Promise<void> {
+    if (this.settings.autoAcceptScope !== 'one-edit') {
+      return
+    }
+    await ghostConfig.update('autoAcceptScope', 'confirm')
+    await ghostConfig.update('fileEditApproval', 'confirm')
+  }
+
   private async sendControlsState(forceProviderRefresh = false): Promise<void> {
     const generation = ++this.controlsStateGeneration
     const settings = this.settings
@@ -1927,7 +1975,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         repeatPenalty: settings.repeatPenalty,
         responseLength: settings.responseLength,
         mode: settings.mode,
-        autoAcceptScope: settings.autoAcceptScope,
+        autoAcceptScope: this.effectiveAutoAcceptScope(),
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
@@ -2118,7 +2166,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       await ghostConfig.update('mode', update.mode, target)
     }
     if (update.autoAcceptScope) {
-      if (update.autoAcceptScope !== 'confirm' && this.settings.autoAcceptScope !== update.autoAcceptScope) {
+      if (update.autoAcceptScope !== 'confirm' && this.effectiveAutoAcceptScope() !== update.autoAcceptScope) {
         const choice = await vscode.window.showWarningMessage(
           `Auto-accept can change workspace files without asking. Scope: ${update.autoAcceptScope}. Terminal and other dangerous tools still require approval.`,
           { modal: true },
@@ -2129,8 +2177,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
           return
         }
       }
-      await ghostConfig.update('autoAcceptScope', update.autoAcceptScope, target)
-      await ghostConfig.update('fileEditApproval', update.autoAcceptScope === 'confirm' ? 'confirm' : 'auto', target)
+      this.sessionAutoAcceptActive = update.autoAcceptScope === 'session'
+      this.oneEditConsumed = false
+      const persistedScope = update.autoAcceptScope === 'session' ? 'confirm' : update.autoAcceptScope
+      await ghostConfig.update('autoAcceptScope', persistedScope, target)
+      await ghostConfig.update('fileEditApproval', persistedScope === 'confirm' ? 'confirm' : 'auto', target)
     } else if (update.fileEditApproval) {
       await ghostConfig.update('fileEditApproval', update.fileEditApproval, target)
       await ghostConfig.update('autoAcceptScope', update.fileEditApproval === 'auto' ? 'always' : 'confirm', target)

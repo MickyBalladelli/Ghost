@@ -1,206 +1,155 @@
 # Ghost TODO
 
-Roadmap from the full project review. Order matters: protect user files first, then make the agent reliable, then improve speed, UX, and provider support.
+Prioritized follow-up from a full-project review of Ghost `1.1.96`. Historical Phase 1–9 work lives in [`archives/TODO1-historical.md`](archives/TODO1-historical.md) and is complete.
 
-## Priority guide
+Use this list as the active backlog. Check items off as they land, and keep `CHANGELOG.md`, `README.md`, and `package.json` on the same version.
 
-- **P0**: protect files, secrets, and requests. Do first.
-- **P1**: reliability and core workflow. Do before adding many features.
-- **P2**: quality, speed, accessibility, and maintainability.
-- **P3**: future providers and larger product features.
+---
 
-## P0 — safety and trust
+## P0 — Bugs that change user-visible behavior
 
-- [x] Add atomic writes: write to a temporary file, flush, then rename. Keep a backup and restore it when verification fails.
-- [x] Detect disk changes between read, approval, and apply. Refuse stale edits and offer refresh/rebase instead of overwriting user work.
-- [x] Make structured edits context-aware. Include old text, a content hash, or nearby anchor lines, not only line numbers.
-- [x] Detect no-op, undo/reapply, alternating, and overlapping edits. Stop the request when the model oscillates on one file.
-- [x] Replace the current edit-count guard with a request budget for files, changed lines, bytes, commands, time, and model tokens. Show the limit and why Ghost stopped.
-- [x] Add one transaction for a multi-file change: preview one combined diff, apply atomically, verify, and roll back the group on failure.
-- [x] Add an explicit verification phase after edits. Run only relevant checks, report their exit status, and do not claim success without evidence.
-- [x] Add a clear stopped state: failed tool, invalid model response, cancellation, timeout, approval rejection, context limit, and budget limit must look different.
-- [x] Give every failed tool result an actionable retry path and preserve the last valid arguments.
-- [x] Audit all terminal commands before execution. Classify destructive commands, writes, network use, package installation, and privilege changes.
-- [x] Replace the raw `process.env` terminal environment with a masked, configurable allowlist. Never expose API keys or secret variables to the model.
-- [x] Add command timeout, output limit, cancellation, and process-tree cleanup for Windows, macOS, and Linux.
-- [x] Add symlink and realpath boundary checks in `src/tools/workspacePath.ts`; test traversal, symlinks, multi-root workspaces, and missing roots.
-- [x] Store provider API keys in VS Code SecretStorage. Do not put credentials in settings, URLs, exports, logs, or conversation persistence.
-- [x] Redact secrets before model context, webview display, diagnostics, persistence, and export. Expand `src/privacy/redact.ts` for URLs, headers, cookies, cloud keys, and common private-key formats.
-- [x] Validate every webview message through one protocol decoder. Check origin/source, schema, request ownership, payload size, and unknown message types.
-- [x] Add a warning and scope selector for auto-accept: one edit, current file, request, session, workspace, or always. Make dangerous tools never auto-accepted by default.
-- [x] Add undo for every applied edit and a visible recovery path after a failed verification.
-- [x] Add a privacy page that explains local providers, external providers, terminal access, storage, export, and redaction.
+These are concrete defects. Fix them before adding features.
 
-## P1 — make the agent finish work reliably
+- [x] **`one-edit` auto-accept never expires.** `shouldAutoAcceptFileEdit()` now consumes the first accepted mutation, then asks again and reverts the stored scope to `confirm`. Stored `session` is in-memory Ghost-session state: leftover `session` values from a previous window are treated as `confirm` until the user selects Session again. Unit tests live in `src/test/suite/ghostApprovalPolicy.test.ts`.
 
-- [x] Add a context-budget manager in `src/agent/chatParticipant.ts`. Estimate tokens, reserve output space, compact old tool results, and preserve current files, diffs, errors, and the user request.
-- [x] Replace the global `MAX_TOOL_RESULT_CHARACTERS` cap with per-tool limits and structured truncation. Return `head`, `tail`, byte count, and a continuation hint.
-- [x] Add a first-class search tool using ripgrep. Return structured file, line, and match data so the model does not use terminal commands for ordinary searching.
-- [x] Add read modes for `head`, `tail`, line range, byte range, symbol range, and matching lines. Include encoding, line endings, size, and content hash.
-- [x] Detect binary, generated, vendored, ignored, and very large files before reading. Explain the reason and offer a safe alternative.
-- [x] Add directory pagination and depth/entry limits instead of returning one large text listing.
-- [x] Add a diagnostics tool for compiler errors, Problems panel errors, and diagnostics for a selected file.
-- [x] Add optional Git context: status, diff, staged diff, branch, and recent file history. Never include unrelated or ignored files by default.
-- [x] Detect unsaved editor changes and let the model read the editor buffer or disk explicitly. Prevent disk edits from silently clobbering unsaved text.
-- [x] Add a task plan object with checked steps, current step, blocked reason, and completion evidence. Persist it in the conversation.
-- [x] Require the model to answer a final structured completion record: changed files, checks run, failures, and remaining work.
-- [x] Add a “continue from last state” action that sends the last failed tool, current file state, and remaining plan without replaying the whole conversation.
-- [x] Add request-level cancellation to every provider, tool, file operation, timer, and pending approval.
-- [x] Add bounded retry policies per failure class. Do not retry invalid arguments forever; retry network disconnects with backoff and jitter.
-- [x] Make empty output, explanatory-only output, malformed JSON, truncated JSON, and unknown tool names separate parser states.
-- [x] Add tool-call streaming support so long tool arguments are assembled safely instead of waiting for a large final text block.
-- [x] Add JSON Schema validation and repair feedback for every tool call. Return the exact missing or invalid field.
-- [x] Add a safe “split this edit” recovery that asks for smaller hunks/files when output approaches the provider limit.
-- [x] Add a no-tool detection message that clearly says why Ghost cannot complete an edit and offers retry/regenerate.
-- [x] Make model-generated paths relative in the prompt where possible, then resolve and validate them host-side. Keep absolute paths accepted for compatibility.
-- [x] Add a per-request event log with timestamps and status transitions. Keep it bounded and redact it before display/export.
+- [x] **`current-file` auto-accept compares raw path strings.** `current-file` now stores a canonical workspace path from `resolveWorkspacePath()` and matches relative, `./`, and absolute forms of the same file. Tests cover this in `src/test/suite/ghostApprovalPolicy.test.ts`.
 
-## P1 — provider abstraction and LLM compatibility
+- [ ] **Legacy `fileEditApproval: auto` migrates to `always`.** `migrateGhostSettings()` in `src/settingsMigrations.ts` (and the duplicate path in `src/config.ts`) maps the old confirm/auto toggle onto `autoAcceptScope: always`. Users who once chose “don’t ask” get workspace-wide auto-accept with no scope picker. Migrate to `request` or `session` instead, and stop writing `fileEditApproval` except as a legacy mirror.
 
-- [x] Define a provider adapter interface with `chat`, `stream`, `listModels`, `health`, `capabilities`, error normalization, and cancellation.
-- [x] Define a model capability record: context window, output limit, tools, JSON mode, vision, FIM, streaming, sampling parameters, and native API.
-- [x] Separate provider-neutral generation settings from Ollama, OpenAI, MLX, and future wire-format options.
-- [x] Move request construction into small provider-specific builders and test each request body independently.
-- [x] Support both OpenAI `/v1/chat/completions` and `/v1/responses`, including streamed tool-call deltas.
-- [x] Add configurable authentication headers, API key name, organization/project headers, proxy, TLS, and no-proxy settings for OpenAI-compatible servers.
-- [x] Add adapters or tested compatibility profiles for Anthropic, Google/Gemini, Azure OpenAI, LM Studio, llama.cpp/llama-server, vLLM, and LiteLLM.
-- [x] Keep an extension point for local HTTP servers with custom model discovery and request templates.
-- [x] Make endpoint joining robust for trailing slashes, `/v1`, native Ollama routes, IPv6, and reverse proxies.
-- [x] Add shared timeout, retry, status parsing, rate-limit handling, and normalized provider errors.
-- [x] Cache model discovery and health checks with a manual refresh button. Do not fall back silently to a different model.
-- [x] Show model metadata and capabilities in settings. Explain when Top K, Min P, penalties, vision, tools, or FIM are ignored.
-- [x] Add model aliases and per-model profiles so chat, agent, vision, and autocomplete can use different settings.
-- [x] Add support for provider-native tool calling and JSON/schema mode before relying on text parsing.
-- [x] Add grammar/JSON constraints, seed, stop sequences, context window, and max output settings where the provider supports them.
-- [x] Add an adapter contract test suite using fake providers. Every new LLM adapter must pass the same stream, error, tool, cancellation, and capability tests.
-- [x] Keep image messages behind a capability check and unify MLX/VLM image handling with the generic chat path.
-- [x] Generalize FIM beyond Ollama with an explicit `supportsFIM` capability and endpoint mapping.
+- [ ] **`@local` chat bypasses Ghost approval policy.** `createChatParticipant()` in `src/extension.ts` does not pass `approveTool`. The handler then auto-decides `{ decision: 'once' }` and `LocalToolExecutor` falls back to generic VS Code modals. Ghost allow/ask/deny lists, auto-accept scopes, hunk selection, and diff preview never run for the native Chat view. Share the same approval service as `GhostViewProvider.requestToolApproval()`, or document that full policy exists only in the Ghost sidebar.
 
-## P1 — user experience
+- [ ] **Registered Language Model tools ignore Ghost denylist/allowlist.** `WriteFileTool` / `ApplyEditTool` / terminal tools in `src/tools/fileTools.ts` and `src/tools/terminalTools.ts` only set VS Code `confirmationMessages` in `prepareInvocation`. `ghost.toolDenylist` is enforced in `ghostView.requestToolApproval()` only. Invoke the same policy helper from LM `prepareInvocation`/`invoke` so Deny always wins on every entry point.
 
-- [x] Show simple live progress by default: “Reading file…”, “Running command…”, “Applying edit…”, “Checking result…”. Keep verbose arguments/results behind a setting.
-- [x] Add a request summary card with changed files, commands, elapsed time, model, provider, tokens, and final status.
-- [x] Group repeated tool calls and show a compact expandable timeline instead of many duplicate blocks.
-- [x] Add Cancel, Retry, Continue, Regenerate, and Open Diff actions to the stopped/failed card.
-- [x] Show the actual reason when Ghost stops: approval denied, tool failure, model stopped, context full, budget reached, or verification failed.
-- [x] Improve approval cards with diff statistics, file names, hunk navigation, keyboard shortcuts, focus management, and accessible labels.
-- [x] Add “approve all pending files” plus separate scopes for this request, session, workspace, and one file.
-- [x] Make “Edit Arguments” open an editable form populated with the original arguments, validate it, and send it back through the same approval flow.
-- [x] Add a visible auto-accept indicator and an easy emergency stop that disables auto-accept for the current request.
-- [x] Add conversation search, message search, bookmarks, rename, duplicate/branch conversation, and lazy loading for old messages.
-- [x] Keep prompt history per conversation with deduplication, search, configurable size, keyboard hints, and reliable previous/next navigation.
-- [x] Autosave composer drafts and show whether prompt history/conversation persistence is enabled.
-- [x] Add slash commands or prompt presets for explain, fix, test, review, refactor, and summarize.
-- [x] Add file/folder mention autocomplete, drag-and-drop files, paste-image support, and clear attachment limits.
-- [x] Add a workspace selector for multi-root workspaces and show which root each file belongs to.
-- [x] Add a model/provider quick switcher and a visible connection/model status with refresh and copyable diagnostic details.
-- [x] Add a settings search and split settings into Provider, Generation, Agent Safety, Appearance, Persistence, and Advanced sections.
-- [x] Add stable coding, balanced, and creative generation profiles. Show the effective values and restore defaults per setting.
-- [x] Add a first-run setup flow that checks the provider, lists models, tests one request, and explains missing capabilities.
-- [x] Use VS Code theme variables consistently. Add high-contrast, reduced-motion, keyboard-only, and screen-reader checks.
-- [x] Replace unsafe or expensive whole-message rendering with safe DOM updates and a central markdown/syntax rendering policy.
-- [x] Add copy buttons for code, paths, errors, commands, and diagnostics. Do not copy hidden secrets.
+- [ ] **A failed inspection tool aborts the whole request.** In `src/agent/chatParticipant.ts`, `editFailed` is true for any tool whose status is `failed` / `denied` / `blocked` or whose text matches `/^Tool error:/`. After two path-recovery retries, a missing-file `ghost_read_file` (or a failed search / list) stops the agent instead of letting it list the tree and try another path. `GHOST_RETRY_POLICIES.failedTool` exists and is unused. Continue after recoverable inspection failures; stop only on denied/blocked mutations, user rejection, or exhausted edit retries.
 
-## P1 — speed and resource use
+- [ ] **Overlapping-edit guard blocks legitimate follow-up edits.** `getEditLoopReason()` in `src/agent/editLoopGuard.ts` treats any later hunk whose line range overlaps a previous successful edit as a loop. After “edit lines 10–20”, a real refinement of line 12 is stopped. Keep the repeated-signature and inverse-hunk checks; allow overlapping ranges after a fresh read of that file, or only flag overlap when the fingerprint matches.
 
-- [x] Add a shared HTTP transport for Ollama, MLX, OpenAI-compatible, and future adapters with keep-alive, timeout, abort, retry, and connection diagnostics.
-- [x] Cache workspace context, file reads, directory listings, model lists, and provider health. Invalidate caches on relevant VS Code events.
-- [x] Make context selection relevance-based: active file, diagnostics, changed files, search matches, and user-mentioned files first.
-- [x] Add a tokenizer-aware context packer instead of character-only limits. Report how much context was omitted.
-- [x] Cache inline completions by document version, position, prefix, suffix, language, model, and settings.
-- [x] Cancel obsolete inline requests and agent requests immediately when the document, prompt, provider, or request changes.
-- [x] Add adaptive inline debounce, minimum prefix length, suffix limits, and separate completion timeout/model settings.
-- [x] Batch webview stream updates with `requestAnimationFrame`; do not rebuild the entire message DOM for each token or event.
-- [x] Virtualize long conversations and keep old markdown/code rendering lazy.
-- [x] Stream terminal output into a bounded ring buffer. Prefer a structured tail plus exit metadata over accumulating 200,000 characters first.
-- [x] Bound persistence size and write incrementally. Compress or archive old conversations and handle storage failures visibly.
-- [x] Dispose render targets, event listeners, timers, child processes, and provider streams on request completion and extension deactivation.
-- [x] Add internal timing counters for context preparation, provider wait, first token, tool execution, approval wait, and verification. Keep telemetry local and opt-in if ever added.
-- [x] Reduce debug logging by default and redact before writing logs. Add log levels and a clear log location/cleanup action.
-- [x] Profile startup and lazy-load nonessential commands, diagnostics, model discovery, and webview assets.
+- [ ] **Edit-loop state is keyed by the model’s raw path.** `getEditPaths()` / `getEditRecord()` in `src/agent/chatParticipant.ts` use `call.arguments.path` rather than the canonical fs path. The same file as `src/app.ts` and `/abs/workspace/src/app.ts` is tracked as two files, so loop detection and “already applied” checks miss. Canonicalize before recording.
 
-## P2 — architecture and maintainability
+- [ ] **Inline completion ignores the MLX provider.** `InlineCompletionProvider` in `src/providers/inlineCompletionProvider.ts` sends FIM to `settings.ollamaUrl` unless the OpenAI-compatible profile is FIM-capable. With `ghost.provider` set to `mlx-vlm`, completions still hit Ollama (or fail silently). Disable FIM for MLX (capabilities already say `supportsFIM: false`) or route through the selected adapter.
 
-- [x] Split `src/webview/ghostWebview.ts` into protocol client, conversation store, settings store, history, rendering, tool timeline, composer, and modal modules.
-  - [x] Extract shared state and protocol types.
-  - [x] Extract conversation creation and prompt-history runtime operations.
-- [x] Split `src/ui/ghostView.ts` into request orchestration, persistence, approvals, provider state, import/export, and webview lifecycle services.
-  - [x] Extract persisted-state shapes, redaction-safe compaction, and storage bounds.
-  - [x] Extract tool approval policy, file-edit classification, and auto-accept scope rules.
-  - [x] Extract provider cache-key and model-capability state helpers.
-  - [x] Extract request registry and completion lifecycle.
-  - [x] Extract import/export state parsing and export envelope creation.
-  - [x] Extract webview attachment, pending-message, and disposal state.
-- [x] Share or generate protocol types between `src/ui/ghostProtocol.ts` and the webview. Remove duplicated local message declarations.
-- [x] Centralize file validation, read/write/edit execution, diff creation, and conflict handling instead of duplicating logic between `fileTools.ts` and `localToolExecutor.ts`.
-- [x] Keep provider-neutral types separate from `MlxChatOptions`; avoid using one provider’s request shape as the shared contract.
-- [x] Introduce an event/state store with one owner for request state, conversation state, settings, approvals, and persistence.
-- [x] Add protocol version negotiation and migrations for webview/extension changes.
-- [x] Replace giant `innerHTML` templates with small safe render functions or DOM builders. Centralize escaping and markdown sanitization.
-- [x] Add typed result objects for tools: status, exit code, changed files, bytes, truncation, warnings, and retryability.
-- [x] Make constants such as tool rounds, edit limits, output limits, timeouts, and context limits configurable or grouped in one policy module.
-- [x] Define error classes and error codes shared by providers, tools, persistence, approvals, and UI.
-- [x] Add settings schema versioning and migrations before adding more configuration.
-- [x] Add dependency injection for providers, filesystem, clock, process runner, storage, and webview messaging so core behavior can be tested without VS Code.
-- [x] Add `dispose` methods and ownership rules for every long-lived resource.
+- [ ] **`create-vsix.sh` is the source of version drift.** The script runs `npm version patch` and does not update `CHANGELOG.md`, `README.md` (“Current release: `1.1.19`”), or `docs/release.md` (still `1.1.19`). `package.json` is `1.1.96` while the latest changelog heading is behind and README is 77 patches stale. `scripts/checkReleaseConsistency.js` would fail today. Stop auto-bumping in the local install helper, or make the bump update README + changelog in the same step. Run `npm run release:check` before every publish.
 
-## P2 — testing and quality
+- [ ] **Release docs claim CI that does not exist.** `docs/release.md` and `docs/dependency-policy.md` describe `.github/workflows/ci.yml`, a Linux/macOS/Windows host-test matrix, Dependabot, and `npm audit` on every PR. There is **no** `.github/` directory. Either add the workflow the docs describe, or stop claiming it.
 
-- [x] Add fast pure unit tests for settings defaults/migrations, endpoint normalization, capability mapping, redaction, workspace paths, edit application, and tool result limits.
-- [x] Add tests for chunked reads, line ranges, UTF-8/CRLF files, binary detection, large files, directory pagination, and no-op writes.
-- [x] Add tests for edit conflicts, stale hashes, overlapping hunks, repeated edits, oscillating edits, multi-file rollback, and approval races.
-- [x] Add tests for malformed compact names, raw multiline JSON, truncated JSON, multiple tool calls, unknown tools, invalid schemas, and output-only model replies.
-- [x] Add tests that verify the 4096-token minimum tool budget and the 128-call safety boundary without making live provider requests.
-- [x] Add OpenAI-compatible, native Ollama, MLX, and image request fixtures. Assert unsupported parameters are omitted, not merely ignored by the server.
-- [x] Add fake-provider integration tests for read → edit → approve → verify, failure → retry, cancellation, empty output, and context compaction.
-- [x] Add webview tests for keyboard navigation, focus traps, approval controls, failure colors/icons, live regions, history restore, and reduced motion.
-- [x] Add property/fuzz tests for tool JSON parsing, edit hunks, protocol messages, redaction, and endpoint handling.
-- [x] Add accessibility checks for every modal, button, status update, contrast mode, and keyboard path.
-- [x] Separate fast tests from VS Code extension-host tests. Make CI run the fast suite on every change.
-- [x] Add CI for compile, unit/integration tests, packaging, VSIX install smoke test, and supported OS versions.
-- [x] Add dependency security checks and a policy for updating TypeScript, VS Code types, `node-fetch`, `vsce`, and test tooling.
-- [x] Add regression fixtures from real failures: malformed shader edits, missing files, provider-empty output, failed apply, truncated tool arguments, and repeated same-file edits.
+---
 
-## P2 — docs and release hygiene
+## P1 — Ability to execute (agent actually finishes workspace work)
 
-- [x] Expand `docs/architecture.md` with state ownership, request sequence diagrams, approval sequence, provider sequence, persistence schema, and failure recovery.
-- [x] Add `docs/provider-adapter.md` describing capabilities, request builders, streaming, errors, authentication, and how to add a provider.
-- [x] Add `docs/tool-protocol.md` describing schemas, validation, approval, retries, truncation, edits, and verification.
-- [x] Add `docs/release.md` with version, changelog, compile, package, install, smoke-test, publish, and rollback steps.
-- [x] Update `README.md` with the current stable coding profile, provider capability matrix, tool limits, approval scopes, persistence/privacy behavior, and troubleshooting for failed edits.
-- [x] Link `OLLAMA_PARAMETERS.md` from the settings and README. Document which settings each provider really uses.
-- [x] Add a user FAQ for model setup, OpenAI-compatible URLs, MLX/VLM images, auto-accept, tool failures, context limits, and disk usage.
-- [x] Add configuration reference generated from `package.json` so descriptions/defaults cannot drift from `src/config.ts`.
-- [x] Fix stale examples in `PUBLISH.md` (name, publisher, version, Marketplace ID, and old commands).
-- [x] Replace the hardcoded `ghost-1.0.14.vsix` package output with the current package version.
-- [x] Add a release check that package.json, package-lock.json, changelog, README, and VSIX version agree.
-- [x] Keep only intentional release artifacts. Move old local VSIX files to `./Trash` or stop tracking them; do not let every build grow the repository.
-- [x] Decide whether `archives/TODO1.md` is historical. Archived as `archives/TODO1-historical.md`; active work remains in `TODO.md`.
-- [x] Add `.editorconfig` and audit `.gitignore`, `.vscodeignore`, line endings, generated output, logs, caches, and local model files.
-- [x] Add dependency update automation and a documented review cadence.
-- [x] Add issue templates for provider bugs, failed edits, security reports, and performance reports.
+Ghost already has strong edit safety (workspace jail, hunk context, rebase, atomic writes, approval). The remaining execution problems are mostly “the loop gives up” and “the model is asked to do too much with too little context.”
 
-## P3 — future product capabilities
+- [ ] **Shrink the default system prompt.** `SYSTEM_PROMPT` in `src/agent/chatParticipant.ts` concatenates the full tool catalog, JSON-escaping rules, path rules, diagnostics, git, task-plan, and completion-record instructions on every request. Local 7B models spend a large fraction of an 8k window on instructions. Split into a short always-on prompt plus tool schemas only when native tools are off; keep per-tool details in `GHOST_NATIVE_TOOL_DEFINITIONS`.
 
-- [ ] Add conversation branching and compare two model/provider answers.
-- [ ] Add background indexing with explicit workspace consent, ignore rules, and an on-disk index that can be deleted.
-- [ ] Add semantic symbol/file retrieval while keeping exact search available and transparent.
-- [ ] Add project-specific instructions with safe precedence: workspace config, folder config, file language, conversation, then user prompt.
-- [ ] Add configurable tool packs and third-party tools behind permissions and capability discovery.
-- [ ] Add local-only mode that disables external endpoints, persistence, telemetry, and network-capable commands.
-- [ ] Add remote/container/WSL/SSH workspace awareness so paths, shells, providers, and terminals run in the correct environment.
-- [ ] Add multimodal context for screenshots, diagrams, PDFs, and selected editor regions when the model supports vision.
-- [ ] Add structured code review mode with inline comments, severity, confidence, and diff-aware findings.
-- [ ] Add test-generation and test-running mode with a clear command allowlist.
-- [ ] Add patch export/import in unified diff format and optional Git apply integration.
-- [ ] Add per-workspace policy files for allowed tools, ignored paths, provider restrictions, and approval defaults.
-- [ ] Add optional local evaluation harness with repeatable tasks, fake repositories, latency, tool-call accuracy, edit success rate, and regression scoring.
+- [ ] **Stop reserving 4096 output tokens from an 8192 context by default.** `MIN_TOOL_CALL_TOKENS` in `src/ghostPolicy.ts` / `budgetPolicy.ts` forces a 4096-token output reserve whenever tools are on. `ContextBudgetManager` then has ~4k for system + files + history, so compaction fires early and the model loses the file it just read. Scale the reserve from `maxContextTokens` (for example 25%, min 1024, max 4096) or from the model profile’s `maxTokens`.
 
-## Done means
+- [ ] **`describesWorkspaceChange()` is far too broad.** The regex matches `add`, `change`, `fix`, `update`, `create`, `write`, … in almost any coding sentence. Combined with default `ghost.mode = agent`, Ghost then *demands* a tool call when the model only explained something (`expectsWorkspaceTool`). That causes extra retries, false “you must edit the workspace” loops, and wasted budget. Match explicit edit intent (or the active mode), not those verbs in isolation. Add tests; there are none today.
 
-- [x] Every file mutation is reviewable, conflict-safe, undoable, and verified.
-- [ ] Every provider reports capabilities and gives a useful error when a feature is unsupported.
-- [ ] Long requests stay within a measured context and tool budget without silently losing the user’s task.
-- [x] The UI says what Ghost is doing, what failed, and what the user can do next.
-- [ ] Tests cover the failure cases that caused the current tool/edit bugs.
-- [ ] Docs, settings, package metadata, changelog, and release artifacts agree.
+- [ ] **Native Ollama tool schemas are weaker than the real validators.** `GHOST_NATIVE_TOOL_DEFINITIONS` marks `ghost_apply_edit` hunks as `{ additionalProperties: true }` and omits `oldText` / `oldHash` / context, `allowSpecialFile`, byte ranges, and several read modes. Models that use native tools then fail `validateLocalToolCall` / `parseGhostEdit`. Mirror `package.json` `languageModelTools` and `src/agent/toolSchema.ts` so the model is asked for the same shape that execution requires.
+
+- [ ] **JSON-in-the-reply remains the fallback for too many models.** Native tool calling is enabled for every Ollama model and for generic OpenAI-chat profiles, even when the model cannot emit tool calls. Small coder models dump truncated JSON, hit `splitEdit` / `malformed-json` retries, then stop. Detect tool support from model metadata when Ollama provides it; otherwise keep the JSON protocol but add a one-tool-per-turn reminder only after a parse failure.
+
+- [ ] **Do not stop on no-op edits during stale-edit recovery except when the change is already present.** The no-op path already special-cases `staleEditRecoveryPaths`. Extend that: if the requested replacement is already in the file, treat it as success and continue (or finish), instead of `Ghost stopped because it found no changes`.
+
+- [ ] **Task-plan + completion-record tools compete with real work.** Small models burn rounds on `ghost_update_task_plan` / `ghost_record_completion` instead of reading and editing. Keep them, but make the prompt say they are optional bookkeeping, never a substitute for a file tool, and do not require `ghost_record_completion` before the final answer unless files actually changed.
+
+- [ ] **Read-result cache should invalidate on file change, not only on a later edit tool.** `completedReadCalls` is keyed by path+options and reused even if the user saved the file in the editor. Changelog 1.1.89 already forces fresh reads in some inspection paths; make the cache honor editor version / mtime, or drop it after any document-change event for that path.
+
+- [ ] **Default mode is Agent.** That is reasonable for a coding assistant, but first-run users can be surprised by write/terminal approvals. Keep Agent as default, and make the first-run setup state clearly: Ask vs Edit vs Agent, and that file writes need approval.
+
+- [ ] **The agent loop can exit after streamed prose and skip the next tool.** In `src/agent/chatParticipant.ts`, after a successful workspace change the loop returns as soon as a turn streamed any text (`turn.streamed && successfulWorkspaceChange`). A short “done” sentence then prevents a follow-up read, diagnostic check, or `ghost_record_completion`. Only exit on cancellation, an explicit stop reason, or a turn that is both streamed **and** classified as a final non-tool answer after the completion policy is satisfied.
+
+- [ ] **MLX has no native tool calling.** `providerAdapter.ts` reports `supportsTools: false` for MLX/VLM, so agent work depends on JSON-in-text parsing. Document that Agent mode is unreliable on MLX, keep the JSON parser resilient, and prefer Ollama/OpenAI-compatible when the user enables tools.
+
+---
+
+## P2 — Quality and maintainability
+
+- [ ] **Split the two god objects.** `src/webview/ghostWebview.ts` (~4650 lines) and `src/ui/ghostView.ts` (~4480 lines) own protocol handling, settings, approvals, HTML/CSS, history, and rendering. Continue the existing split (`ghostWebviewShell`, `ghostStateStore`, `ghostApprovalPolicy`, …) until `ghostView.ts` is host orchestration only and the webview has no 4k-line module. Extract the inline CSS in `getHtml()` to a real stylesheet under `src/webview/` (nonce remains).
+
+- [ ] **Deduplicate the protocol types.** `src/ui/ghostProtocol.ts` and `src/webview/ghostWebviewTypes.ts` both describe messages, settings, and auto-accept scopes. `fileEditApproval` is `'confirm' | 'auto'` on the host and `AutoAcceptScope` in the webview. One generated or shared module would prevent the dual-setting mapping in `ghostView.ts` (`fileEditApproval` ↔ `autoAcceptScope`).
+
+- [ ] **Remove leftover Hello World.** `ghost.helloWorld` is still registered in `package.json` and `src/extension.ts`. It only shows “Ghost is ready.” Drop the command, activation event, and handler.
+
+- [ ] **Rename `ghost.checkOllamaStatus`.** The command id still says Ollama; the title is “Check Provider Connection.” Rename the id (with a compatibility alias if needed) and update the chat participant description, which still says “Local AI Agent (Ollama)” for MLX and OpenAI-compatible users.
+
+- [ ] **Wire up ESLint or remove it.** `eslint` is a `devDependency` with **no** config and **no** `lint` script. Add `eslint.config.js` + `npm run lint`, or drop the unused dependency. Same review for `@types/node-fetch` living in `dependencies` instead of `devDependencies`.
+
+- [ ] **Move off `node-fetch@2` when practical.** The extension already targets Node 20 / VS Code 1.125, which have native `fetch` and `AbortSignal`. `node-fetch@2` plus three allowlisted copies in `.vscodeignore` inflate the VSIX. Migrate transport to native fetch (keep proxy/TLS agents) and shrink the package.
+
+- [ ] **`npm run watch` does not rebuild the webview.** `package.json` `watch` is `tsc -watch -p ./` only. UI changes need `tsc -p tsconfig.webview.json` and `scripts/copyWebviewBuild.js`. Add a compound watch (extension + webview copy) so F5 development does not serve a stale UI.
+
+- [ ] **Multi-root workspaces use only folder[0].** `getWorkspaceRoot()` in `src/tools/workspacePath.ts` ignores additional folders. `resolveWorkspacePath()` already searches all folders for containment; listing, search, and git context should use the folder that owns the path, not always the first.
+
+- [ ] **Trim redundant `activationEvents`.** Modern VS Code activates from `contributes.commands` / views / chat. The long `onCommand:*` and `onLanguageModelTool:*` list in `package.json` is mostly leftover, including Hello World. Do **not** add more `onCommand` entries for API-key commands; they already activate via `contributes.commands`.
+
+- [ ] **Staged edit preview can race the real buffer.** `getDiffPreview()` in `src/ui/ghostView.ts` applies the proposed text with `vscode.workspace.applyEdit` so the user can review in the source editor (this is intentional). Reject/restore exists, but an external save or overlapping user edit during the wait can make restore wrong. Transactions only get a text preview (`prepareFileTransaction`) and skip `alreadyApplied` verification in `LocalToolExecutor`. Harden restore against dirty/external changes, and give multi-file transactions the same staging or a clear “text preview only” label.
+
+- [ ] **Accept/Reject Ghost edit commands are unregistered in the manifest.** `ghost.acceptEditPreview` and `ghost.rejectEditPreview` are registered only in `GhostViewProvider` for CodeLens. Add them to `contributes.commands` so keybindings and the Command Palette can find them.
+
+- [ ] **Webview defaults `toolAllowlist` to `[]`.** Before the host `controls-state` arrives, `src/webview/ghostWebview.ts` treats every tool as Ask. Default to `GHOST_TOOL_NAMES` (or a loading state) so the Context popup is not wrong on first paint.
+
+- [ ] **Provider timeout vs request time-limit are easy to confuse.** `providerRequestTimeoutMinutes` and `requestTimeLimitMinutes` both default to 15 minutes. The Ghost view can report “provider did not respond” when the agent safety budget expired during tool rounds (`src/ui/ghostView.ts`). Label them separately in Settings and use a stop reason that names the limit that fired.
+
+---
+
+## P3 — Testing
+
+Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:host`) cover filesystem and webview integration. Several high-risk units have no dedicated coverage.
+
+- [x] Add **fast** tests for remaining auto-accept path canonicalization (`current-file` relative vs absolute). `one-edit` consumption, `confirm`, emergency pause, and session-active checks are covered in `ghostApprovalPolicy.test.ts`.
+
+- [ ] Add **fast** tests for `describesWorkspaceChange` / `isLikelyConversationalPrompt` so Ask-mode explanations are not forced into tool retries.
+
+- [ ] Add **fast** tests for the chat-participant stop policy: inspection tool failure continues; mutation failure after retries stops; overlapping non-identical edits continue after a fresh read.
+
+- [ ] Move `src/test/suite/coreHelpers.test.ts` pieces that do not need `vscode` (endpoint join, redaction, settings migration, tool-result limits) into the fast suite so they run on every `test:fast`.
+
+- [ ] Cover terminal audit + cwd jail (`src/tools/terminalTools.ts`) without spawning a real shell where possible.
+
+- [ ] Add a regression fixture for the `one-edit` and “failed read aborts request” bugs once fixed.
+
+- [ ] Host tests still need a real VS Code download via `@vscode/test-electron`. Document the first-run cost in `docs/release.md` and cache `.vscode-test` in CI when CI exists.
+
+---
+
+## P4 — Docs, release, and developer experience
+
+- [ ] **Align versions.** After the next real release: `package.json` == lockfile == README “Current release” == latest `CHANGELOG.md` heading == examples in `docs/release.md`. Changelog currently skips several patch numbers (`1.1.91`, `1.1.81`, `1.1.80`, …); that is fine historically, but stop shipping silent `npm version patch` bumps.
+
+- [ ] **Add GitHub Actions** matching `docs/release.md`: `npm ci`, `compile`, `test:fast`, `security:audit`, `vsce package`, `release:check`, and host tests on Linux (xvfb), macOS, and Windows. Do not auto-publish from every push.
+
+- [ ] Keep **Dependabot** (or equivalent) if the dependency policy stays as written; otherwise rewrite `docs/dependency-policy.md`.
+
+- [ ] First-run / README: README still documents `1.1.19` behavior in places that have since changed (timeouts, log level vs `enableDebugLogging`, auto-accept scopes). After the version sync, re-read Highlights, Settings, and Troubleshooting against `package.json`.
+
+- [ ] `PUBLISH.md` vs `docs/release.md` overlap. Keep one canonical release guide and link the other.
+
+---
+
+## P5 — Product improvements (after P0–P2)
+
+- [ ] **Language-aware inline completion.** FIM is registered for `{ pattern: '**' }`, including markdown, JSON, and settings. Limit to programming language ids, or skip when the line prefix is too short in non-code files.
+
+- [ ] **Better token accounting.** `tokenizeContext()` is a word/punctuation split, not tokenizer-accurate. Wrong budgets cause either truncation or oversized Ollama `num_ctx`. Optionally use a cheap byte/4 estimate or a small encoding library.
+
+- [ ] **Provider model discovery UX.** Missing-model errors should offer “Refresh models” and, for Ollama, the pull command already in the README. Status bar click already checks health; include the selected model name.
+
+- [ ] **Cancel vs Stop vs emergency auto-accept pause.** The composer hides Send while running (good). Make Stop also reject in-flight approvals without leaving a stuck “Waiting for approval” card (changelog 1.1.78 addressed some of this; verify with a host test).
+
+- [ ] **Ask / Explain modes should not include write tools in the native tool list.** Even if the Context panel has tools on, Ask/Explain can expose read/search/diagnostics only, which reduces accidental edit JSON from small models.
+
+- [ ] **Accessibility follow-ups** only if audit tests start failing: keep live regions, high-contrast, and reduced-motion as regression gates.
+
+---
+
+## Suggested order of work
+
+1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
+2. Route `@local` chat and Language Model tools through the same allow/deny/approval policy as the Ghost view.
+3. Soften the agent stop policy (failed reads, overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
+4. Reduce default context pressure (prompt size + 4096 output reserve).
+5. Tighten `describesWorkspaceChange` and native tool schemas.
+6. Remove Hello World, fix `watch`, add ESLint or drop it.
+7. Stop `create-vsix.sh` from drifting versions; sync README/changelog; add CI.
+
+Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

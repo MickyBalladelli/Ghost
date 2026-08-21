@@ -23,4 +23,5 @@ model-cache/
 *.pt
 *.bin
 TODO*
+!TODO.md
 !archives/TODO1-historical.md

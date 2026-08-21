@@ -1,7 +1,15 @@
-import type { GhostAutoAcceptScope } from '../config'
 import type { LocalToolCall } from '../agent/toolCallParser'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { resolveWorkspacePath } from '../tools/workspacePath'
+
+export {
+  shouldAutoAcceptFileEdit
+} from './autoAcceptPolicy'
+export type {
+  AutoAcceptFileEditDecision,
+  AutoAcceptFileEditState,
+  AutoAcceptToolCall
+} from './autoAcceptPolicy'
 
 export const requiresToolApproval = (toolName: string): boolean => (
   toolName === 'ghost_write_file' ||
@@ -29,23 +37,3 @@ export const getFileEditPaths = (call: LocalToolCall): string[] => {
   }
 }
 
-export const shouldAutoAcceptFileEdit = (
-  scope: GhostAutoAcceptScope,
-  autoAcceptDisabled: boolean,
-  autoAcceptFilePath: string | undefined,
-  call: LocalToolCall
-): { accepted: boolean; nextAutoAcceptFilePath?: string } => {
-  if (scope === 'confirm' || autoAcceptDisabled) {
-    return { accepted: false }
-  }
-  if (scope === 'one-edit' || scope === 'request' || scope === 'session' || scope === 'workspace' || scope === 'always') {
-    return { accepted: true }
-  }
-  if (call.name === 'ghost_apply_transaction' || typeof call.arguments.path !== 'string') {
-    return { accepted: false }
-  }
-  if (!autoAcceptFilePath) {
-    return { accepted: true, nextAutoAcceptFilePath: call.arguments.path }
-  }
-  return { accepted: autoAcceptFilePath === call.arguments.path }
-}
