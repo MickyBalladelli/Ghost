@@ -110,7 +110,7 @@ Ghost exposes these tools to the agent:
 
 The **Context** popup shows the tools currently available to the request. The **Settings** panel has clear permission dialogs for tools and terminal environment variables. Each item can be set to **Allow**, **Ask**, or **Deny**. Deny always wins.
 
-Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Repeated reads reuse the existing result when possible. The edit guard stops repeated and inverse edits that look like an edit loop. Overlapping follow-up edits to the same lines are allowed when the fingerprint is new.
+Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Repeated reads reuse the existing result when possible. The edit guard stops repeated and inverse edits that look like an edit loop. Overlapping follow-up edits to the same lines are allowed when the fingerprint is new. Relative and absolute paths for the same workspace file are tracked as one file.
 
 Ghost allows up to 128 tool rounds per request. It asks whether to continue after that limit. A request also stops at 24 files, 4,000 changed lines, 1 MB of changed bytes, 32 terminal commands, or 64,000 model tokens. The counter includes reads, edits, terminal commands, directory listings, and state tools.
 

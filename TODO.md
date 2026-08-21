@@ -24,7 +24,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **Overlapping-edit guard blocks legitimate follow-up edits.** `getEditLoopReason()` still stops repeated fingerprints and inverse hunks. Overlapping ranges with a new fingerprint are allowed, so a refinement of line 12 after editing lines 10–20 can proceed. Hunks inside a single `ghost_apply_edit` must still be sorted and non-overlapping.
 
-- [ ] **Edit-loop state is keyed by the model’s raw path.** `getEditPaths()` / `getEditRecord()` in `src/agent/chatParticipant.ts` use `call.arguments.path` rather than the canonical fs path. The same file as `src/app.ts` and `/abs/workspace/src/app.ts` is tracked as two files, so loop detection and “already applied” checks miss. Canonicalize before recording.
+- [x] **Edit-loop state is keyed by the model’s raw path.** `getCanonicalEditPaths()` now stores loop, signature, stale-recovery, and budget file keys from `resolveWorkspacePath()`. Relative, `./`, and absolute forms of the same file share one history.
 
 - [ ] **Inline completion ignores the MLX provider.** `InlineCompletionProvider` in `src/providers/inlineCompletionProvider.ts` sends FIM to `settings.ollamaUrl` unless the OpenAI-compatible profile is FIM-capable. With `ghost.provider` set to `mlx-vlm`, completions still hit Ollama (or fail silently). Disable FIM for MLX (capabilities already say `supportsFIM: false`) or route through the selected adapter.
 
@@ -145,7 +145,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 ## Suggested order of work
 
 1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Soften remaining agent stop policy (canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
+2. Soften remaining agent stop policy (early return after streamed text) in `chatParticipant.ts`.
 3. Reduce default context pressure (prompt size + 4096 output reserve).
 4. Tighten `describesWorkspaceChange` and native tool schemas.
 5. Remove Hello World, fix `watch`, add ESLint or drop it.

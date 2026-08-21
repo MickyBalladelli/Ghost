@@ -2,6 +2,7 @@ export const FAST_TEST_FILES = [
   'accessibilityAudit.test.js',
   'budgetPolicy.test.js',
   'editLoopGuard.test.js',
+  'editPaths.test.js',
   'editWorkflow.test.js',
   'ghostApprovalPolicy.test.js',
   'ollamaClient.test.js',

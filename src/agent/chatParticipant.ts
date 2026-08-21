@@ -28,6 +28,7 @@ import { GHOST_POLICY } from '../ghostPolicy'
 import { createToolErrorResult, replaceToolResultText, ToolResult } from '../tools/toolResult'
 import { limitToolResultText } from '../tools/toolResultLimits'
 import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
+import { argumentsWithCanonicalPath, canonicalizeEditPath, getCanonicalEditPath, getCanonicalEditPaths } from './editPaths'
 import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, MIN_TOOL_CALL_TOKENS, outputTokenBudget } from './budgetPolicy'
 import { parseTaskPlanMarker } from './taskPlan'
 
@@ -289,8 +290,8 @@ function finishAfterSuccessfulWorkspaceChange(
   return true
 }
 
-function isFileEditTool(name: LocalToolCall['name']): boolean {
-  return name === 'ghost_write_file' || name === 'ghost_apply_edit' || name === 'ghost_apply_transaction'
+function resolveEditFilePath(filePath: string): string {
+  return resolveWorkspacePath(filePath).fsPath
 }
 
 function readToolCallSignature(call: LocalToolCall): string | undefined {
@@ -298,13 +299,7 @@ function readToolCallSignature(call: LocalToolCall): string | undefined {
     return undefined
   }
 
-  let filePath = call.arguments.path
-  try {
-    filePath = resolveWorkspacePath(filePath).fsPath
-  } catch {
-    // Validation already reports invalid paths. Keep a fallback key for safety.
-  }
-
+  const filePath = canonicalizeEditPath(call.arguments.path, resolveEditFilePath)
   const options = Object.keys(call.arguments)
     .filter(key => key !== 'path')
     .sort()
@@ -314,21 +309,11 @@ function readToolCallSignature(call: LocalToolCall): string | undefined {
 }
 
 function getEditPath(call: LocalToolCall): string | undefined {
-  return isFileEditTool(call.name) && typeof call.arguments.path === 'string'
-    ? call.arguments.path
-    : undefined
+  return getCanonicalEditPath(call, resolveEditFilePath)
 }
 
 function getEditPaths(call: LocalToolCall): string[] {
-  if (call.name !== 'ghost_apply_transaction') {
-    const path = getEditPath(call)
-    return path ? [path] : []
-  }
-  try {
-    return parseFileTransaction(call.arguments).edits.map(edit => edit.path)
-  } catch {
-    return []
-  }
+  return getCanonicalEditPaths(call, resolveEditFilePath)
 }
 
 function getEditRecord(call: LocalToolCall): EditRecord | undefined {
@@ -340,7 +325,7 @@ function getEditRecord(call: LocalToolCall): EditRecord | undefined {
   if (call.name === 'ghost_write_file') {
     const content = typeof call.arguments.content === 'string' ? call.arguments.content : ''
     return {
-      signature: `${call.name}:${path}:${JSON.stringify(call.arguments)}`,
+      signature: `${call.name}:${path}:${JSON.stringify(argumentsWithCanonicalPath(call, path))}`,
       fingerprint: `${call.name}:${path}:${content}`,
       ranges: [],
       hunks: []
@@ -355,7 +340,7 @@ function getEditRecord(call: LocalToolCall): EditRecord | undefined {
       replacement: hunk.replacement
     }))
     return {
-      signature: `${call.name}:${path}:${JSON.stringify(call.arguments)}`,
+      signature: `${call.name}:${path}:${JSON.stringify(argumentsWithCanonicalPath(call, path))}`,
       fingerprint: `${call.name}:${path}:${JSON.stringify(shape)}`,
       ranges: edit.hunks.map(hunk => ({ startLine: hunk.startLine, endLine: hunk.endLine })),
       hunks: edit.hunks
