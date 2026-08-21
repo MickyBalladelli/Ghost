@@ -30,7 +30,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **`create-vsix.sh` is the source of version drift.** The local install helper no longer runs `npm version patch`. `npm version` syncs the README and `docs/release.md` markers; `npm run package` runs `release:check`. README, changelog, and the release guide now match `package.json` `1.1.96`.
 
-- [ ] **Release docs claim CI that does not exist.** `docs/release.md` remove those claims.
+- [x] **Release docs claim CI that does not exist.** `docs/release.md`, `docs/dependency-policy.md`, and `PUBLISH.md` now describe local release gates only. They no longer claim `.github/workflows/ci.yml`, a host-test matrix, or Dependabot.
 
 ---
 
@@ -149,6 +149,5 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 3. Reduce default context pressure (prompt size + 4096 output reserve).
 4. Tighten `describesWorkspaceChange` and native tool schemas.
 5. Remove Hello World, fix `watch`, add ESLint or drop it.
-6. Add the CI workflow that release docs currently describe.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

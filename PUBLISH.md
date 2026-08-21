@@ -127,7 +127,7 @@ After the local VSIX check succeeds, publish the exact artifact:
 npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
-For a logged-in local publisher, log in once with `MickyBalladelli` and run the same command. In CI, provide `VSCE_PAT` as a protected secret. The Marketplace item is:
+For a logged-in local publisher, log in once with `MickyBalladelli` and run the same command. The Marketplace item is:
 
 ```bash
 https://marketplace.visualstudio.com/items?itemName=MickyBalladelli.ghost-ai-coding-assistant
@@ -177,11 +177,9 @@ git tag v1.1.96
 git push origin main --tags
 ```
 
-## Automated publishing
+## Publishing token
 
-Store the publishing token as a protected CI secret named `VSCE_PAT`. Never print it in logs.
-
-Typical CI commands:
+Store the Marketplace token as `VSCE_PAT` in your local environment. Never commit it or print it in logs.
 
 ```bash
 npm ci
@@ -189,7 +187,7 @@ npm run package
 VSCE_PAT="$VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
-Use a protected release branch or manual approval before publishing. Prefer identity-based publishing as PAT retirement approaches.
+Prefer identity-based publishing as PAT retirement approaches. This repository does not currently include a GitHub Actions publish workflow.
 
 ## Unpublishing
 

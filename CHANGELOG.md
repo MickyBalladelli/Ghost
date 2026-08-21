@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Stop claiming a GitHub Actions matrix, Dependabot, and `.github/workflows/ci.yml` in release docs. Local compile, tests, `npm run package`, and Marketplace verification are the release gates.
 - Stop `create-vsix.sh` from bumping the patch version on every local install. Packaging now uses the current `package.json` version, syncs README/`docs/release.md` on `npm version`, and runs `release:check` after `npm run package`.
 - Skip inline completion for MLX/VLM instead of sending FIM requests to Ollama.
 - Track edit-loop state by the canonical workspace path so `src/app.ts` and the absolute file are the same file.

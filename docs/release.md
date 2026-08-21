@@ -39,7 +39,7 @@ Then add a dated `CHANGELOG.md` heading for that version. Use `minor` for a back
 
 ## 2. Install and validate dependencies
 
-Use the lockfile in release and CI environments:
+Use the lockfile in release environments:
 
 ```bash
 npm ci
@@ -64,7 +64,7 @@ npm run test:host
 npm test
 ```
 
-The host suite needs a VS Code-capable environment. On Linux CI, run it under `xvfb-run`. The GitHub Actions matrix also checks Linux, macOS, and Windows.
+The host suite needs a VS Code-capable environment. On Linux, run it under `xvfb-run` when no display is available.
 
 ## 4. Build the VSIX
 
@@ -128,7 +128,7 @@ Publish the exact artifact after all checks pass:
 npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
-For a logged-in local publisher, `npx --no-install vsce login MickyBalladelli` can be used once, followed by the same package command. In CI, use a protected secret and a manually approved release workflow; do not publish from every push.
+For a logged-in local publisher, `npx --no-install vsce login MickyBalladelli` can be used once, followed by the same package command. Do not publish from an unverified local build.
 
 After publishing:
 
@@ -166,6 +166,6 @@ code --install-extension ./ghost-ai-coding-assistant-<known-good-version>.vsix -
 
 Record the incident, affected versions, mitigation, and follow-up regression fixture. Never roll back by deleting user workspace or global state.
 
-## CI release gates
+## Local release gates
 
-`.github/workflows/ci.yml` runs compile and fast tests, the VS Code host suite on Linux/macOS/Windows, dependency audit, VSIX packaging, install smoke testing, and artifact upload. A release is ready only when those checks are green and the manual Marketplace verification is complete.
+A release is ready only after local compile, fast tests, host tests, `npm run package` (which runs `release:check`), and manual Marketplace verification. There is no GitHub Actions workflow in this repository.
