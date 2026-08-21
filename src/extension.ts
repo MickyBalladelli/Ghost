@@ -150,7 +150,11 @@ export async function activate(context: vscode.ExtensionContext) {
     clearGhostLogs()
     void vscode.window.showInformationMessage('Ghost logs cleared.')
   })
-  const chatParticipant = createChatParticipant({ statusBar, providerApiKey })
+  const chatParticipant = createChatParticipant({
+    statusBar,
+    providerApiKey,
+    approveTool: (call, requestKey) => ghostView.approveChatTool(call, requestKey)
+  })
   registerLanguageModelTools(context)
 
   updateInlineStatusBar()

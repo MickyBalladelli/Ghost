@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Apply Ghost tool permissions, denylist, and auto-accept policy to the `@local` chat participant.
 - Auto-accept one edit only for the next file mutation, then ask again.
 - Keep Session auto-accept in memory for the current Ghost session instead of treating a stored `session` setting as always-on.
 - Match Current file auto-accept across relative, `./`, and absolute paths for the same workspace file.

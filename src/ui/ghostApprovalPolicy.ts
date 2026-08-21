@@ -11,20 +11,16 @@ export type {
   AutoAcceptToolCall
 } from './autoAcceptPolicy'
 
-export const requiresToolApproval = (toolName: string): boolean => (
-  toolName === 'ghost_write_file' ||
-  toolName === 'ghost_apply_edit' ||
-  toolName === 'ghost_apply_transaction' ||
-  toolName === 'ghost_run_terminal_command'
-)
-
-export const isConversationStateTool = (toolName: string): boolean => (
-  toolName === 'ghost_update_task_plan' || toolName === 'ghost_record_completion'
-)
-
-export const isFileEditTool = (toolName: string): boolean => (
-  toolName === 'ghost_write_file' || toolName === 'ghost_apply_edit' || toolName === 'ghost_apply_transaction'
-)
+export {
+  isConversationStateTool,
+  isFileEditTool,
+  requiresToolApproval,
+  resolveToolPermission
+} from './toolPermissionPolicy'
+export type {
+  ToolPermissionDecision,
+  ToolPermissionState
+} from './toolPermissionPolicy'
 
 export const getFileEditPaths = (call: LocalToolCall): string[] => {
   try {

@@ -536,6 +536,7 @@ export interface ChatParticipantOptions {
   toolExecutor?: LocalToolExecutor
   statusBar?: GhostStatusBar
   providerApiKey?: (provider: GhostProvider) => string | undefined
+  approveTool?: (call: LocalToolCall, requestKey: string) => Promise<GhostToolApproval>
 }
 
 export interface GhostContextSelection {
@@ -1254,7 +1255,16 @@ export function createChatParticipantHandler(
     const providerRequestTimeoutMinutes = Number.isFinite(settings.providerRequestTimeoutMinutes)
       ? Math.max(1, Math.floor(settings.providerRequestTimeoutMinutes))
       : 30
-    const requestOptions = getRequestOptions(request)
+    const nativeRequestKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const incomingOptions = getRequestOptions(request)
+    const requestOptions: GhostRequestOptions = {
+      ...incomingOptions,
+      approveTool: incomingOptions.approveTool ?? (
+        options.approveTool
+          ? call => options.approveTool!(call, nativeRequestKey)
+          : undefined
+      )
+    }
     const conversationalPrompt = isLikelyConversationalPrompt(request.prompt)
     const pendingWorkspaceTask = hasPendingWorkspaceTask(requestOptions.additionalContext)
     const keepWorkspaceTools = pendingWorkspaceTask || requestOptions.mode === 'agent'

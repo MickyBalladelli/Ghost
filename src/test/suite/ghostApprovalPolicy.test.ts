@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert'
 
 import { shouldAutoAcceptFileEdit } from '../../ui/autoAcceptPolicy'
 import type { AutoAcceptToolCall } from '../../ui/autoAcceptPolicy'
+import { resolveToolPermission } from '../../ui/toolPermissionPolicy'
 
 const writeCall = (path = 'src/app.ts'): AutoAcceptToolCall => ({
   name: 'ghost_write_file',
@@ -108,5 +109,53 @@ suite('File edit auto-accept policy', () => {
       resolveFilePath
     }, writeCall('/workspace/src/other.ts'))
     assert.equal(otherFile.accepted, false)
+  })
+})
+
+suite('Shared tool permission policy', () => {
+  const confirmAutoAccept = { scope: 'confirm' as const }
+
+  test('denylist blocks even when auto-accept is always', () => {
+    const decision = resolveToolPermission('ghost_write_file', {
+      denylist: ['ghost_write_file'],
+      autoAccept: { scope: 'always' }
+    }, writeCall())
+    assert.equal(decision.blockedByPolicy, true)
+    assert.equal(decision.autoAcceptedFileEdit, false)
+    assert.equal(decision.needsInteractiveApproval, false)
+  })
+
+  test('asklist requires interactive approval for otherwise allowed tools', () => {
+    const decision = resolveToolPermission('ghost_read_file', {
+      allowlist: ['ghost_read_file'],
+      asklist: ['ghost_read_file'],
+      autoAccept: confirmAutoAccept
+    }, { name: 'ghost_read_file', arguments: { path: 'src/app.ts' } })
+    assert.equal(decision.asksByPolicy, true)
+    assert.equal(decision.needsInteractiveApproval, true)
+  })
+
+  test('session-approved file edits skip the interactive prompt', () => {
+    const decision = resolveToolPermission('ghost_write_file', {
+      autoAccept: confirmAutoAccept,
+      sessionApprovedFileEdits: true
+    }, writeCall())
+    assert.equal(decision.needsInteractiveApproval, false)
+    assert.equal(decision.autoAcceptedFileEdit, false)
+  })
+
+  test('confirm file edits still need approval without memory or auto-accept', () => {
+    const decision = resolveToolPermission('ghost_write_file', {
+      autoAccept: confirmAutoAccept
+    }, writeCall())
+    assert.equal(decision.needsInteractiveApproval, true)
+  })
+
+  test('always auto-accept skips the interactive prompt for file edits', () => {
+    const decision = resolveToolPermission('ghost_write_file', {
+      autoAccept: { scope: 'always' }
+    }, writeCall())
+    assert.equal(decision.autoAcceptedFileEdit, true)
+    assert.equal(decision.needsInteractiveApproval, false)
   })
 })

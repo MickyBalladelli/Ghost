@@ -16,7 +16,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **Legacy `fileEditApproval: auto` migrates to `always`.** Leftover `fileEditApproval: auto` with `autoAcceptScope: confirm` now migrates to `request`. Runtime settings no longer promote that pair to `always`. `fileEditApproval` is only a confirm/auto mirror of `autoAcceptScope`. An explicit `always` scope is left unchanged.
 
-- [ ] **`@local` chat bypasses Ghost approval policy.** `createChatParticipant()` in `src/extension.ts` does not pass `approveTool`. The handler then auto-decides `{ decision: 'once' }` and `LocalToolExecutor` falls back to generic VS Code modals. Ghost allow/ask/deny lists, auto-accept scopes, hunk selection, and diff preview never run for the native Chat view. Share the same approval service as `GhostViewProvider.requestToolApproval()`, or document that full policy exists only in the Ghost sidebar.
+- [x] **`@local` chat bypasses Ghost approval policy.** `createChatParticipant()` now passes `GhostViewProvider.approveChatTool()`. Native Chat uses the same allow/ask/deny lists, auto-accept scopes, and session/workspace/forever memory as the Ghost view. Interactive approvals use a VS Code modal (Approve now / session / forever) instead of sidebar cards and editor staging.
 
 - [ ] **Registered Language Model tools ignore Ghost denylist/allowlist.** `WriteFileTool` / `ApplyEditTool` / terminal tools in `src/tools/fileTools.ts` and `src/tools/terminalTools.ts` only set VS Code `confirmationMessages` in `prepareInvocation`. `ghost.toolDenylist` is enforced in `ghostView.requestToolApproval()` only. Invoke the same policy helper from LM `prepareInvocation`/`invoke` so Deny always wins on every entry point.
 
@@ -145,7 +145,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 ## Suggested order of work
 
 1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Route `@local` chat and Language Model tools through the same allow/deny/approval policy as the Ghost view.
+2. Route Language Model tools through the same allow/deny/approval policy as the Ghost view.
 3. Soften the agent stop policy (failed reads, overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
 4. Reduce default context pressure (prompt size + 4096 output reserve).
 5. Tighten `describesWorkspaceChange` and native tool schemas.

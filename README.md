@@ -85,7 +85,7 @@ The Ghost view contains the provider and model strip, message log, composer, and
 - Use the **History** button at the top to search, select, rename, or delete previous conversations.
 - Use the **Settings** gear to change the model, workflow, context, appearance, persistence, and tool permissions.
 - Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost stages proposed file changes in the real source editor and asks for approval before saving file edits or running terminal commands.
-- Use `@local` in the VS Code Chat view for the native local participant.
+- Use `@local` in the VS Code Chat view for the native local participant. `@local` uses the same Ghost tool allow/ask/deny lists, auto-accept scope, and session/forever approvals as the Ghost view. File edits and terminal commands confirm in a VS Code modal instead of the Ghost sidebar cards.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.
 - File writes, structured edits, and terminal commands require confirmation unless already approved for the current session.
 - Structured edits appear directly in the source editor. Use the `Accept Ghost edit` or `Reject Ghost edit` code lens at the top of the file, or use the approval controls in the Ghost view. Accepted edits are saved; rejected edits are restored. Selected hunks can be applied from the Ghost view.
