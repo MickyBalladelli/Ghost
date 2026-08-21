@@ -29,3 +29,11 @@ export function describesWorkspaceChange(value: string): boolean {
 
   return true
 }
+
+export function isLikelyConversationalPrompt(value: string): boolean {
+  const prompt = value.trim()
+  if (!prompt || prompt.length > 240 || describesWorkspaceChange(prompt)) {
+    return false
+  }
+  return !/\b(?:file|folder|workspace|project|repository|repo|code|bug|error|test|diagnostic|terminal|command|run|inspect|read|search|find|list|tool|function|class|module|api|extension)\b/i.test(prompt)
+}

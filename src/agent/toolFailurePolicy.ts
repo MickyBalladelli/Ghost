@@ -34,3 +34,20 @@ export function shouldStopAgentForToolFailure(toolName: string, status: ToolResu
   }
   return !isInspectionTool(toolName)
 }
+
+export function getInspectionPathRecoveryKey(toolName: string, result: string, pathValue?: unknown): string | undefined {
+  if (!isInspectionTool(toolName)) {
+    return undefined
+  }
+  if (typeof pathValue !== 'string' || !pathValue.trim()) {
+    return undefined
+  }
+  if (!/enoent|not found|does not exist|inside the current workspace|not a directory|no such file|no such directory/i.test(result)) {
+    return undefined
+  }
+  return `${toolName}:${pathValue}`
+}
+
+export function shouldRetryInspectionPath(retriesSoFar: number, maxRetries: number): boolean {
+  return retriesSoFar < maxRetries
+}

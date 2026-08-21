@@ -3,11 +3,7 @@ import * as fs from 'node:fs'
 
 import * as vscode from 'vscode'
 import { GhostError } from '../ghostErrors'
-
-function isInsideWorkspace(candidate: string, workspaceRoot: string): boolean {
-  const relative = path.relative(workspaceRoot, candidate)
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
-}
+import { isInsideWorkspaceRoot } from './workspaceContainment'
 
 function canonicalWorkspacePath(candidate: string): string {
   let current = candidate
@@ -61,7 +57,7 @@ function workspaceFolders(): readonly vscode.WorkspaceFolder[] {
 function owningWorkspaceRoot(candidate: string): string | undefined {
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const root = canonicalWorkspaceRoot(folder.uri.fsPath)
-    if (root && isInsideWorkspace(candidate, root)) {
+    if (root && isInsideWorkspaceRoot(candidate, root)) {
       return root
     }
   }

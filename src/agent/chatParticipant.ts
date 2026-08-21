@@ -13,14 +13,14 @@ import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
-import { auditTerminalCommand } from '../tools/terminalTools'
+import { auditTerminalCommand } from '../tools/terminalAudit'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler, parseNativeLocalToolCall } from './toolCallParser'
 import { GHOST_NATIVE_TOOL_DEFINITIONS, JSON_OBJECT_RESPONSE_FORMAT } from './nativeTooling'
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
-import { isFailedToolOutcome, isInspectionTool, shouldStopAgentForToolFailure } from './toolFailurePolicy'
+import { isFailedToolOutcome, getInspectionPathRecoveryKey, shouldRetryInspectionPath, shouldStopAgentForToolFailure } from './toolFailurePolicy'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
@@ -32,7 +32,7 @@ import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
 import { argumentsWithCanonicalPath, canonicalizeEditPath, getCanonicalEditPath, getCanonicalEditPaths } from './editPaths'
 import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, outputTokenBudget } from './budgetPolicy'
 import { parseTaskPlanMarker } from './taskPlan'
-import { describesWorkspaceChange } from './workspaceChangeIntent'
+import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
 
@@ -242,14 +242,6 @@ function hasPendingWorkspaceTask(value: string | undefined): boolean {
   const latestGhostReply = /(?:^|\n\n)Ghost:\n([\s\S]*)$/i.exec(value)?.[1] ?? ''
   return /\b(?:would you like me to|want me to|shall i|should i|ready to apply|ready to proceed|tell me to proceed)\b/i.test(latestGhostReply)
     && describesWorkspaceChange(latestGhostReply)
-}
-
-function isLikelyConversationalPrompt(value: string): boolean {
-  const prompt = value.trim()
-  if (!prompt || prompt.length > 240 || describesWorkspaceChange(prompt)) {
-    return false
-  }
-  return !/\b(?:file|folder|workspace|project|repository|repo|code|bug|error|test|diagnostic|terminal|command|run|inspect|read|search|find|list|tool|function|class|module|api|extension)\b/i.test(prompt)
 }
 
 function isStaleEditConflict(value: string): boolean {
@@ -490,17 +482,7 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
 }
 
 function getPathRecoveryKey(call: LocalToolCall, result: string): string | undefined {
-  if (!isInspectionTool(call.name)) {
-    return undefined
-  }
-  const pathValue = call.arguments.path
-  if (typeof pathValue !== 'string' || !pathValue.trim()) {
-    return undefined
-  }
-  if (!/enoent|not found|does not exist|inside the current workspace|not a directory|no such file|no such directory/i.test(result)) {
-    return undefined
-  }
-  return `${call.name}:${pathValue}`
+  return getInspectionPathRecoveryKey(call.name, result, call.arguments.path)
 }
 
 export interface ChatParticipantOptions {
@@ -1722,7 +1704,7 @@ export function createChatParticipantHandler(
         const pathRecoveryKey = getPathRecoveryKey(toolCall, toolResult)
         if (pathRecoveryKey) {
           const retries = pathRecoveryRetries.get(pathRecoveryKey) ?? 0
-          if (retries < GHOST_RETRY_POLICIES.failedTool.maxRetries) {
+          if (shouldRetryInspectionPath(retries, GHOST_RETRY_POLICIES.failedTool.maxRetries)) {
             pathRecoveryRetries.set(pathRecoveryKey, retries + 1)
             response.progress('The workspace path was not found. Asking Ghost to retry with a workspace-relative path.')
             messages.push(

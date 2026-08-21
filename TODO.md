@@ -98,17 +98,17 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 
 - [x] Add **fast** tests for remaining auto-accept path canonicalization (`current-file` relative vs absolute). `one-edit` consumption, `confirm`, emergency pause, and session-active checks are covered in `ghostApprovalPolicy.test.ts`.
 
-- [ ] Add **fast** tests for `describesWorkspaceChange` / `isLikelyConversationalPrompt` so Ask-mode explanations are not forced into tool retries.
+- [x] Add **fast** tests for `describesWorkspaceChange` / `isLikelyConversationalPrompt` so Ask-mode explanations are not forced into tool retries.
 
-- [ ] Add **fast** tests for the chat-participant stop policy: inspection tool failure continues; mutation failure after retries stops; overlapping non-identical edits continue after a fresh read.
+- [x] Add **fast** tests for the chat-participant stop policy: inspection tool failure continues; mutation failure after retries stops; overlapping non-identical edits continue after a fresh read.
 
-- [ ] Move `src/test/suite/coreHelpers.test.ts` pieces that do not need `vscode` (endpoint join, redaction, settings migration, tool-result limits) into the fast suite so they run on every `test:fast`.
+- [x] Move `src/test/suite/coreHelpers.test.ts` pieces that do not need `vscode` (endpoint join, redaction, settings migration, tool-result limits) into the fast suite so they run on every `test:fast`.
 
-- [ ] Cover terminal audit + cwd jail (`src/tools/terminalTools.ts`) without spawning a real shell where possible.
+- [x] Cover terminal audit + cwd jail (`src/tools/terminalTools.ts`) without spawning a real shell where possible.
 
-- [ ] Add a regression fixture for the `one-edit` and “failed read aborts request” bugs once fixed.
+- [x] Add a regression fixture for the `one-edit` and “failed read aborts request” bugs once fixed.
 
-- [ ] Host tests still need a real VS Code download via `@vscode/test-electron`. Document the first-run cost in `docs/release.md` and cache `.vscode-test` in CI when CI exists.
+- [x] Host tests still need a real VS Code download via `@vscode/test-electron`. Document the first-run cost in `docs/release.md` and cache `.vscode-test` in CI when CI exists.
 
 ---
 
@@ -144,7 +144,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 
 ## Suggested order of work
 
-1. Optional GitHub Actions and remaining P3 polish (fast tests for stop policy, conversational prompts, terminal cwd jail).
+1. Optional GitHub Actions if automated gates are wanted.
 2. Keep shrinking `ghostWebview.ts` if it grows back toward a 4k-line module.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

@@ -1,6 +1,9 @@
 export const FAST_TEST_FILES = [
   'accessibilityAudit.test.js',
+  'agentRegressionFixtures.test.js',
+  'agentStopPolicy.test.js',
   'budgetPolicy.test.js',
+  'coreHelpers.fast.test.js',
   'editLoopGuard.test.js',
   'editPaths.test.js',
   'editWorkflow.test.js',
@@ -16,6 +19,7 @@ export const FAST_TEST_FILES = [
   'providerResilience.test.js',
   'requestState.test.js',
   'settingsMigrations.test.js',
+  'terminalAudit.test.js',
   'toolCallParser.test.js',
   'toolFailurePolicy.test.js',
   'webviewAccessibility.test.js',

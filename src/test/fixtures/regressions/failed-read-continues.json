@@ -1,0 +1,6 @@
+{
+  "tool": "ghost_read_file",
+  "status": "failed",
+  "result": "Tool error: File 'src/missing.ts' was not found. Retry with the workspace-relative path shown by ghost_list_directory.",
+  "shouldStop": false
+}

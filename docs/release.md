@@ -64,6 +64,8 @@ npm run test:host
 npm test
 ```
 
+The host suite downloads a VS Code build through `@vscode/test-electron` on first run and stores it under `.vscode-test/` in the repo. That first download can take several minutes and hundreds of megabytes. Later runs reuse the cache. When CI exists, cache `.vscode-test` between jobs so host tests do not re-download VS Code every time.
+
 The host suite needs a VS Code-capable environment. On Linux, run it under `xvfb-run` when no display is available.
 
 ## 4. Build the VSIX
