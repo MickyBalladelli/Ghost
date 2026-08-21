@@ -22,7 +22,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **A failed inspection tool aborts the whole request.** Inspection failures (`ghost_read_file`, search, list, diagnostics, git context) no longer stop the agent. Path-recovery hints use `GHOST_RETRY_POLICIES.failedTool` (two retries), then Ghost continues so the model can list the tree or try another path. The request still stops on denied/blocked tools, cancellation, user rejection, or a failed file mutation.
 
-- [ ] **Overlapping-edit guard blocks legitimate follow-up edits.** `getEditLoopReason()` in `src/agent/editLoopGuard.ts` treats any later hunk whose line range overlaps a previous successful edit as a loop. After “edit lines 10–20”, a real refinement of line 12 is stopped. Keep the repeated-signature and inverse-hunk checks; allow overlapping ranges after a fresh read of that file, or only flag overlap when the fingerprint matches.
+- [x] **Overlapping-edit guard blocks legitimate follow-up edits.** `getEditLoopReason()` still stops repeated fingerprints and inverse hunks. Overlapping ranges with a new fingerprint are allowed, so a refinement of line 12 after editing lines 10–20 can proceed. Hunks inside a single `ghost_apply_edit` must still be sorted and non-overlapping.
 
 - [ ] **Edit-loop state is keyed by the model’s raw path.** `getEditPaths()` / `getEditRecord()` in `src/agent/chatParticipant.ts` use `call.arguments.path` rather than the canonical fs path. The same file as `src/app.ts` and `/abs/workspace/src/app.ts` is tracked as two files, so loop detection and “already applied” checks miss. Canonicalize before recording.
 
@@ -145,7 +145,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 ## Suggested order of work
 
 1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Soften remaining agent stop policy (overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
+2. Soften remaining agent stop policy (canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
 3. Reduce default context pressure (prompt size + 4096 output reserve).
 4. Tighten `describesWorkspaceChange` and native tool schemas.
 5. Remove Hello World, fix `watch`, add ESLint or drop it.

@@ -110,7 +110,7 @@ Ghost exposes these tools to the agent:
 
 The **Context** popup shows the tools currently available to the request. The **Settings** panel has clear permission dialogs for tools and terminal environment variables. Each item can be set to **Allow**, **Ask**, or **Deny**. Deny always wins.
 
-Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Repeated reads reuse the existing result when possible. The edit guard stops repeated, inverse, and overlapping edits that look like an edit loop.
+Large files are read in chunks. Ghost reports the line range and gives the next `startLine`/`endLine` range when more content is available. Repeated reads reuse the existing result when possible. The edit guard stops repeated and inverse edits that look like an edit loop. Overlapping follow-up edits to the same lines are allowed when the fingerprint is new.
 
 Ghost allows up to 128 tool rounds per request. It asks whether to continue after that limit. A request also stops at 24 files, 4,000 changed lines, 1 MB of changed bytes, 32 terminal commands, or 64,000 model tokens. The counter includes reads, edits, terminal commands, directory listings, and state tools.
 
@@ -306,7 +306,7 @@ Check the API mode and endpoint suffix. Most OpenAI-compatible servers use `/v1`
 
 ### A file edit fails
 
-Read the file again before retrying. Make sure the path is inside the open workspace and that unsaved editor changes are accounted for. An edit can fail when its old text, expected content, hash, line range, or context is stale; when hunks overlap or are malformed; when it is a no-op; or when the edit-loop guard sees a repeated or inverse change. Retry with a fresh read and smaller, non-overlapping hunks. For a staged edit, use **Open Diff**, then **Accept Ghost edit**, **Reject Ghost edit**, or **Restore**. A failed transaction rolls back its changes; inspect the first reported conflict before retrying. If the tool is blocked, check the allowlist, asklist, denylist, and approval scope.
+Read the file again before retrying. Make sure the path is inside the open workspace and that unsaved editor changes are accounted for. An edit can fail when its old text, expected content, hash, line range, or context is stale; when hunks overlap or are malformed; when it is a no-op; or when the edit-loop guard sees a repeated or inverse change. Retry with a fresh read and smaller hunks. For a staged edit, use **Open Diff**, then **Accept Ghost edit**, **Reject Ghost edit**, or **Restore**. A failed transaction rolls back its changes; inspect the first reported conflict before retrying. If the tool is blocked, check the allowlist, asklist, denylist, and approval scope.
 
 ## License
 

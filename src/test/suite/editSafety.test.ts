@@ -79,7 +79,7 @@ suite('Edit safety', () => {
     assert.throws(() => applyGhostEdit('changed', edit), /content hash does not match/)
   })
 
-  test('detects repeated, oscillating, and overlapping edits', () => {
+  test('detects repeated and oscillating edits, not overlapping refinements', () => {
     const repeatedState: FileEditState = {
       signatures: new Set(),
       history: [editRecord('same')]
@@ -96,7 +96,7 @@ suite('Edit safety', () => {
       signatures: new Set(),
       history: [editRecord('first', 3, 4)]
     }
-    assert.match(getEditLoopReason(overlapState, editRecord('second', 4, 5)) ?? '', /overlapping/)
+    assert.equal(getEditLoopReason(overlapState, editRecord('second', 4, 5)), undefined)
   })
 
   test('rolls back earlier files when a later transaction write fails', async () => {

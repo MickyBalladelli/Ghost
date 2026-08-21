@@ -12,10 +12,6 @@ export interface FileEditState {
   history: EditRecord[]
 }
 
-function rangesOverlap(left: { startLine: number; endLine: number }, right: { startLine: number; endLine: number }): boolean {
-  return left.startLine <= right.endLine && right.startLine <= left.endLine
-}
-
 function isInverseEdit(previous: EditRecord | undefined, current: EditRecord): boolean {
   if (!previous || previous.hunks.length === 0 || previous.hunks.length !== current.hunks.length) {
     return false
@@ -38,9 +34,6 @@ export function getEditLoopReason(state: FileEditState, record: EditRecord): str
   }
   if (isInverseEdit(state.history.at(-1), record)) {
     return 'an undo/reapply edit loop'
-  }
-  if (record.ranges.length > 0 && state.history.some(previous => previous.ranges.some(previousRange => record.ranges.some(range => rangesOverlap(previousRange, range))))) {
-    return 'overlapping edits'
   }
   return undefined
 }
