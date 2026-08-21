@@ -1,4 +1,5 @@
-import fetch, { type RequestInit, type Response } from 'node-fetch'
+import { nativeFetch } from './nativeFetch'
+import type { FetchLike, GhostRequestInit } from './httpTypes'
 
 import type { GhostSettings } from '../config'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
@@ -13,13 +14,11 @@ import { providerHttpError, requestWithRetry, streamWithTimeout } from './provid
 import { ProviderHttpTransport } from './providerTransport'
 import { GHOST_POLICY } from '../ghostPolicy'
 
-type FetchLike = typeof fetch
-
 const requestWithProviderTransport = (
   request: FetchLike,
   settings: OpenAiTransportSettings,
   endpoint: string,
-  init: RequestInit,
+  init: GhostRequestInit,
   signal?: AbortSignal,
   timeoutMs?: number
 ): Promise<Response> => (
@@ -210,7 +209,7 @@ class AnthropicClient implements ProviderClient {
     private readonly baseUrl: string,
     private readonly apiKeyProvider: () => string | undefined,
     private readonly transport: OpenAiTransportSettings,
-    private readonly request: FetchLike = fetch
+    private readonly request: FetchLike = nativeFetch
   ) {}
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
@@ -288,7 +287,7 @@ class GeminiClient implements ProviderClient {
     private readonly baseUrl: string,
     private readonly apiKeyProvider: () => string | undefined,
     private readonly transport: OpenAiTransportSettings,
-    private readonly request: FetchLike = fetch
+    private readonly request: FetchLike = nativeFetch
   ) {}
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
@@ -367,7 +366,7 @@ class CustomHttpClient implements ProviderClient {
     private readonly responseFormat: CustomResponseFormat,
     private readonly settings: GhostSettings,
     private readonly apiKeyProvider: () => string | undefined,
-    private readonly request: FetchLike = fetch
+    private readonly request: FetchLike = nativeFetch
   ) {}
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {
@@ -439,7 +438,7 @@ class AzureOpenAiClient implements ProviderClient {
     private readonly apiVersion: string,
     private readonly apiKeyProvider: () => string | undefined,
     private readonly settings: GhostSettings,
-    private readonly request: FetchLike = fetch
+    private readonly request: FetchLike = nativeFetch
   ) {}
 
   async checkHealth(timeoutMs = 3000): Promise<boolean> {

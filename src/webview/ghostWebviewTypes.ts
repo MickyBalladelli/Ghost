@@ -1,17 +1,28 @@
-export type GhostViewStatus = 'ready' | 'offline'
-export type NoticeKind = 'error' | 'no-model' | 'info'
-export type MessageRole = 'user' | 'assistant'
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+import type {
+  GhostAutoAcceptScope,
+  GhostLogLevel,
+  GhostMode,
+  GhostProgressPhase,
+  GhostProvider,
+  GhostRequestStatus,
+  GhostResponseLength,
+  GhostStopReason,
+  GhostViewStatus
+} from './ghostProtocolTypes'
+
+export type AutoAcceptScope = GhostAutoAcceptScope
+export type ResponseLength = GhostResponseLength
+export type LogLevel = GhostLogLevel
+export type RequestStatus = GhostRequestStatus
+export type ProgressPhase = GhostProgressPhase
+export type StopReason = GhostStopReason
+export type { GhostViewStatus, GhostProvider, GhostMode }
+
 export type OpenAiProfile = 'generic' | 'anthropic' | 'gemini' | 'azure-openai' | 'lm-studio' | 'llama-cpp' | 'vllm' | 'litellm' | 'custom'
 export type CustomResponseFormat = 'openai-sse' | 'json'
-export type AutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
-export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-export type ResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
-export type LogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'
+export type NoticeKind = 'error' | 'no-model' | 'info'
+export type MessageRole = 'user' | 'assistant'
 export type ModelRole = 'chat' | 'agent' | 'vision' | 'autocomplete'
-export type RequestStatus = 'idle' | 'preparing' | 'connecting' | 'thinking' | 'streaming' | 'waiting-for-approval' | 'completed' | 'cancelled' | 'failed'
-export type ProgressPhase = 'context' | 'provider' | 'thinking' | 'streaming' | 'tool' | 'complete' | 'error'
-export type StopReason = 'failed-tool' | 'invalid-model-response' | 'cancelled' | 'timeout' | 'approval-rejected' | 'context-limit' | 'budget-limit' | 'provider-failure'
 
 export interface ModelProfile {
   provider?: GhostProvider
@@ -92,6 +103,7 @@ export interface ControlSettings {
   repeatPenalty: number
   responseLength: ResponseLength
   mode: GhostMode
+  autoAcceptScope: AutoAcceptScope
   fileEditApproval: AutoAcceptScope
   enableConversationPersistence: boolean
 }
@@ -172,7 +184,7 @@ export interface ToolCall {
   arguments?: string
   requiresApproval?: boolean
   approval?: 'pending' | 'approved' | 'rejected'
-  diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
+  diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; previewKind?: 'staged' | 'text'; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'
   result?: string
   startedAt: number

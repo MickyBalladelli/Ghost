@@ -3,7 +3,7 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
-import type { RequestInit } from 'node-fetch'
+import type { RequestAgent } from './httpTypes'
 
 export interface OpenAiTransportSettings {
   apiKeyHeader: string
@@ -49,8 +49,6 @@ export function createOpenAiTransportSettings(settings: {
     tlsKeyFile: settings.openaiTlsKeyFile
   }
 }
-
-type RequestAgent = NonNullable<RequestInit['agent']>
 
 function readOptionalFile(filePath: string): Buffer | undefined {
   const normalized = filePath.trim()

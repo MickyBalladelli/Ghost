@@ -1,8 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { Readable } from 'node:stream'
 
-import fetch, { Response } from 'node-fetch'
-
 import { MlxClient, streamSseTokens } from '../../services/mlxClient'
 import { OllamaClient } from '../../services/ollamaClient'
 import {

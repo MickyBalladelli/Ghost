@@ -1,10 +1,7 @@
-import fetch, { type RequestInit, type Response } from 'node-fetch'
-
+import { nativeFetch } from './nativeFetch'
+import type { FetchLike, GhostRequestInit, RequestAgent } from './httpTypes'
 import { requestWithRetry, type ProviderRequestOptions } from './providerRequest'
 import { GhostClock, systemClock } from '../runtimeDependencies'
-
-type FetchLike = typeof fetch
-type RequestAgent = NonNullable<RequestInit['agent']>
 
 export interface ProviderTransportDiagnostics {
   endpoint: string
@@ -28,7 +25,7 @@ export class ProviderHttpTransport {
   private readonly agents = new Map<string, RequestAgent>()
 
   constructor(
-    private readonly request: FetchLike = fetch,
+    private readonly request: FetchLike = nativeFetch,
     private readonly agentFactory?: ProviderAgentFactory
   ) {}
 
@@ -42,7 +39,7 @@ export class ProviderHttpTransport {
     this.lastDiagnostics = undefined
   }
 
-  private agentFor(endpoint: string, init: RequestInit, options: ProviderTransportOptions): RequestAgent | undefined {
+  private agentFor(endpoint: string, init: GhostRequestInit, options: ProviderTransportOptions): RequestAgent | undefined {
     if (options.agent) {
       return options.agent
     }
@@ -62,7 +59,7 @@ export class ProviderHttpTransport {
 
   async requestWithDiagnostics(
     endpoint: string,
-    init: RequestInit = {},
+    init: GhostRequestInit = {},
     options: ProviderTransportOptions = {}
   ): Promise<Response> {
     const clock: GhostClock = options.clock ?? systemClock

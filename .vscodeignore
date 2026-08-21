@@ -26,10 +26,6 @@ tsconfig.webview.json
 *.map
 *.ts
 node_modules/**
-!node_modules/node-fetch/**
-!node_modules/whatwg-url/**
-!node_modules/tr46/**
-!node_modules/webidl-conversions/**
 !node_modules/http-proxy-agent/**
 !node_modules/https-proxy-agent/**
 !node_modules/agent-base/**

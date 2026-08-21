@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import { TextDecoder } from 'node:util'
-import fetch, { type RequestInit, type Response } from 'node-fetch'
+import { nativeFetch } from './nativeFetch'
+import type { FetchLike, GhostRequestInit } from './httpTypes'
 import { buildMlxChatBody } from './providerRequestBuilders'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError, streamWithTimeout } from './providerRequest'
@@ -58,8 +59,6 @@ interface MlxStreamChunk {
     text?: string | null
   }>
 }
-
-type FetchLike = typeof fetch
 
 const MIME_TYPES: Record<string, string> = {
   '.avif': 'image/avif',
@@ -210,7 +209,7 @@ export class MlxClient {
   private readonly transport: ProviderHttpTransport
   private readonly apiKeyProvider?: () => string | undefined
 
-  constructor(baseUrl = DEFAULT_MLX_URL, request: FetchLike = fetch, apiKeyProvider?: () => string | undefined) {
+  constructor(baseUrl = DEFAULT_MLX_URL, request: FetchLike = nativeFetch, apiKeyProvider?: () => string | undefined) {
     this.apiUrl = normalizeMlxApiUrl(baseUrl)
     this.transport = new ProviderHttpTransport(request, createKeepAliveAgent)
     this.apiKeyProvider = apiKeyProvider
@@ -253,7 +252,7 @@ export class MlxClient {
 
   async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     const body = JSON.stringify(buildMlxChatBody(options))
-    const requestOptions: RequestInit = {
+    const requestOptions: GhostRequestInit = {
       method: 'POST',
       headers: {
         accept: 'text/event-stream',

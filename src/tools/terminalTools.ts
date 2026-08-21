@@ -302,7 +302,7 @@ export class RunTerminalCommandTool implements vscode.LanguageModelTool<RunTermi
 
     const cwd = options.input.cwd
       ? resolveWorkspacePath(options.input.cwd).fsPath
-      : getWorkspaceRoot().fsPath
+      : getWorkspaceRoot(options.input.cwd).fsPath
     const output = await runCommand(options.input.command, cwd, token, this.processRunner)
 
     return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(output)])

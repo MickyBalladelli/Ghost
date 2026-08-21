@@ -17,7 +17,7 @@ import { auditTerminalCommand, formatTerminalAudit, RunTerminalCommandInput, Run
 import { parseGhostEdit, summarizeGhostEdit } from './editWorkflow'
 import { assertExpectedWorkspaceSnapshot, assertFileMutationAllowed, applyWorkspaceFileChange, createWorkspaceEditChange, createWorkspaceFileChange, expectedWorkspaceSnapshot, readFileMutation } from './fileMutationWorkflow'
 import { WorkspaceFileSnapshot } from './workspaceFile'
-import { applyFileTransaction, FileTransactionInput, parseFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
+import { applyFileTransaction, FileTransactionInput, parseFileTransaction, prepareFileTransaction, summarizeFileTransaction } from './transactionWorkflow'
 import { awaitCancellable } from './cancellation'
 import { validateLocalToolCall } from '../agent/toolSchema'
 import { createToolErrorResult, createToolResult, ToolResult } from './toolResult'
@@ -280,6 +280,16 @@ export class LocalToolExecutor {
         )
         if (!allowed) {
           return 'User denied the file transaction.'
+        }
+        if (options.alreadyApplied) {
+          const prepared = await prepareFileTransaction(transactionInput, options.expectedFiles, token, this.fileSystem)
+          for (const file of prepared) {
+            const current = await readCurrentFile(file.path, token, this.fileSystem)
+            if (!current.exists || current.content !== file.after) {
+              throw new Error('The accepted transaction changed before Ghost could finish the request')
+            }
+          }
+          return `${summarizeFileTransaction(prepared)}\nApplied and verified as one transaction.`
         }
         const applied = await applyFileTransaction(transactionInput, options.expectedFiles, token)
         return `${summarizeFileTransaction(applied)}\nApplied and verified as one transaction.`

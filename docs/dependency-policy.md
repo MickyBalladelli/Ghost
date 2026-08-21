@@ -19,7 +19,7 @@ Ghost keeps `package-lock.json` committed. Dependency changes must update the lo
 ## Review rules
 
 - Update TypeScript, `@types/node`, and `@types/vscode` together when their compiler or API types are coupled. Confirm the declared VS Code engine still supports the selected types, then run compile and the host tests.
-- Review `node-fetch`, proxy agents, and related provider transport packages for request, TLS, redirect, timeout, and error-handling changes. Run provider fixtures and resilience tests.
+- Review proxy agents and related provider transport packages for request, TLS, redirect, timeout, and error-handling changes. Run provider fixtures and resilience tests.
 - Review `@vscode/vsce` changes against `.vscodeignore`, the generated VSIX manifest, and a local package smoke install. Do not publish a package that contains source maps, tests, secrets, or local model data.
 - Review Mocha, `@types/mocha`, `@vscode/test-electron`, Node types, and ESLint updates as test-infrastructure changes. Run both fast and extension-host suites.
 - Avoid unrelated major-version upgrades in feature pull requests. Land major upgrades separately with a changelog entry and a rollback path.

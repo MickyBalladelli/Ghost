@@ -71,19 +71,13 @@ async function resolveReadableFilePath(input: string, token: vscode.Cancellation
   }
 
   const fileName = path.basename(input.replace(/\\/g, '/'))
-  const root = getWorkspaceRoot()
-  const matches = await vscode.workspace.findFiles(
-    new vscode.RelativePattern(root, `**/${fileName}`),
-    undefined,
-    20,
-    token
-  )
+  const matches = await vscode.workspace.findFiles(`**/${fileName}`, undefined, 20, token)
   if (matches.length === 1) {
     return matches[0]
   }
   if (matches.length > 1) {
     const candidates = matches
-      .map(match => path.relative(root.fsPath, match.fsPath))
+      .map(match => path.relative(getWorkspaceRoot(match.fsPath).fsPath, match.fsPath))
       .slice(0, 8)
       .join(', ')
     throw new Error(`File '${input}' was not found at that path. Multiple filename matches exist: ${candidates}. Retry with the full workspace-relative path.`)
@@ -143,7 +137,7 @@ const GENERATED_DIRECTORY_NAMES = new Set([
 ])
 
 function normalizedWorkspaceRelativePath(uri: vscode.Uri): string {
-  return path.relative(getWorkspaceRoot().fsPath, uri.fsPath).split(path.sep).join('/')
+  return path.relative(getWorkspaceRoot(uri.fsPath).fsPath, uri.fsPath).split(path.sep).join('/')
 }
 
 function globToRegExp(pattern: string): RegExp {
@@ -191,7 +185,7 @@ async function isGitIgnored(uri: vscode.Uri, token?: vscode.CancellationToken): 
     return false
   }
   try {
-    const ignoreFile = vscode.Uri.joinPath(getWorkspaceRoot(), '.gitignore')
+    const ignoreFile = vscode.Uri.joinPath(getWorkspaceRoot(uri.fsPath), '.gitignore')
     const ignoreContent = new TextDecoder('utf-8', { fatal: true }).decode(await readCachedWorkspaceFile(ignoreFile, token))
     let ignored = false
     for (const rawPattern of ignoreContent.split(/\r\n|\n|\r/)) {
@@ -657,7 +651,7 @@ export class ListDirectoryTool implements vscode.LanguageModelTool<ListDirectory
     assertNotCancelled(token)
     assertLanguageModelToolAllowed('ghost_list_directory', options.input)
     const uri = resolveWorkspacePath(options.input.path)
-    const workspaceRoot = getWorkspaceRoot()
+    const workspaceRoot = getWorkspaceRoot(options.input.path)
     const relativePrefix = path.relative(workspaceRoot.fsPath, uri.fsPath)
     const displayPath = relativePrefix.split(path.sep).join('/') || '.'
     let stat: vscode.FileStat

@@ -99,6 +99,8 @@ export interface StagedEdit {
   uri: vscode.Uri
   before: string
   after: string
+  documentVersion: number
+  mtimeMs?: number
 }
 
 export interface WorkspaceContextSnapshot {

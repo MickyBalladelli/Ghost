@@ -3,6 +3,13 @@ import type { CustomResponseFormat, OpenAiProfileId } from '../services/provider
 import type { GhostLogLevel } from '../config'
 import type { GhostModelAliases, GhostModelProfiles, GhostModelRole } from '../services/modelProfiles'
 import { GHOST_POLICY } from '../ghostPolicy'
+import type {
+  GhostAutoAcceptScope,
+  GhostMode,
+  GhostProvider,
+  GhostResponseLength,
+  GhostViewStatus
+} from '../webview/ghostProtocolTypes'
 
 export const GHOST_WEBVIEW_PROTOCOL_VERSION = 2 as const
 export const GHOST_SUPPORTED_PROTOCOL_VERSIONS = [1, GHOST_WEBVIEW_PROTOCOL_VERSION] as const
@@ -10,12 +17,14 @@ export type GhostProtocolVersion = typeof GHOST_SUPPORTED_PROTOCOL_VERSIONS[numb
 export const GHOST_PERSISTENCE_SCHEMA_VERSION = 2 as const
 export const MAX_GHOST_WEBVIEW_MESSAGE_BYTES = GHOST_POLICY.protocol.maxWebviewMessageBytes
 
-export type GhostViewStatus = 'ready' | 'offline'
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type {
+  GhostViewStatus,
+  GhostProvider,
+  GhostAutoAcceptScope,
+  GhostMode,
+  GhostResponseLength
+}
 export type GhostOpenAiProfile = OpenAiProfileId
-export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
-export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
-export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostContextKey = 'workspace' | 'folders' | 'activeFile' | 'selection' | 'openFiles' | 'tools'
 export type { GhostRequestStatus }
 export type { GhostProgressPhase }
@@ -35,6 +44,7 @@ export interface GhostToolDiffPreview {
   before: string
   after: string
   truncated?: boolean
+  previewKind?: 'staged' | 'text'
   hunks?: Array<{ startLine: number; endLine: number; replacement: string }>
 }
 
@@ -120,7 +130,7 @@ export interface GhostSettingsUpdate {
   repeatPenalty?: number
   responseLength?: GhostResponseLength
   mode?: GhostMode
-  fileEditApproval?: 'confirm' | 'auto'
+  fileEditApproval?: GhostAutoAcceptScope | 'auto'
   autoAcceptScope?: GhostAutoAcceptScope
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
@@ -429,7 +439,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.repeatPenalty === undefined || isFiniteNumber(value.repeatPenalty)) &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
-    (value.fileEditApproval === undefined || ['confirm', 'auto'].includes(value.fileEditApproval as string)) &&
+    (value.fileEditApproval === undefined || ['confirm', 'auto', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.fileEditApproval as string)) &&
     (value.autoAcceptScope === undefined || ['confirm', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.autoAcceptScope as string)) &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&

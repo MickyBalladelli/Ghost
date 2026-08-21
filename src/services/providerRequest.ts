@@ -1,4 +1,4 @@
-import type { Response } from 'node-fetch'
+import { Readable } from 'node:stream'
 import { GHOST_POLICY } from '../ghostPolicy'
 import { GhostError } from '../ghostErrors'
 import { GhostClock, systemClock } from '../runtimeDependencies'
@@ -31,9 +31,12 @@ export class ProviderTimeoutError extends GhostError {
   }
 }
 
-export async function* streamWithTimeout(body: NodeJS.ReadableStream, timeoutMs: number): AsyncGenerator<Buffer | string> {
-  const iterator = (body as AsyncIterable<Buffer | string>)[Symbol.asyncIterator]()
-  const stream = body as NodeJS.ReadableStream & { destroy?: (error?: Error) => void }
+export async function* streamWithTimeout(body: NodeJS.ReadableStream | ReadableStream<Uint8Array>, timeoutMs: number): AsyncGenerator<Buffer | string> {
+  const nodeBody = typeof (body as ReadableStream<Uint8Array>).getReader === 'function' && !('on' in body)
+    ? Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0])
+    : body as NodeJS.ReadableStream
+  const iterator = (nodeBody as AsyncIterable<Buffer | string>)[Symbol.asyncIterator]()
+  const stream = nodeBody as NodeJS.ReadableStream & { destroy?: (error?: Error) => void }
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {

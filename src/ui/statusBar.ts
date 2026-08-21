@@ -23,7 +23,7 @@ export class GhostStatusBar implements vscode.Disposable {
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
-    this.item.command = 'ghost.checkOllamaStatus'
+    this.item.command = 'ghost.checkProviderStatus'
     this.setStatus('ready')
   }
 

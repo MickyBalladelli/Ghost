@@ -1,4 +1,5 @@
-import fetch, { type RequestInit, type Response } from 'node-fetch'
+import { nativeFetch } from './nativeFetch'
+import type { FetchLike, GhostRequestInit } from './httpTypes'
 import { TextDecoder } from 'node:util'
 
 import { ChatMessage, ChatRequestOptions, ChatStreamEvent } from './chatTypes'
@@ -73,8 +74,6 @@ interface OllamaCompletionResponse {
 interface OllamaStreamChunk extends OllamaCompletionResponse {
   done?: boolean
 }
-
-type FetchLike = typeof fetch
 
 function normalizeBaseUrl(baseUrl: string): string {
   return normalizeEndpoint(baseUrl)
@@ -234,7 +233,7 @@ export class OllamaClient {
   constructor(
     baseUrl = DEFAULT_OLLAMA_URL,
     mode: OllamaApiMode = 'auto',
-    request: FetchLike = fetch,
+    request: FetchLike = nativeFetch,
     apiKeyProvider?: () => string | undefined,
     openAiTransport?: OpenAiTransportSettings
   ) {
@@ -263,7 +262,7 @@ export class OllamaClient {
     })
   }
 
-  private withTransport(endpoint: string, init: RequestInit, useOpenAiTransport = true): RequestInit {
+  private withTransport(endpoint: string, init: GhostRequestInit, useOpenAiTransport = true): GhostRequestInit {
     if (!useOpenAiTransport || !this.openAiTransport) {
       return init
     }
@@ -506,7 +505,7 @@ export class OllamaClient {
     options: OllamaChatOptions,
     messages: ChatMessage[],
     stream: boolean
-  ): RequestInit {
+  ): GhostRequestInit {
     if (kind === 'ollama') {
       return {
         method: 'POST',
@@ -559,7 +558,7 @@ export class OllamaClient {
     kind: 'ollama' | 'openai',
     options: FimCompletionOptions,
     prompt: string
-  ): RequestInit {
+  ): GhostRequestInit {
     if (kind === 'ollama') {
       return {
         method: 'POST',
@@ -594,5 +593,5 @@ export async function fetchFimCompletion(
   baseUrl: string,
   options: FimCompletionOptions
 ): Promise<string> {
-  return new OllamaClient(baseUrl, 'auto', fetch, undefined, options.openAiTransport).fetchFimCompletion(options)
+  return new OllamaClient(baseUrl, 'auto', nativeFetch, undefined, options.openAiTransport).fetchFimCompletion(options)
 }

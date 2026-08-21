@@ -4,6 +4,7 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..')
 const source = path.join(root, '.webview-build', 'webview')
 const target = path.join(root, 'out', 'webview')
+const cssSource = path.join(root, 'src', 'webview')
 
 fs.mkdirSync(target, { recursive: true })
 
@@ -25,6 +26,13 @@ for (const file of fs.readdirSync(source)) {
   }
 
   fs.writeFileSync(targetPath, browserSource)
+}
+
+for (const file of fs.readdirSync(cssSource)) {
+  if (!file.endsWith('.css')) {
+    continue
+  }
+  fs.copyFileSync(path.join(cssSource, file), path.join(target, file))
 }
 
 console.log('Copied browser webview output into out/webview')

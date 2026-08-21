@@ -53,11 +53,14 @@ suite('Webview message contract', () => {
     assert.equal(isGhostWebviewMessage({
       ...envelope,
       type: 'update-settings',
+      requestId: 'request-1',
+      conversationId: 'conversation-1',
       settings: {
         provider: 'ollama',
         enableConversationPersistence: false,
         enableDebugLogging: true,
-        toolAllowlist: ['ghost_read_file']
+        toolAllowlist: ['ghost_read_file'],
+        autoAcceptScope: 'confirm'
       }
     }), true)
     assert.equal(isGhostWebviewMessage({

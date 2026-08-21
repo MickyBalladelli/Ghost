@@ -50,35 +50,62 @@ function canonicalWorkspaceRoot(root: string): string | undefined {
   }
 }
 
-export function resolveWorkspacePath(input: string): vscode.Uri {
-  const workspaceRoot = getWorkspaceRoot().fsPath
-  const candidate = path.isAbsolute(input)
-    ? path.resolve(input)
-    : path.resolve(workspaceRoot, input)
-  const canonicalCandidate = canonicalWorkspacePath(candidate)
-  const workspaceFolder = vscode.workspace.workspaceFolders?.find(folder => {
-    const root = canonicalWorkspaceRoot(folder.uri.fsPath)
-    return root !== undefined && isInsideWorkspace(canonicalCandidate, root)
-  })
-
-  if (!workspaceFolder) {
-    throw new GhostError('Path must be inside the current workspace', { code: 'tool.path-invalid' })
-  }
-
-  return vscode.Uri.file(canonicalCandidate)
-}
-
-export function getWorkspaceRoot(): vscode.Uri {
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri
-
-  if (!root) {
+function workspaceFolders(): readonly vscode.WorkspaceFolder[] {
+  const folders = vscode.workspace.workspaceFolders
+  if (!folders?.length) {
     throw new GhostError('Open a workspace before using Ghost tools', { code: 'tool.path-invalid' })
   }
+  return folders
+}
 
-  const canonicalRoot = canonicalWorkspaceRoot(root.fsPath)
-  if (!canonicalRoot) {
-    throw new GhostError('The current workspace root does not exist or is not a directory', { code: 'tool.path-invalid' })
+function owningWorkspaceRoot(candidate: string): string | undefined {
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const root = canonicalWorkspaceRoot(folder.uri.fsPath)
+    if (root && isInsideWorkspace(candidate, root)) {
+      return root
+    }
+  }
+  return undefined
+}
+
+export function resolveWorkspacePath(input: string): vscode.Uri {
+  const folders = workspaceFolders()
+  const candidates = path.isAbsolute(input)
+    ? [canonicalWorkspacePath(path.resolve(input))]
+    : folders.flatMap(folder => {
+      const root = canonicalWorkspaceRoot(folder.uri.fsPath)
+      return root ? [canonicalWorkspacePath(path.resolve(root, input))] : []
+    })
+
+  const existing = candidates.find(candidate => owningWorkspaceRoot(candidate) && fs.existsSync(candidate))
+  const chosen = existing ?? candidates.find(candidate => owningWorkspaceRoot(candidate) !== undefined)
+  if (!chosen) {
+    throw new GhostError('Path must be inside the current workspace', { code: 'tool.path-invalid' })
+  }
+  return vscode.Uri.file(chosen)
+}
+
+export function getWorkspaceRoot(pathHint?: string): vscode.Uri {
+  const folders = workspaceFolders()
+  const hinted = pathHint?.trim()
+  if (hinted) {
+    try {
+      const uri = resolveWorkspacePath(hinted)
+      const root = owningWorkspaceRoot(uri.fsPath)
+      if (root) {
+        return vscode.Uri.file(root)
+      }
+    } catch {
+      // Fall through to the first usable folder.
+    }
   }
 
-  return vscode.Uri.file(canonicalRoot)
+  for (const folder of folders) {
+    const canonicalRoot = canonicalWorkspaceRoot(folder.uri.fsPath)
+    if (canonicalRoot) {
+      return vscode.Uri.file(canonicalRoot)
+    }
+  }
+
+  throw new GhostError('The current workspace root does not exist or is not a directory', { code: 'tool.path-invalid' })
 }

@@ -4,6 +4,15 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Extract Ghost webview CSS to `src/webview/ghostWebview.css` and keep the CSP nonce on the stylesheet link.
+- Share protocol unions and tool names through `ghostProtocolTypes.ts` so the webview uses `autoAcceptScope` as the real setting.
+- Remove leftover Hello World. Rename provider health to `ghost.checkProviderStatus` with a `checkOllamaStatus` alias. Register Accept/Reject staged-edit commands.
+- Drop unused ESLint and migrate HTTP transport from `node-fetch@2` to native fetch, keeping proxy/TLS agents.
+- Watch both the extension host and webview, including CSS copy. Trim implied `activationEvents`.
+- Resolve listing, search, git, and relative paths against the owning multi-root folder.
+- Harden staged-edit restore against dirty/external changes, label transaction previews as text-only, and distinguish agent time-limit stops from provider HTTP timeouts.
+- Default the webview tool allowlist to Ghost's tools before host state arrives.
+
 - Shrink the always-on agent system prompt and keep JSON tool schemas for models without native tools.
 - Scale the tool output reserve from context size (25%, min 1024, max 4096) instead of reserving 4096 tokens on every 8k model.
 - Demand workspace tools only for explicit edit intent, not isolated verbs like add or change.

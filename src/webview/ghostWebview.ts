@@ -384,7 +384,20 @@ let controls: ControlSettings = {
   openaiTlsCaFile: '',
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
-  toolAllowlist: [],
+  // Keep in sync with GHOST_TOOL_NAMES in src/config.ts (webview scripts cannot import host modules).
+  toolAllowlist: [
+    'ghost_read_file',
+    'ghost_search_workspace',
+    'ghost_get_diagnostics',
+    'ghost_git_context',
+    'ghost_update_task_plan',
+    'ghost_record_completion',
+    'ghost_write_file',
+    'ghost_apply_edit',
+    'ghost_apply_transaction',
+    'ghost_run_terminal_command',
+    'ghost_list_directory'
+  ],
   toolAsklist: [],
   toolDenylist: [],
   terminalEnvironmentAsklist: [],
@@ -405,6 +418,7 @@ let controls: ControlSettings = {
   repeatPenalty: 1.05,
   responseLength: 'balanced',
   mode: 'agent',
+  autoAcceptScope: 'confirm',
   fileEditApproval: 'confirm',
   enableConversationPersistence: false,
   terminalEnvironmentAllowlist: ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
@@ -2139,10 +2153,10 @@ const stopReasonLabels: Record<StopReason, string> = {
   'failed-tool': 'Tool failed',
   'invalid-model-response': 'Invalid model response',
   cancelled: 'Request cancelled',
-  timeout: 'Request timed out',
+  timeout: 'Provider HTTP timeout',
   'approval-rejected': 'Approval rejected',
   'context-limit': 'Context limit reached',
-  'budget-limit': 'Request budget reached',
+  'budget-limit': 'Agent request time limit or budget reached',
   'provider-failure': 'Provider failed'
 }
 
@@ -2154,10 +2168,10 @@ const stopReasonFallback = (reason: StopReason | undefined): string => {
   if (reason === 'failed-tool') return 'A workspace tool failed.'
   if (reason === 'invalid-model-response') return 'The model response could not be used.'
   if (reason === 'cancelled') return 'The request was cancelled.'
-  if (reason === 'timeout') return 'The provider did not respond before the timeout.'
+  if (reason === 'timeout') return 'The provider HTTP request timed out (ghost.providerRequestTimeoutMinutes).'
   if (reason === 'approval-rejected') return 'A requested tool approval was denied.'
   if (reason === 'context-limit') return 'The request reached the available context limit.'
-  if (reason === 'budget-limit') return 'The request reached its safety budget.'
+  if (reason === 'budget-limit') return 'The agent request time limit or tool budget expired (ghost.requestTimeLimitMinutes).'
   if (reason === 'provider-failure') return 'The configured provider failed to complete the request.'
   return 'Ghost stopped without additional details.'
 }
@@ -2472,7 +2486,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<div class="tool-hunk-toolbar" role="toolbar" aria-label="Hunk navigation"><span>${diff.hunks.length} hunk${diff.hunks.length === 1 ? '' : 's'}</span><button type="button" class="secondary" data-tool-action="previous-hunk" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Focus previous hunk">Previous</button><button type="button" class="secondary" data-tool-action="next-hunk" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Focus next hunk">Next</button></div>`
       : ''
     const diffBlock = part.toolCall.diffPreview
-      ? `<details class="tool-details tool-diff-details"><summary>Diff preview · ${escapeHtml(files[0] ?? part.toolCall.diffPreview.path)} · ${escapeHtml(diffStats)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}</summary>${diffFiles}${hunkNavigation}${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list" role="list" aria-label="Changed hunks">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<div class="tool-hunk" data-tool-hunk-card data-tool-hunk-index="${index}" role="listitem" tabindex="-1"><span>Hunk ${index + 1} · Lines ${hunk.startLine}-${hunk.endLine}</span><button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Open hunk ${index + 1} at line ${hunk.startLine}">Open line</button></div>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
+      ? `<details class="tool-details tool-diff-details"><summary>${part.toolCall.diffPreview.previewKind === 'text' ? 'Text preview only' : 'Diff preview'} · ${escapeHtml(files[0] ?? part.toolCall.diffPreview.path)} · ${escapeHtml(diffStats)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}${part.toolCall.diffPreview.previewKind === 'text' ? ' · files are not staged in the editor' : ''}</summary>${diffFiles}${hunkNavigation}${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list" role="list" aria-label="Changed hunks">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<div class="tool-hunk" data-tool-hunk-card data-tool-hunk-index="${index}" role="listitem" tabindex="-1"><span>Hunk ${index + 1} · Lines ${hunk.startLine}-${hunk.endLine}</span><button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Open hunk ${index + 1} at line ${hunk.startLine}">Open line</button></div>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
       : ''
     const resultBlock = uiPreferences.showToolProgress && part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
@@ -3460,7 +3474,8 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     controls = {
       ...message.settings,
       chatModel: selectedModel,
-      fileEditApproval: message.settings.autoAcceptScope
+      fileEditApproval: message.settings.autoAcceptScope,
+      autoAcceptScope: message.settings.autoAcceptScope
     }
     availableModels = incomingModels
     availableModelMetadata = message.modelMetadata?.filter(metadata => metadata && typeof metadata.id === 'string').map(metadata => ({
@@ -4170,6 +4185,7 @@ modeElement.addEventListener('change', () => {
 fileEditApprovalElement.addEventListener('change', () => {
   const value = fileEditApprovalElement.value
   controls.fileEditApproval = value === 'one-edit' || value === 'current-file' || value === 'request' || value === 'session' || value === 'workspace' || value === 'always' ? value : 'confirm'
+  controls.autoAcceptScope = controls.fileEditApproval
   sendSettingsUpdate()
   saveState()
 })

@@ -173,7 +173,7 @@ export class SearchWorkspaceTool implements vscode.LanguageModelTool<SearchWorks
     if (!query) throw new Error('Search query cannot be empty')
     if (query.length > MAX_QUERY_LENGTH) throw new Error(`Search query cannot exceed ${MAX_QUERY_LENGTH} characters`)
 
-    const workspace = getWorkspaceRoot()
+    const workspace = getWorkspaceRoot(options.input.path)
     const target = options.input.path ? resolveWorkspacePath(options.input.path) : workspace
     const relativeTarget = path.relative(workspace.fsPath, target.fsPath) || '.'
     const maxResults = Math.min(MAX_RESULTS, Math.max(1, Math.floor(options.input.maxResults ?? DEFAULT_MAX_RESULTS)))

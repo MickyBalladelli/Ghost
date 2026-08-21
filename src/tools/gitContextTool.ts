@@ -108,8 +108,8 @@ function relativeGitPath(root: string, target: string): string {
 }
 
 async function getGitScope(input: GitContextInput, token: vscode.CancellationToken, processRunner: GhostProcessRunner): Promise<GitScope> {
-  const workspaceRoot = getWorkspaceRoot().fsPath
   const requestedPath = input.path?.trim() || (input.operation === 'diff' || input.operation === 'stagedDiff' || input.operation === 'history' ? activeFilePath() : undefined)
+  const workspaceRoot = getWorkspaceRoot(requestedPath).fsPath
   const targetUri = requestedPath
     ? resolveWorkspacePath(requestedPath)
     : undefined

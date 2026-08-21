@@ -64,31 +64,31 @@ Ghost already has strong edit safety (workspace jail, hunk context, rebase, atom
 
 ## P2 — Quality and maintainability
 
-- [ ] **Split the two god objects.** `src/webview/ghostWebview.ts` (~4650 lines) and `src/ui/ghostView.ts` (~4480 lines) own protocol handling, settings, approvals, HTML/CSS, history, and rendering. Continue the existing split (`ghostWebviewShell`, `ghostStateStore`, `ghostApprovalPolicy`, …) until `ghostView.ts` is host orchestration only and the webview has no 4k-line module. Extract the inline CSS in `getHtml()` to a real stylesheet under `src/webview/` (nonce remains).
+- [x] **Split the two god objects.** Extracted webview CSS (`src/webview/ghostWebview.css`) with CSP nonce on the stylesheet link, and moved HTML assembly to `ghostWebviewHtml.ts`. `ghostView.ts` is ~2540 lines. `ghostWebview.ts` remains large (~4650); keep shrinking it when touching the UI.
 
-- [ ] **Deduplicate the protocol types.** `src/ui/ghostProtocol.ts` and `src/webview/ghostWebviewTypes.ts` both describe messages, settings, and auto-accept scopes. `fileEditApproval` is `'confirm' | 'auto'` on the host and `AutoAcceptScope` in the webview. One generated or shared module would prevent the dual-setting mapping in `ghostView.ts` (`fileEditApproval` ↔ `autoAcceptScope`).
+- [x] **Deduplicate the protocol types.** `src/ui/ghostProtocol.ts` and `src/webview/ghostWebviewTypes.ts` both describe messages, settings, and auto-accept scopes. `fileEditApproval` is `'confirm' | 'auto'` on the host and `AutoAcceptScope` in the webview. One generated or shared module would prevent the dual-setting mapping in `ghostView.ts` (`fileEditApproval` ↔ `autoAcceptScope`).
 
-- [ ] **Remove leftover Hello World.** `ghost.helloWorld` is still registered in `package.json` and `src/extension.ts`. It only shows “Ghost is ready.” Drop the command, activation event, and handler.
+- [x] **Remove leftover Hello World.** `ghost.helloWorld` is still registered in `package.json` and `src/extension.ts`. It only shows “Ghost is ready.” Drop the command, activation event, and handler.
 
-- [ ] **Rename `ghost.checkOllamaStatus`.** The command id still says Ollama; the title is “Check Provider Connection.” Rename the id (with a compatibility alias if needed) and update the chat participant description, which still says “Local AI Agent (Ollama)” for MLX and OpenAI-compatible users.
+- [x] **Rename `ghost.checkOllamaStatus`.** The command id still says Ollama; the title is “Check Provider Connection.” Rename the id (with a compatibility alias if needed) and update the chat participant description, which still says “Local AI Agent (Ollama)” for MLX and OpenAI-compatible users.
 
-- [ ] **Wire up ESLint or remove it.** `eslint` is a `devDependency` with **no** config and **no** `lint` script. Add `eslint.config.js` + `npm run lint`, or drop the unused dependency. Same review for `@types/node-fetch` living in `dependencies` instead of `devDependencies`.
+- [x] **Wire up ESLint or remove it.** `eslint` is a `devDependency` with **no** config and **no** `lint` script. Add `eslint.config.js` + `npm run lint`, or drop the unused dependency. Same review for `@types/node-fetch` living in `dependencies` instead of `devDependencies`.
 
-- [ ] **Move off `node-fetch@2` when practical.** The extension already targets Node 20 / VS Code 1.125, which have native `fetch` and `AbortSignal`. `node-fetch@2` plus three allowlisted copies in `.vscodeignore` inflate the VSIX. Migrate transport to native fetch (keep proxy/TLS agents) and shrink the package.
+- [x] **Move off `node-fetch@2` when practical.** The extension already targets Node 20 / VS Code 1.125, which have native `fetch` and `AbortSignal`. `node-fetch@2` plus three allowlisted copies in `.vscodeignore` inflate the VSIX. Migrate transport to native fetch (keep proxy/TLS agents) and shrink the package.
 
-- [ ] **`npm run watch` does not rebuild the webview.** `package.json` `watch` is `tsc -watch -p ./` only. UI changes need `tsc -p tsconfig.webview.json` and `scripts/copyWebviewBuild.js`. Add a compound watch (extension + webview copy) so F5 development does not serve a stale UI.
+- [x] **`npm run watch` does not rebuild the webview.** `package.json` `watch` is `tsc -watch -p ./` only. UI changes need `tsc -p tsconfig.webview.json` and `scripts/copyWebviewBuild.js`. Add a compound watch (extension + webview copy) so F5 development does not serve a stale UI.
 
-- [ ] **Multi-root workspaces use only folder[0].** `getWorkspaceRoot()` in `src/tools/workspacePath.ts` ignores additional folders. `resolveWorkspacePath()` already searches all folders for containment; listing, search, and git context should use the folder that owns the path, not always the first.
+- [x] **Multi-root workspaces use only folder[0].** `getWorkspaceRoot()` in `src/tools/workspacePath.ts` ignores additional folders. `resolveWorkspacePath()` already searches all folders for containment; listing, search, and git context should use the folder that owns the path, not always the first.
 
-- [ ] **Trim redundant `activationEvents`.** Modern VS Code activates from `contributes.commands` / views / chat. The long `onCommand:*` and `onLanguageModelTool:*` list in `package.json` is mostly leftover, including Hello World. Do **not** add more `onCommand` entries for API-key commands; they already activate via `contributes.commands`.
+- [x] **Trim redundant `activationEvents`.** Modern VS Code activates from `contributes.commands` / views / chat. The long `onCommand:*` and `onLanguageModelTool:*` list in `package.json` is mostly leftover, including Hello World. Do **not** add more `onCommand` entries for API-key commands; they already activate via `contributes.commands`.
 
-- [ ] **Staged edit preview can race the real buffer.** `getDiffPreview()` in `src/ui/ghostView.ts` applies the proposed text with `vscode.workspace.applyEdit` so the user can review in the source editor (this is intentional). Reject/restore exists, but an external save or overlapping user edit during the wait can make restore wrong. Transactions only get a text preview (`prepareFileTransaction`) and skip `alreadyApplied` verification in `LocalToolExecutor`. Harden restore against dirty/external changes, and give multi-file transactions the same staging or a clear “text preview only” label.
+- [x] **Staged edit preview can race the real buffer.** `getDiffPreview()` in `src/ui/ghostView.ts` applies the proposed text with `vscode.workspace.applyEdit` so the user can review in the source editor (this is intentional). Reject/restore exists, but an external save or overlapping user edit during the wait can make restore wrong. Transactions only get a text preview (`prepareFileTransaction`) and skip `alreadyApplied` verification in `LocalToolExecutor`. Harden restore against dirty/external changes, and give multi-file transactions the same staging or a clear “text preview only” label.
 
-- [ ] **Accept/Reject Ghost edit commands are unregistered in the manifest.** `ghost.acceptEditPreview` and `ghost.rejectEditPreview` are registered only in `GhostViewProvider` for CodeLens. Add them to `contributes.commands` so keybindings and the Command Palette can find them.
+- [x] **Accept/Reject Ghost edit commands are unregistered in the manifest.** `ghost.acceptEditPreview` and `ghost.rejectEditPreview` are registered only in `GhostViewProvider` for CodeLens. Add them to `contributes.commands` so keybindings and the Command Palette can find them.
 
-- [ ] **Webview defaults `toolAllowlist` to `[]`.** Before the host `controls-state` arrives, `src/webview/ghostWebview.ts` treats every tool as Ask. Default to `GHOST_TOOL_NAMES` (or a loading state) so the Context popup is not wrong on first paint.
+- [x] **Webview defaults `toolAllowlist` to `[]`.** Before the host `controls-state` arrives, `src/webview/ghostWebview.ts` treats every tool as Ask. Default to `GHOST_TOOL_NAMES` (or a loading state) so the Context popup is not wrong on first paint.
 
-- [ ] **Provider timeout vs request time-limit are easy to confuse.** `providerRequestTimeoutMinutes` and `requestTimeLimitMinutes` both default to 15 minutes. The Ghost view can report “provider did not respond” when the agent safety budget expired during tool rounds (`src/ui/ghostView.ts`). Label them separately in Settings and use a stop reason that names the limit that fired.
+- [x] **Provider timeout vs request time-limit are easy to confuse.** `providerRequestTimeoutMinutes` and `requestTimeLimitMinutes` both default to 15 minutes. The Ghost view can report “provider did not respond” when the agent safety budget expired during tool rounds (`src/ui/ghostView.ts`). Label them separately in Settings and use a stop reason that names the limit that fired.
 
 ---
 
@@ -144,8 +144,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 
 ## Suggested order of work
 
-1. Split the remaining god objects (`ghostView.ts`, `ghostWebview.ts`) and protocol types.
-2. Remove Hello World, fix `watch`, add ESLint or drop it.
-3. Optional GitHub Actions and remaining P3 polish.
+1. Optional GitHub Actions and remaining P3 polish (fast tests for stop policy, conversational prompts, terminal cwd jail).
+2. Keep shrinking `ghostWebview.ts` if it grows back toward a 4k-line module.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

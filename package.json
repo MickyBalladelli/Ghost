@@ -21,39 +21,12 @@
     "Programming Languages",
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:ghost.helloWorld",
-    "onCommand:ghost.checkOllamaStatus",
-    "onCommand:ghost.toggleInline",
-    "onCommand:ghost.checkModels",
-    "onCommand:ghost.open",
-    "onCommand:ghost.focus",
-    "onCommand:ghost.openSetup",
-    "onCommand:ghost.reset",
-    "onCommand:ghost.export",
-    "onCommand:ghost.clear",
-    "onCommand:ghost.openLogs",
-    "onCommand:ghost.clearLogs",
-    "onView:ghost.chat",
-    "onChatParticipant:ghost.agent",
-    "onLanguageModelTool:ghost_read_file",
-    "onLanguageModelTool:ghost_search_workspace",
-    "onLanguageModelTool:ghost_get_diagnostics",
-    "onLanguageModelTool:ghost_git_context",
-    "onLanguageModelTool:ghost_update_task_plan",
-    "onLanguageModelTool:ghost_record_completion",
-    "onLanguageModelTool:ghost_write_file",
-    "onLanguageModelTool:ghost_apply_edit",
-    "onLanguageModelTool:ghost_apply_transaction",
-    "onLanguageModelTool:ghost_run_terminal_command",
-    "onLanguageModelTool:ghost_list_directory"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "ghost.helloWorld",
-        "title": "Ghost: Hello World"
+        "command": "ghost.checkProviderStatus",
+        "title": "Ghost: Check Provider Connection"
       },
       {
         "command": "ghost.checkOllamaStatus",
@@ -106,6 +79,14 @@
       {
         "command": "ghost.clearLogs",
         "title": "Ghost: Clear Logs"
+      },
+      {
+        "command": "ghost.acceptEditPreview",
+        "title": "Ghost: Accept Staged Edit"
+      },
+      {
+        "command": "ghost.rejectEditPreview",
+        "title": "Ghost: Reject Staged Edit"
       }
     ],
     "viewsContainers": {
@@ -278,7 +259,8 @@
           "default": 15,
           "minimum": 1,
           "maximum": 1440,
-          "description": "Maximum minutes to wait for one chat request to return from the local model provider."
+          "title": "Provider HTTP timeout (minutes)",
+          "description": "Maximum minutes to wait for one HTTP request to the model provider. This is not the overall agent run budget."
         },
         "ghost.inlineCompletionTimeoutMs": {
           "type": "integer",
@@ -292,7 +274,8 @@
           "default": 15,
           "minimum": 1,
           "maximum": 1440,
-          "description": "Maximum minutes a local Ghost request may run before its safety budget stops it."
+          "title": "Agent request time limit (minutes)",
+          "description": "Maximum minutes a Ghost agent request may run, including tool rounds. This is the safety budget, not the provider HTTP timeout."
         },
         "ghost.seed": {
           "type": "integer",
@@ -699,7 +682,7 @@
       {
         "id": "ghost.agent",
         "name": "local",
-        "description": "Local AI Agent (Ollama)",
+        "description": "Local AI coding assistant for Ollama, MLX/VLM, and OpenAI-compatible servers",
         "isSticky": true
       }
     ],
@@ -1373,7 +1356,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./ && tsc -p ./tsconfig.webview.json && node ./scripts/copyWebviewBuild.js",
-    "watch": "tsc -watch -p ./",
+    "watch": "node ./scripts/watch.js",
     "package": "npm run vscode:prepublish && node ./scripts/archiveVsix.js && vsce package && npm run release:check",
     "docs:config": "node ./scripts/generateConfigurationReference.js",
     "version:sync": "node ./scripts/syncReleaseMarkers.js",
@@ -1390,14 +1373,11 @@
     "@types/vscode": "^1.125.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
-    "eslint": "^10.8.1",
     "mocha": "^11.8.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@types/node-fetch": "^2.6.13",
     "http-proxy-agent": "^7.0.2",
-    "https-proxy-agent": "^7.0.6",
-    "node-fetch": "^2.7.0"
+    "https-proxy-agent": "^7.0.6"
   }
 }

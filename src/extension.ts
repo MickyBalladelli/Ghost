@@ -16,9 +16,6 @@ export async function activate(context: vscode.ExtensionContext) {
   await providerSecrets.initialize()
   await ghostConfig.migrateSettings()
   const providerApiKey = (provider: GhostProvider): string | undefined => providerSecrets.get(provider)
-  const helloWorldCommand = vscode.commands.registerCommand('ghost.helloWorld', () => {
-    vscode.window.showInformationMessage('Ghost is ready.')
-  })
   const inlineProvider = createInlineCompletionProvider(ghostConfig, undefined, undefined, () => providerApiKey('openai-compatible'))
   const inlineProviderRegistration = vscode.languages.registerInlineCompletionItemProvider(
     { pattern: '**' },
@@ -52,7 +49,7 @@ export async function activate(context: vscode.ExtensionContext) {
       statusBar.setProvider(settings.provider)
     }
   })
-  const checkOllamaCommand = vscode.commands.registerCommand('ghost.checkOllamaStatus', async () => {
+  const checkProviderStatus = async () => {
     const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }] = await Promise.all([
       import('./services/mlxClient'),
       import('./services/ollamaClient'),
@@ -90,7 +87,9 @@ export async function activate(context: vscode.ExtensionContext) {
           : settings.ollamaUrl
       await vscode.window.showErrorMessage(`${providerLabel} is offline at ${endpoint}.`)
     }
-  })
+  }
+  const checkProviderCommand = vscode.commands.registerCommand('ghost.checkProviderStatus', checkProviderStatus)
+  const checkOllamaCommand = vscode.commands.registerCommand('ghost.checkOllamaStatus', checkProviderStatus)
   const checkModelsCommand = vscode.commands.registerCommand('ghost.checkModels', async () => {
     const { checkRequiredOllamaModels } = await import('./ui/modelDiagnostics')
     return checkRequiredOllamaModels(ghostConfig, () => providerApiKey('ollama'))
@@ -165,11 +164,11 @@ export async function activate(context: vscode.ExtensionContext) {
     { activationMs: Date.now() - activationStartedAt }
   )
   context.subscriptions.push(
-    helloWorldCommand,
     providerSecrets,
     inlineProviderRegistration,
     inlineProvider,
     toggleInlineCommand,
+    checkProviderCommand,
     checkOllamaCommand,
     checkModelsCommand,
     setProviderApiKeyCommand,
