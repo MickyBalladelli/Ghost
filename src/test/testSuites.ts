@@ -5,6 +5,7 @@ export const FAST_TEST_FILES = [
   'editPaths.test.js',
   'editWorkflow.test.js',
   'ghostApprovalPolicy.test.js',
+  'inlineFimPolicy.test.js',
   'ollamaClient.test.js',
   'persistenceModel.test.js',
   'propertyFuzz.test.js',

@@ -26,7 +26,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **Edit-loop state is keyed by the model’s raw path.** `getCanonicalEditPaths()` now stores loop, signature, stale-recovery, and budget file keys from `resolveWorkspacePath()`. Relative, `./`, and absolute forms of the same file share one history.
 
-- [ ] **Inline completion ignores the MLX provider.** `InlineCompletionProvider` in `src/providers/inlineCompletionProvider.ts` sends FIM to `settings.ollamaUrl` unless the OpenAI-compatible profile is FIM-capable. With `ghost.provider` set to `mlx-vlm`, completions still hit Ollama (or fail silently). Disable FIM for MLX (capabilities already say `supportsFIM: false`) or route through the selected adapter.
+- [x] **Inline completion ignores the MLX provider.** `shouldFetchInlineFim()` now returns empty completions when the autocomplete provider is `mlx-vlm` (or an OpenAI-compatible profile without FIM). Ghost no longer sends those FIM requests to `ghost.ollamaUrl`.
 
 - [ ] **`create-vsix.sh` is the source of version drift.** The script runs `npm version patch` and does not update `CHANGELOG.md`, `README.md` (“Current release: `1.1.19`”), or `docs/release.md` (still `1.1.19`). `package.json` is `1.1.96` while the latest changelog heading is behind and README is 77 patches stale. `scripts/checkReleaseConsistency.js` would fail today. Stop auto-bumping in the local install helper, or make the bump update README + changelog in the same step. Run `npm run release:check` before every publish.
 

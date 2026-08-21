@@ -117,6 +117,10 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
   }
 }
 
+export function providerSupportsFim(provider: ProviderId): boolean {
+  return CAPABILITIES[provider].supportsFIM
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }

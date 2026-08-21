@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
-Ghost runs chat, agent tools, and inline completion against Ollama, MLX/VLM, or another OpenAI-compatible server. Your code stays on your machine when you use a local provider.
+Ghost runs chat and agent tools against Ollama, MLX/VLM, or another OpenAI-compatible server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM is chat and vision only. Your code stays on your machine when you use a local provider.
 
 Current release: `1.1.19`
 

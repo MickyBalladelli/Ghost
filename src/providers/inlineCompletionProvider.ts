@@ -4,8 +4,9 @@ import { GhostConfig, ghostConfig } from '../config'
 import type { GhostSettings } from '../config'
 import { FimCompletionOptions, fetchFimCompletion } from '../services/ollamaClient'
 import { createOpenAiTransportSettings } from '../services/openAiTransport'
-import { isFimCompatibleProfile, resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
+import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveModelSettings } from '../services/modelProfiles'
+import { shouldFetchInlineFim } from './inlineFimPolicy'
 
 export type FimCompletionFetcher = (
   baseUrl: string,
@@ -101,7 +102,9 @@ function getInlineCompletionCacheKey(
 ): string {
   const endpoint = modelSettings.provider === 'openai-compatible'
     ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
-    : settings.ollamaUrl
+    : modelSettings.provider === 'mlx-vlm'
+      ? settings.mlxUrl
+      : settings.ollamaUrl
   return JSON.stringify({
     document: {
       uri: document.uri.toString(),
@@ -188,7 +191,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
       return []
     }
 
-    if (modelSettings.provider === 'openai-compatible' && !isFimCompatibleProfile(settings.openaiProfile)) {
+    if (!shouldFetchInlineFim(modelSettings.provider, settings.openaiProfile)) {
       return []
     }
 
@@ -225,7 +228,7 @@ export class InlineCompletionProvider implements vscode.InlineCompletionItemProv
 
     const startedAt = Date.now()
     try {
-      const useOpenAiCompatible = modelSettings.provider === 'openai-compatible' && isFimCompatibleProfile(settings.openaiProfile)
+      const useOpenAiCompatible = modelSettings.provider === 'openai-compatible'
       const inlineTimeoutMs = Number.isFinite(settings.inlineCompletionTimeoutMs)
         ? Math.max(1000, Math.min(120000, Math.floor(settings.inlineCompletionTimeoutMs)))
         : 30000

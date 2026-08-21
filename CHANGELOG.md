@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Skip inline completion for MLX/VLM instead of sending FIM requests to Ollama.
 - Track edit-loop state by the canonical workspace path so `src/app.ts` and the absolute file are the same file.
 - Allow overlapping follow-up edits to the same lines when the fingerprint is new. Repeated and inverse hunks still stop the request.
 - Keep the agent running after a failed read, search, or directory listing so it can list the tree and try another path. Denied, blocked, cancelled, and failed file edits still stop the request.
