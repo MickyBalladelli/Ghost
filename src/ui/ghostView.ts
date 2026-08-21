@@ -73,7 +73,6 @@ import { ApprovalRaceGuard } from './approvalRaceGuard'
 
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
-  private static readonly requestTimeoutMs = 2 * 60 * 60 * 1000
 
   private readonly webviewLifecycle = new GhostWebviewLifecycle()
   private readonly stateStore: GhostStateStore
@@ -444,6 +443,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
     }
 
+    const requestTimeoutMs = Math.max(1, Math.floor(settings.requestTimeLimitMinutes)) * 60 * 1000
     const timeout = setTimeout(() => {
       if (!this.requests.has(requestId)) {
         return
@@ -462,7 +462,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         message: request.stopMessage,
         stopReason: request.stopReason
       })
-    }, GhostViewProvider.requestTimeoutMs)
+    }, requestTimeoutMs)
 
     const waitForBackoff = (milliseconds: number): Promise<boolean> => new Promise(resolve => {
       const timer = setTimeout(() => resolve(true), milliseconds)

@@ -13,7 +13,7 @@ import {
 import { OpenAiStreamMode, streamOpenAiEvents } from './openAiStream'
 import { buildOpenAiAuthenticationHeaders, createKeepAliveAgent, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint, removeEndpointSuffix } from './endpoint'
-import { providerHttpError } from './providerRequest'
+import { providerHttpError, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import type { FimCompletionOptions } from './fim'
 import { GHOST_POLICY } from '../ghostPolicy'
@@ -146,7 +146,7 @@ function extractOllamaToolCall(payload: OllamaCompletionResponse): ChatStreamEve
   }
 }
 
-export async function* streamOllamaEvents(body: NodeJS.ReadableStream): AsyncGenerator<ChatStreamEvent> {
+export async function* streamOllamaEvents(body: AsyncIterable<Buffer | string>): AsyncGenerator<ChatStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
 
@@ -196,7 +196,7 @@ export async function* streamOllamaEvents(body: NodeJS.ReadableStream): AsyncGen
   }
 }
 
-export async function* streamOllamaJson(body: NodeJS.ReadableStream): AsyncGenerator<string> {
+export async function* streamOllamaJson(body: AsyncIterable<Buffer | string>): AsyncGenerator<string> {
   let toolName = ''
   let toolOpen = false
   for await (const event of streamOllamaEvents(body)) {
@@ -379,10 +379,10 @@ export class OllamaClient {
       }
 
       if (attempt.kind === 'ollama') {
-        yield* streamOllamaEvents(response.body)
+        yield* streamOllamaEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs))
       } else {
         const streamMode: OpenAiStreamMode = attempt.kind === 'openai-responses' ? 'responses' : 'chat-completions'
-        yield* streamOpenAiEvents(response.body, streamMode)
+        yield* streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), streamMode)
       }
 
       return

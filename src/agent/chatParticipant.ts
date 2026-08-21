@@ -1362,6 +1362,7 @@ export function createChatParticipantHandler(
       const staleEditRecoveryPaths = new Set<string>()
       let successfulWorkspaceChange = false
       let taskPlanRequiresExecution = false
+      let unfinishedPlanAfterChangeCount = 0
       let emptyProviderRetries = 0
       let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
@@ -1684,6 +1685,16 @@ export function createChatParticipantHandler(
         const updatedTaskPlan = parseTaskPlanMarker(toolResult)
         if (updatedTaskPlan) {
           taskPlanRequiresExecution = updatedTaskPlan.steps.some(step => !step.checked)
+          if (taskPlanRequiresExecution && successfulWorkspaceChange) {
+            unfinishedPlanAfterChangeCount += 1
+          } else if (!taskPlanRequiresExecution) {
+            unfinishedPlanAfterChangeCount = 0
+          }
+          if (unfinishedPlanAfterChangeCount >= 2) {
+            response.progress('The model repeated the same unfinished task plan without making progress.')
+            response.markdown('Workspace changes are already applied. Ghost stopped the repeated task-plan loop safely.')
+            return
+          }
         }
 
         const editFailed = toolOutcome.status === 'failed' || toolOutcome.status === 'denied' || toolOutcome.status === 'blocked' || toolOutcome.status === 'cancelled' || /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
@@ -1754,6 +1765,7 @@ export function createChatParticipantHandler(
         if (editPaths.length > 0 && !editFailed && !editNoOp) {
           completedReadCalls.clear()
           successfulWorkspaceChange = true
+          unfinishedPlanAfterChangeCount = 0
           const cost = getEditCost(toolCall, approval.selectedHunkIndexes)
           if (cost) {
             for (const path of editPaths) {

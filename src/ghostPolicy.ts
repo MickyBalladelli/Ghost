@@ -54,7 +54,7 @@ export const GHOST_POLICY = {
     maxEntries: 200
   },
   provider: {
-    requestTimeoutMs: 300000,
+    requestTimeoutMs: 15 * 60 * 1000,
     defaultMaxAttempts: 2,
     maxRetryDelayMs: 30000,
     retryBaseDelayMs: 250

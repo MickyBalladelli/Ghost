@@ -4,7 +4,7 @@ import { TextDecoder } from 'node:util'
 import fetch, { type RequestInit, type Response } from 'node-fetch'
 import { buildMlxChatBody } from './providerRequestBuilders'
 import { hasEndpointSuffix, joinEndpoint, normalizeEndpoint } from './endpoint'
-import { providerHttpError } from './providerRequest'
+import { providerHttpError, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { createKeepAliveAgent } from './openAiTransport'
 import type {
@@ -138,7 +138,7 @@ function extractChunkText(chunk: MlxStreamChunk): string {
   return choice?.delta?.content ?? choice?.message?.content ?? choice?.text ?? ''
 }
 
-export async function* streamSseTokens(body: NodeJS.ReadableStream): AsyncGenerator<string> {
+export async function* streamSseTokens(body: AsyncIterable<Buffer | string>): AsyncGenerator<string> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
 
@@ -274,7 +274,7 @@ export class MlxClient {
       throw new Error('MLX server returned an empty streaming response')
     }
 
-    yield* streamSseTokens(response.body)
+    yield* streamSseTokens(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs))
   }
 }
 

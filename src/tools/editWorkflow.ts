@@ -115,6 +115,31 @@ function detectLineEnding(value: string): string {
   return value.match(/\r\n|\n|\r/)?.[0] ?? '\n'
 }
 
+function isHunkAlreadyApplied(lines: string[], hunk: GhostEditHunk): boolean {
+  if (!hunk.replacement) {
+    return false
+  }
+
+  const replacementLines = splitLines(normalizeLineEndings(hunk.replacement))
+  const replacementText = normalizeLineEndings(hunk.replacement)
+  const directText = lines.slice(hunk.startLine - 1, hunk.startLine - 1 + replacementLines.length).join('\n')
+  if (normalizeLineEndings(directText) === replacementText) {
+    return true
+  }
+
+  let matches = 0
+  for (let start = 0; start <= lines.length - replacementLines.length; start += 1) {
+    const candidateText = lines.slice(start, start + replacementLines.length).join('\n')
+    if (normalizeLineEndings(candidateText) === replacementText) {
+      matches += 1
+      if (matches > 1) {
+        return false
+      }
+    }
+  }
+  return matches === 1
+}
+
 function rebaseHunk(lines: string[], hunk: GhostEditHunk, index: number): GhostEditHunk {
   if (hunk.oldText === undefined) {
     return hunk
@@ -184,14 +209,22 @@ function validateHunkContext(lines: string[], hunk: GhostEditHunk, index: number
 export function applyGhostEdit(content: string, edit: GhostFileEdit, selectedHunkIndexes?: Set<number>): string {
   const lines = splitLines(content)
   const lineEnding = detectLineEnding(content)
-  const effectiveHunks = edit.hunks.map((hunk, index) => (
-    selectedHunkIndexes && !selectedHunkIndexes.has(index) ? hunk : rebaseHunk(lines, hunk, index)
-  ))
+  const alreadyAppliedHunks = new Set<number>()
+  const effectiveHunks = edit.hunks.map((hunk, index) => {
+    if (selectedHunkIndexes && !selectedHunkIndexes.has(index)) {
+      return hunk
+    }
+    if (isHunkAlreadyApplied(lines, hunk)) {
+      alreadyAppliedHunks.add(index)
+      return hunk
+    }
+    return rebaseHunk(lines, hunk, index)
+  })
   const selected = selectedHunkIndexes
-    ? effectiveHunks.filter((_hunk, index) => selectedHunkIndexes.has(index))
-    : effectiveHunks
+    ? effectiveHunks.filter((_hunk, index) => selectedHunkIndexes.has(index) && !alreadyAppliedHunks.has(index))
+    : effectiveHunks.filter((_hunk, index) => !alreadyAppliedHunks.has(index))
   for (const [index, hunk] of effectiveHunks.entries()) {
-    if (!selectedHunkIndexes || selectedHunkIndexes.has(index)) {
+    if ((!selectedHunkIndexes || selectedHunkIndexes.has(index)) && !alreadyAppliedHunks.has(index)) {
       validateHunkContext(lines, hunk, index)
     }
   }

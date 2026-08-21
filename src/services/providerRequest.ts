@@ -31,6 +31,34 @@ export class ProviderTimeoutError extends GhostError {
   }
 }
 
+export async function* streamWithTimeout(body: NodeJS.ReadableStream, timeoutMs: number): AsyncGenerator<Buffer | string> {
+  const iterator = (body as AsyncIterable<Buffer | string>)[Symbol.asyncIterator]()
+  const stream = body as NodeJS.ReadableStream & { destroy?: (error?: Error) => void }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new ProviderTimeoutError(timeoutMs)
+      stream.destroy?.(error)
+      reject(error)
+    }, Math.max(1, timeoutMs))
+  })
+
+  try {
+    while (true) {
+      const result = await Promise.race([iterator.next(), timeout])
+      if (result.done) {
+        return
+      }
+      yield result.value
+    }
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+    }
+    await iterator.return?.()
+  }
+}
+
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
 }

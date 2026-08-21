@@ -639,6 +639,7 @@ const setPresetSaveState = (saved: boolean): void => {
 }
 
 let ghostWanderTimer: number | undefined
+let ghostIdleTimer: number | undefined
 
 const setGhostEyeOffset = (face: HTMLElement, horizontal: number, vertical: number): void => {
   const bounds = face.getBoundingClientRect()
@@ -651,6 +652,10 @@ const setGhostEyeOffset = (face: HTMLElement, horizontal: number, vertical: numb
 }
 
 const stopGhostWandering = (): void => {
+  if (ghostIdleTimer !== undefined) {
+    window.clearTimeout(ghostIdleTimer)
+    ghostIdleTimer = undefined
+  }
   if (ghostWanderTimer !== undefined) {
     window.clearInterval(ghostWanderTimer)
     ghostWanderTimer = undefined
@@ -665,12 +670,26 @@ const wanderGhostEyes = (): void => {
 }
 
 const startGhostWandering = (): void => {
+  if (ghostIdleTimer !== undefined) {
+    window.clearTimeout(ghostIdleTimer)
+    ghostIdleTimer = undefined
+  }
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || ghostWanderTimer !== undefined) {
     return
   }
   document.querySelectorAll<HTMLElement>('.ghost-face').forEach(face => face.classList.add('idle-wandering'))
   wanderGhostEyes()
   ghostWanderTimer = window.setInterval(wanderGhostEyes, 1800)
+}
+
+const scheduleGhostIdle = (): void => {
+  if (ghostIdleTimer !== undefined) {
+    window.clearTimeout(ghostIdleTimer)
+  }
+  ghostIdleTimer = window.setTimeout(() => {
+    ghostIdleTimer = undefined
+    startGhostWandering()
+  }, 1000)
 }
 
 const updateGhostEyes = (event: PointerEvent): void => {
@@ -684,11 +703,12 @@ const updateGhostEyes = (event: PointerEvent): void => {
     const vertical = (event.clientY - (bounds.top + bounds.height / 2)) / (bounds.height / 2)
     setGhostEyeOffset(face, horizontal, vertical)
   })
+  scheduleGhostIdle()
 }
 
 window.addEventListener('pointermove', updateGhostEyes, { passive: true })
 window.addEventListener('blur', startGhostWandering)
-window.addEventListener('focus', stopGhostWandering)
+window.addEventListener('focus', scheduleGhostIdle)
 document.documentElement.addEventListener('pointerleave', startGhostWandering, { passive: true })
 
 const post = (type: string, details: Record<string, unknown> = {}): void => {
@@ -2394,6 +2414,16 @@ const toolActionText = (toolCall: ToolCall): string => {
   return base
 }
 
+const toolDurationMs = (toolCall: ToolCall): number | undefined => {
+  const end = toolCall.completedAt ?? (toolCall.status === 'running' ? Date.now() : undefined)
+  return end === undefined ? undefined : Math.max(0, end - toolCall.startedAt)
+}
+
+const toolDurationText = (toolCall: ToolCall): string => {
+  const duration = toolDurationMs(toolCall)
+  return duration === undefined ? '' : ` · ${(duration / 1000).toFixed(1)}s`
+}
+
 const lineCount = (text: string): number => (text ? text.split(/\r?\n/).length : 0)
 
 const diffStatsText = (diffPreview: NonNullable<ToolCall['diffPreview']>): string => {
@@ -2428,8 +2458,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
     const animatedAction = requestActive && (part.toolCall.status === 'running' || part.toolCall.status === 'requested')
     const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
-    const durationEnd = part.toolCall.completedAt ?? (part.toolCall.status === 'running' ? Date.now() : undefined)
-    const duration = durationEnd ? ` · ${((durationEnd - part.toolCall.startedAt) / 1000).toFixed(1)}s` : ''
+    const duration = toolDurationText(part.toolCall)
     const argumentsBlock = uiPreferences.showToolProgress && part.toolCall.arguments
       ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`
       : ''
@@ -2466,7 +2495,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const resultActions = fileAction || restoreAction || retryToolAction || rerunRequestAction
       ? `<div class="tool-result-actions">${fileAction}${restoreAction}${retryToolAction}${rerunRequestAction}</div>`
       : ''
-    const verboseStatus = uiPreferences.showToolProgress ? ` · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}` : ''
+    const verboseStatus = uiPreferences.showToolProgress ? ` · ${escapeHtml(part.toolCall.status)}${escapeHtml(duration)}${escapeHtml(result)}` : escapeHtml(duration)
     const compactFailure = !uiPreferences.showToolProgress && part.toolCall.result && (part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
       ? ` — ${escapeHtml(part.toolCall.result.replace(/^Tool error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 240))}`
       : ''
@@ -2496,7 +2525,10 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const groupComplete = !groupFailed && latestTool.status === 'completed'
     const groupStatusClass = groupFailed ? 'tool-failure' : groupComplete ? 'tool-success' : ''
     const groupStatusIcon = groupFailed ? '✕' : groupComplete ? '✓' : '•'
-    const groupLabel = `${toolActionText(activeTool?.toolCall ?? group[group.length - 1].toolCall)} · ${group.length} calls`
+    const groupDurationMs = group.reduce((total, part) => total + (toolDurationMs(part.toolCall) ?? 0), 0)
+    const groupHasDuration = group.some(part => toolDurationMs(part.toolCall) !== undefined)
+    const groupDuration = groupHasDuration ? ` · ${(groupDurationMs / 1000).toFixed(1)}s` : ''
+    const groupLabel = `${toolActionText(activeTool?.toolCall ?? group[group.length - 1].toolCall)} · ${group.length} calls${groupDuration}`
     const animatedGroup = requestActive && Boolean(activeTool)
     return `<details class="tool-timeline ${groupStatusClass}"${animatedGroup ? ' open' : ''}><summary class="message-progress tool-progress ${groupStatusClass}"><span class="tool-status-icon" aria-hidden="true">${groupStatusIcon}</span><strong>${animatedGroup ? animatedStatusLabel(groupLabel) : escapeHtml(groupLabel)}</strong></summary><div class="tool-timeline-items">${group.map(renderToolCallProgress).join('')}</div></details>`
   }).join('')

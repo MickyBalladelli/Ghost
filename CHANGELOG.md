@@ -2,6 +2,20 @@
 
 All notable changes to this extension are documented here.
 
+## 1.1.95 - 2026-08-21
+
+- Start idle eye wandering one second after pointer movement stops.
+- Show elapsed time for each tool section and grouped tool calls.
+
+## 1.1.94 - 2026-08-21
+
+- Reduce the default Ghost and provider request timeout to 15 minutes.
+- Keep the provider timeout active while consuming streaming response bodies.
+
+## 1.1.93 - 2026-08-21
+
+- Stop repeated edit and task-plan loops after the workspace change is already complete.
+
 ## 1.1.92 - 2026-08-20
 
 - Preserve successful workspace changes when the model emits invalid follow-up tool arguments.

@@ -114,7 +114,7 @@ function eventOutput(
   return outputs
 }
 
-export async function* streamOpenAiEvents(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<ChatStreamEvent> {
+export async function* streamOpenAiEvents(body: AsyncIterable<Buffer | string>, mode: OpenAiStreamMode): AsyncGenerator<ChatStreamEvent> {
   let buffer = ''
   const decoder = new TextDecoder('utf-8', { fatal: true })
   const toolState = { name: '', argumentsSeen: false }
@@ -143,7 +143,7 @@ export async function* streamOpenAiEvents(body: NodeJS.ReadableStream, mode: Ope
   }
 }
 
-export async function* streamOpenAiTokens(body: NodeJS.ReadableStream, mode: OpenAiStreamMode): AsyncGenerator<string> {
+export async function* streamOpenAiTokens(body: AsyncIterable<Buffer | string>, mode: OpenAiStreamMode): AsyncGenerator<string> {
   let toolName = ''
   let toolArguments = ''
   let toolOpen = false

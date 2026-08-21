@@ -9,7 +9,7 @@ import { CustomResponseFormat, getOpenAiProfile, OpenAiProfileId, ProviderWirePr
 import { ProviderClient } from './providerAdapter'
 import { streamOpenAiEvents, streamOpenAiTokens } from './openAiStream'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
-import { providerHttpError, requestWithRetry } from './providerRequest'
+import { providerHttpError, requestWithRetry, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { GHOST_POLICY } from '../ghostPolicy'
 
@@ -72,12 +72,12 @@ function parseDataLines(buffer: string): { data: string[]; remaining: string } {
   }
 }
 
-async function* streamSseJson<T>(body: NodeJS.ReadableStream, parse: (payload: T) => string | undefined): AsyncGenerator<string> {
+async function* streamSseJson<T>(body: AsyncIterable<Buffer | string>, parse: (payload: T) => string | undefined): AsyncGenerator<string> {
   const decoder = new TextDecoder()
   let buffer = ''
 
-  for await (const chunk of body as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true })
+  for await (const chunk of body) {
+    buffer += decoder.decode(typeof chunk === 'string' ? Buffer.from(chunk) : chunk, { stream: true })
     const parsed = parseDataLines(buffer)
     buffer = parsed.remaining
     for (const data of parsed.data) {
@@ -271,7 +271,7 @@ class AnthropicClient implements ProviderClient {
     }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Anthropic returned an empty streaming response')
-    yield* streamSseJson<AnthropicResponse>(response.body, payload => payload.content?.find(item => item.type === 'text')?.text)
+    yield* streamSseJson<AnthropicResponse>(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), payload => payload.content?.find(item => item.type === 'text')?.text)
   }
 
   private headers(): Record<string, string> {
@@ -349,7 +349,7 @@ class GeminiClient implements ProviderClient {
     }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Gemini returned an empty streaming response')
-    yield* streamSseJson<GeminiResponse>(response.body, payload => payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join(''))
+    yield* streamSseJson<GeminiResponse>(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), payload => payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join(''))
   }
 
   private headers(): Record<string, string> {
@@ -418,7 +418,7 @@ class CustomHttpClient implements ProviderClient {
       return
     }
     if (!response.body) throw new Error('Custom HTTP server returned an empty streaming response')
-    yield* streamOpenAiTokens(response.body, 'chat-completions')
+    yield* streamOpenAiTokens(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')
   }
 
   private headers(): Record<string, string> {
@@ -475,7 +475,7 @@ class AzureOpenAiClient implements ProviderClient {
     }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
-    yield* streamOpenAiTokens(response.body, 'chat-completions')
+    yield* streamOpenAiTokens(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')
   }
 
   async *streamChatEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
@@ -489,7 +489,7 @@ class AzureOpenAiClient implements ProviderClient {
     }, options.signal, options.timeoutMs)
     if (!response.ok) throw await httpError(response)
     if (!response.body) throw new Error('Azure OpenAI returned an empty streaming response')
-    yield* streamOpenAiEvents(response.body, 'chat-completions')
+    yield* streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')
   }
 
   private headers(): Record<string, string> {

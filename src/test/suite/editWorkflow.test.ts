@@ -42,4 +42,13 @@ suite('Reviewed edit workflow', () => {
 
     assert.throws(() => applyGhostEdit('one\ntwo', edit), /old text does not match/)
   })
+
+  test('treats an already applied replacement as a safe no-op', () => {
+    const edit = parseGhostEdit({
+      path: `${process.cwd()}/example.ts`,
+      hunks: [{ startLine: 1, endLine: 1, replacement: 'updated', oldText: 'original' }]
+    })
+
+    assert.equal(applyGhostEdit('updated\ntwo', edit), 'updated\ntwo')
+  })
 })
