@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.1.83`.
+Package version: `1.1.96`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -65,7 +65,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | --- | --- | --- | --- |
 | `ghost.requestTimeLimitMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes a local Ghost request may run before its safety budget stops it. |
 | `ghost.mode` | string; one of `ask`, `edit`, `agent`, `explain`, `inline` | `agent` | Default workflow mode for the Ghost interface. |
-| `ghost.fileEditApproval` | string; one of `confirm`, `auto` | `confirm` | Default approval behavior for Ghost file writes and structured edits. |
+| `ghost.fileEditApproval` | string; one of `confirm`, `auto` | `confirm` | Legacy mirror of ghost.autoAcceptScope. Use autoAcceptScope. auto means request-scoped auto-accept, not always. |
 | `ghost.autoAcceptScope` | string; one of `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, `always` | `confirm` | Scope for automatic file-edit approval. Terminal and other dangerous tools always require explicit approval. |
 
 ## Persistence and diagnostics
@@ -80,7 +80,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `ghost.settingsSchemaVersion` | integer | `2` | Internal Ghost settings schema version. Ghost migrates older settings automatically. |
+| `ghost.settingsSchemaVersion` | integer | `3` | Internal Ghost settings schema version. Ghost migrates older settings automatically. |
 | `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. |
 | `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. |
 | `ghost.toolDenylist` | array | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |

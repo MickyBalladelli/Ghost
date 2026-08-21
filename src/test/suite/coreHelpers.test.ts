@@ -25,7 +25,7 @@ suite('Core Ghost helpers', () => {
       values: { fileEditApproval: 'auto', autoAcceptScope: 'confirm', enableDebugLogging: true, logLevel: 'off' }
     })
     assert.equal(migrated.version, GHOST_SETTINGS_SCHEMA_VERSION)
-    assert.equal(migrated.values.autoAcceptScope, 'always')
+    assert.equal(migrated.values.autoAcceptScope, 'request')
     assert.equal(migrated.values.logLevel, 'debug')
     assert.equal(migrated.changed, true)
   })

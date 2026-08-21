@@ -11,6 +11,7 @@ export const FAST_TEST_FILES = [
   'providerRequestFixtures.test.js',
   'providerResilience.test.js',
   'requestState.test.js',
+  'settingsMigrations.test.js',
   'toolCallParser.test.js',
   'webviewAccessibility.test.js'
 ] as const

@@ -187,7 +187,7 @@ For parameter names, provider differences, and tuning examples, see [OLLAMA_PARA
 | `ghost.toolDenylist` | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules. |
 | `ghost.terminalEnvironmentAllowlist` | Safe common variables | Environment variables passed to approved terminal commands without asking. |
 | `ghost.terminalEnvironmentAsklist` | `[]` | Environment variables passed only after terminal approval. |
-| `ghost.fileEditApproval` | `confirm` | Ask before each file edit, or use `auto` to apply file edits automatically. |
+| `ghost.fileEditApproval` | `confirm` | Legacy mirror of `ghost.autoAcceptScope`. Prefer the scope setting. `auto` means request-scoped auto-accept, not always. |
 
 File-edit auto-accept scopes are `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, and `always`. `one-edit` accepts one edit; `current-file` stays on the first file; `request` lasts for the current request; `session` lasts for the Ghost session; `workspace` applies to this workspace; `always` applies file edits without asking. Terminal and other dangerous tools still require their own approval. Deny rules always win.
 

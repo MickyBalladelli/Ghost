@@ -7,6 +7,7 @@ All notable changes to this extension are documented here.
 - Auto-accept one edit only for the next file mutation, then ask again.
 - Keep Session auto-accept in memory for the current Ghost session instead of treating a stored `session` setting as always-on.
 - Match Current file auto-accept across relative, `./`, and absolute paths for the same workspace file.
+- Migrate leftover `fileEditApproval: auto` to request-scoped auto-accept instead of always.
 - Add a current, prioritized `TODO.md` from a full-project review of quality, agent execution, bugs, tests, and release process.
 
 ## 1.1.95 - 2026-08-21

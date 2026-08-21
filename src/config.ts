@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import type { CustomResponseFormat, OpenAiProfileId } from './services/providerProfiles'
 import type { GhostModelAliases, GhostModelProfiles } from './services/modelProfiles'
-import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION } from './settingsMigrations'
+import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION, legacyFileEditApprovalMirror } from './settingsMigrations'
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
@@ -225,11 +225,8 @@ export class GhostConfig {
   getSettings(): GhostSettings {
     const configuration = vscode.workspace.getConfiguration(GHOST_CONFIGURATION_SECTION)
 
-    const legacyFileEditApproval = configuration.get('fileEditApproval', DEFAULT_GHOST_SETTINGS.fileEditApproval)
-    const configuredAutoAcceptScope = configuration.get('autoAcceptScope', DEFAULT_GHOST_SETTINGS.autoAcceptScope)
-    const autoAcceptScope = legacyFileEditApproval === 'auto' && configuredAutoAcceptScope === 'confirm'
-      ? 'always'
-      : configuredAutoAcceptScope
+    const autoAcceptScope = configuration.get('autoAcceptScope', DEFAULT_GHOST_SETTINGS.autoAcceptScope)
+    const fileEditApproval = legacyFileEditApprovalMirror(autoAcceptScope)
     return {
       settingsSchemaVersion: this.configuredSchemaVersion(configuration),
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOST_SETTINGS.ollamaUrl),
@@ -280,7 +277,7 @@ export class GhostConfig {
       grammar: configuration.get('grammar', DEFAULT_GHOST_SETTINGS.grammar),
       responseLength: configuration.get('responseLength', DEFAULT_GHOST_SETTINGS.responseLength),
       mode: configuration.get('mode', DEFAULT_GHOST_SETTINGS.mode),
-      fileEditApproval: legacyFileEditApproval,
+      fileEditApproval,
       autoAcceptScope,
       enableConversationPersistence: configuration.get('enableConversationPersistence', DEFAULT_GHOST_SETTINGS.enableConversationPersistence),
       enableDebugLogging: configuration.get('enableDebugLogging', DEFAULT_GHOST_SETTINGS.enableDebugLogging),

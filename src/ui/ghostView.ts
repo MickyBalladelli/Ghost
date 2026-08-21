@@ -6,6 +6,7 @@ import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
 import { GHOST_TOOL_NAMES, ghostConfig, getGhostSettings, GhostAutoAcceptScope, GhostLogLevel, GhostProvider, GhostSettings } from '../config'
+import { legacyFileEditApprovalMirror } from '../settingsMigrations'
 import { MlxClient } from '../services/mlxClient'
 import { ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
@@ -1926,7 +1927,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     await ghostConfig.update('autoAcceptScope', 'confirm')
-    await ghostConfig.update('fileEditApproval', 'confirm')
+    await ghostConfig.update('fileEditApproval', legacyFileEditApprovalMirror('confirm'))
   }
 
   private async revertOneEditAutoAccept(): Promise<void> {
@@ -1934,7 +1935,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     await ghostConfig.update('autoAcceptScope', 'confirm')
-    await ghostConfig.update('fileEditApproval', 'confirm')
+    await ghostConfig.update('fileEditApproval', legacyFileEditApprovalMirror('confirm'))
   }
 
   private async sendControlsState(forceProviderRefresh = false): Promise<void> {
@@ -2181,10 +2182,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.oneEditConsumed = false
       const persistedScope = update.autoAcceptScope === 'session' ? 'confirm' : update.autoAcceptScope
       await ghostConfig.update('autoAcceptScope', persistedScope, target)
-      await ghostConfig.update('fileEditApproval', persistedScope === 'confirm' ? 'confirm' : 'auto', target)
-    } else if (update.fileEditApproval) {
+      await ghostConfig.update('fileEditApproval', legacyFileEditApprovalMirror(persistedScope), target)
+    } else if (update.fileEditApproval === 'confirm' || update.fileEditApproval === 'auto') {
+      this.sessionAutoAcceptActive = false
+      this.oneEditConsumed = false
+      const persistedScope = update.fileEditApproval === 'auto' ? 'request' : 'confirm'
+      await ghostConfig.update('autoAcceptScope', persistedScope, target)
       await ghostConfig.update('fileEditApproval', update.fileEditApproval, target)
-      await ghostConfig.update('autoAcceptScope', update.fileEditApproval === 'auto' ? 'always' : 'confirm', target)
     }
     if (typeof update.enableConversationPersistence === 'boolean') {
       await ghostConfig.update('enableConversationPersistence', update.enableConversationPersistence, target)

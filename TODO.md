@@ -14,7 +14,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **`current-file` auto-accept compares raw path strings.** `current-file` now stores a canonical workspace path from `resolveWorkspacePath()` and matches relative, `./`, and absolute forms of the same file. Tests cover this in `src/test/suite/ghostApprovalPolicy.test.ts`.
 
-- [ ] **Legacy `fileEditApproval: auto` migrates to `always`.** `migrateGhostSettings()` in `src/settingsMigrations.ts` (and the duplicate path in `src/config.ts`) maps the old confirm/auto toggle onto `autoAcceptScope: always`. Users who once chose “don’t ask” get workspace-wide auto-accept with no scope picker. Migrate to `request` or `session` instead, and stop writing `fileEditApproval` except as a legacy mirror.
+- [x] **Legacy `fileEditApproval: auto` migrates to `always`.** Leftover `fileEditApproval: auto` with `autoAcceptScope: confirm` now migrates to `request`. Runtime settings no longer promote that pair to `always`. `fileEditApproval` is only a confirm/auto mirror of `autoAcceptScope`. An explicit `always` scope is left unchanged.
 
 - [ ] **`@local` chat bypasses Ghost approval policy.** `createChatParticipant()` in `src/extension.ts` does not pass `approveTool`. The handler then auto-decides `{ decision: 'once' }` and `LocalToolExecutor` falls back to generic VS Code modals. Ghost allow/ask/deny lists, auto-accept scopes, hunk selection, and diff preview never run for the native Chat view. Share the same approval service as `GhostViewProvider.requestToolApproval()`, or document that full policy exists only in the Ghost sidebar.
 
