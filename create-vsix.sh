@@ -2,18 +2,19 @@
 
 set -e
 
-# Bump the patch version before building
-npm version patch --no-git-tag-version --ignore-scripts
-
-# Read the package identity from package.json
+# Read the package identity from package.json. This helper does not bump the
+# version; bump and review package.json, README, and CHANGELOG before packaging.
 PACKAGE_NAME=$(node -p "require('./package.json').name")
 VERSION=$(node -p "require('./package.json').version")
 VSIX_FILE="${PACKAGE_NAME}-${VERSION}.vsix"
 
 echo "Building VSIX package version ${VERSION}..."
-npm run vscode:prepublish
-node ./scripts/archiveVsix.js
-npx vsce package --out "${VSIX_FILE}"
+npm run package
+
+if [ ! -f "./${VSIX_FILE}" ]; then
+  echo "Expected ${VSIX_FILE} after npm run package" >&2
+  exit 1
+fi
 
 echo "✓ VSIX package created: ${VSIX_FILE}"
 echo ""

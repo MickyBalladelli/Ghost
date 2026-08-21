@@ -27,6 +27,10 @@ const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8')
 const changelogVersion = new RegExp(`^##\\s+${semverPattern}(?:\\s|$)`, 'm').exec(changelog)?.[1]
 requireEqual('CHANGELOG latest release', version, changelogVersion)
 
+const releaseGuide = fs.readFileSync(path.join(root, 'docs/release.md'), 'utf8')
+const releaseGuideVersion = new RegExp(`^version:\\s*${semverPattern}`, 'm').exec(releaseGuide)?.[1]
+requireEqual('docs/release.md current version', version, releaseGuideVersion)
+
 function readZipEntry(filePath, entryName) {
   const archive = fs.readFileSync(filePath)
   const centralDirectorySignature = 0x02014b50

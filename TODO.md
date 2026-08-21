@@ -28,9 +28,9 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **Inline completion ignores the MLX provider.** `shouldFetchInlineFim()` now returns empty completions when the autocomplete provider is `mlx-vlm` (or an OpenAI-compatible profile without FIM). Ghost no longer sends those FIM requests to `ghost.ollamaUrl`.
 
-- [ ] **`create-vsix.sh` is the source of version drift.** The script runs `npm version patch` and does not update `CHANGELOG.md`, `README.md` (“Current release: `1.1.19`”), or `docs/release.md` (still `1.1.19`). `package.json` is `1.1.96` while the latest changelog heading is behind and README is 77 patches stale. `scripts/checkReleaseConsistency.js` would fail today. Stop auto-bumping in the local install helper, or make the bump update README + changelog in the same step. Run `npm run release:check` before every publish.
+- [x] **`create-vsix.sh` is the source of version drift.** The local install helper no longer runs `npm version patch`. `npm version` syncs the README and `docs/release.md` markers; `npm run package` runs `release:check`. README, changelog, and the release guide now match `package.json` `1.1.96`.
 
-- [ ] **Release docs claim CI that does not exist.** `docs/release.md` and `docs/dependency-policy.md` describe `.github/workflows/ci.yml`, a Linux/macOS/Windows host-test matrix, Dependabot, and `npm audit` on every PR. There is **no** `.github/` directory. Either add the workflow the docs describe, or stop claiming it.
+- [ ] **Release docs claim CI that does not exist.** `docs/release.md` remove those claims.
 
 ---
 
@@ -149,6 +149,6 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 3. Reduce default context pressure (prompt size + 4096 output reserve).
 4. Tighten `describesWorkspaceChange` and native tool schemas.
 5. Remove Hello World, fix `watch`, add ESLint or drop it.
-6. Stop `create-vsix.sh` from drifting versions; sync README/changelog; add CI.
+6. Add the CI workflow that release docs currently describe.
 
 Do not treat this file as a feature dump. If an item is not pulling its weight against “the agent completes a real edit,” drop it.

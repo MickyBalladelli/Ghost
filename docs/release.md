@@ -5,7 +5,7 @@ This guide releases the VS Code extension from the repository root. Current mani
 ```text
 publisher: MickyBalladelli
 name: ghost-ai-coding-assistant
-version: 1.1.19
+version: 1.1.96
 Marketplace ID: MickyBalladelli.ghost-ai-coding-assistant
 ```
 
@@ -29,14 +29,13 @@ Before changing the version:
 - check that `package.json` and `package-lock.json` use the same version;
 - confirm no secrets, local model files, `.env` files, VSIX files, or generated test data are tracked.
 
-Use one version bump for a release. The commands below update `package.json` and the lockfile without creating a Git tag automatically:
+Use one version bump for a release. The commands below update `package.json` and the lockfile without creating a Git tag automatically. The `version` npm script also syncs the README and `docs/release.md` markers:
 
 ```bash
 npm version patch --no-git-tag-version
-npm install --package-lock-only
 ```
 
-Use `minor` for a backwards-compatible feature and `major` only for an intentional breaking change. Review the generated diff before continuing.
+Then add a dated `CHANGELOG.md` heading for that version. Use `minor` for a backwards-compatible feature and `major` only for an intentional breaking change. Review the generated diff before continuing.
 
 ## 2. Install and validate dependencies
 
@@ -78,37 +77,31 @@ npm run package
 The default artifact is named like:
 
 ```text
-ghost-ai-coding-assistant-1.1.19.vsix
+ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
-Run the release consistency check after packaging:
+`npm run package` runs the release consistency check after packaging. It compares `package.json`, `package-lock.json`, the README release marker, the latest changelog heading, `docs/release.md`, and every root VSIX artifact, including the embedded extension manifest.
 
-```bash
-npm run release:check
-```
-
-It compares `package.json`, `package-lock.json`, the README release marker, the latest changelog heading, and every root VSIX artifact, including the embedded extension manifest.
-
-For the local install helper, use the repository script. It bumps the patch version, builds `<package-name>-<version>.vsix` from `package.json`, and installs it with the local `code` CLI:
+For the local install helper, use the repository script. It builds `<package-name>-<version>.vsix` from the current `package.json` version and installs it with the local `code` CLI. It does not bump the version:
 
 ```bash
 ./create-vsix.sh
 ```
 
-Use this helper only when the automatic patch bump and local installation are intended. For a controlled release, bump and review the version first, then run `npm run package`.
+For a controlled release, bump and review the version first, then run `npm run package`.
 
 ## 5. Install and smoke-test
 
 Install the exact artifact in a local VS Code installation:
 
 ```bash
-code --install-extension ./ghost-ai-coding-assistant-1.1.19.vsix --force
+code --install-extension ./ghost-ai-coding-assistant-1.1.96.vsix --force
 ```
 
 The automated smoke script downloads a clean VS Code copy when needed, installs the VSIX, and verifies the extension ID:
 
 ```bash
-node scripts/smokeVsix.js ./ghost-ai-coding-assistant-1.1.19.vsix
+node scripts/smokeVsix.js ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 Manually verify the important user paths:
@@ -132,7 +125,7 @@ Publishing requires a Marketplace publisher for `MickyBalladelli` and a protecte
 Publish the exact artifact after all checks pass:
 
 ```bash
-npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
+npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 For a logged-in local publisher, `npx --no-install vsce login MickyBalladelli` can be used once, followed by the same package command. In CI, use a protected secret and a manually approved release workflow; do not publish from every push.
@@ -147,8 +140,8 @@ After publishing:
 
 ```bash
 git add package.json package-lock.json CHANGELOG.md README.md docs
-git commit -m "Release Ghost 1.1.19"
-git tag v1.1.19
+git commit -m "Release Ghost 1.1.96"
+git tag v1.1.96
 git push origin HEAD --tags
 ```
 

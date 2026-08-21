@@ -16,7 +16,7 @@ Ghost currently uses:
 {
   "name": "ghost-ai-coding-assistant",
   "publisher": "MickyBalladelli",
-  "version": "1.1.19",
+  "version": "1.1.96",
   "icon": "icon.png"
 }
 ```
@@ -69,7 +69,7 @@ Paste the PAT when prompted. Use the current publisher ID from `package.json`; d
 For automation, use a protected secret instead:
 
 ```bash
-VSCE_PAT="$YOUR_VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
+VSCE_PAT="$YOUR_VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 ## 5. Build Ghost
@@ -94,13 +94,13 @@ npm run release:check
 The package script creates:
 
 ```bash
-ghost-ai-coding-assistant-1.1.19.vsix
+ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 Install it locally:
 
 ```bash
-code --install-extension ./ghost-ai-coding-assistant-1.1.19.vsix --force
+code --install-extension ./ghost-ai-coding-assistant-1.1.96.vsix --force
 ```
 
 Verify the following before publishing:
@@ -124,7 +124,7 @@ Verify the following before publishing:
 After the local VSIX check succeeds, publish the exact artifact:
 
 ```bash
-npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
+npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 For a logged-in local publisher, log in once with `MickyBalladelli` and run the same command. In CI, provide `VSCE_PAT` as a protected secret. The Marketplace item is:
@@ -139,10 +139,13 @@ Every Marketplace release needs a new version:
 
 ```bash
 npm version patch --no-git-tag-version
-npm install --package-lock-only
+```
+
+Add a dated `CHANGELOG.md` heading for the new version, then package (this runs `release:check`) and publish:
+
+```bash
 npm run package
-npm run release:check
-npx --no-install vsce publish --packagePath "./ghost-ai-coding-assistant-$(node -p \"require('./package.json').version\").vsix"
+npx --no-install vsce publish --packagePath "./ghost-ai-coding-assistant-$(node -p "require('./package.json').version").vsix"
 ```
 
 Use `patch` for bug fixes, `minor` for backwards-compatible features, and `major` for breaking changes:
@@ -165,12 +168,12 @@ npx --no-install vsce publish --packagePath "./ghost-ai-coding-assistant-$(node 
 
 ## 9. Tag the release
 
-Replace `1.1.19` with the actual release version:
+Replace `1.1.96` with the actual release version:
 
 ```bash
 git add package.json package-lock.json CHANGELOG.md README.md PUBLISH.md docs
-git commit -m "Release Ghost 1.1.19"
-git tag v1.1.19
+git commit -m "Release Ghost 1.1.96"
+git tag v1.1.96
 git push origin main --tags
 ```
 
@@ -183,7 +186,7 @@ Typical CI commands:
 ```bash
 npm ci
 npm run package
-VSCE_PAT="$VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.19.vsix
+VSCE_PAT="$VSCE_PAT" npx --no-install vsce publish --packagePath ./ghost-ai-coding-assistant-1.1.96.vsix
 ```
 
 Use a protected release branch or manual approval before publishing. Prefer identity-based publishing as PAT retirement approaches.
