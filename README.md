@@ -252,7 +252,7 @@ Auto-accept controls file edits only. `one-edit`, `current-file`, `request`, `se
 
 ### What should I do when a tool fails?
 
-Read the error detail and retry with the corrected argument. For a missing file, list the workspace and use the real path. For a failed edit, read the current file again and send smaller, non-overlapping hunks. For a blocked command, check tool permissions and terminal environment permissions. Rejected or failed changes are not silently treated as successful.
+Read the error detail. Ghost keeps going after a failed read, search, or directory listing so the model can list the tree and try another path. A denied or blocked mutation, a cancelled tool, or a failed file edit still stops the request. For a missing file, list the workspace and use the real path. For a failed edit, read the current file again and send smaller, non-overlapping hunks. For a blocked command, check tool permissions and terminal environment permissions. Rejected or failed changes are not silently treated as successful.
 
 ### Why did Ghost say the context is full?
 

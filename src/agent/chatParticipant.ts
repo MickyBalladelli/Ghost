@@ -19,6 +19,7 @@ import { GHOST_NATIVE_TOOL_DEFINITIONS, JSON_OBJECT_RESPONSE_FORMAT } from './na
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
+import { isFailedToolOutcome, isInspectionTool, shouldStopAgentForToolFailure } from './toolFailurePolicy'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
@@ -508,16 +509,8 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
   return undefined
 }
 
-const PATH_RECOVERY_TOOLS = new Set([
-  'ghost_read_file',
-  'ghost_search_workspace',
-  'ghost_get_diagnostics',
-  'ghost_git_context',
-  'ghost_list_directory'
-])
-
 function getPathRecoveryKey(call: LocalToolCall, result: string): string | undefined {
-  if (!PATH_RECOVERY_TOOLS.has(call.name)) {
+  if (!isInspectionTool(call.name)) {
     return undefined
   }
   const pathValue = call.arguments.path
@@ -1707,7 +1700,7 @@ export function createChatParticipantHandler(
           }
         }
 
-        const editFailed = toolOutcome.status === 'failed' || toolOutcome.status === 'denied' || toolOutcome.status === 'blocked' || toolOutcome.status === 'cancelled' || /^Tool error:|^User denied|^Tool call cancelled|^File changed externally|^The accepted edit changed|^Edit expected/.test(toolResult)
+        const editFailed = isFailedToolOutcome(toolOutcome.status, toolResult)
         const editNoOp = /no changes needed/i.test(toolResult)
         if (editPaths.length > 0 && isStaleEditConflict(toolResult) && staleEditRetries < GHOST_RETRY_POLICIES.staleEdit.maxRetries) {
           staleEditRetries += 1
@@ -1732,7 +1725,7 @@ export function createChatParticipantHandler(
         const pathRecoveryKey = getPathRecoveryKey(toolCall, toolResult)
         if (pathRecoveryKey) {
           const retries = pathRecoveryRetries.get(pathRecoveryKey) ?? 0
-          if (retries < 2) {
+          if (retries < GHOST_RETRY_POLICIES.failedTool.maxRetries) {
             pathRecoveryRetries.set(pathRecoveryKey, retries + 1)
             response.progress('The workspace path was not found. Asking Ghost to retry with a workspace-relative path.')
             messages.push(
@@ -1744,6 +1737,7 @@ export function createChatParticipantHandler(
             )
             continue
           }
+          response.progress('The workspace path was still not found. Continuing so Ghost can list the tree or try another path.')
         }
 
         messages.push(
@@ -1751,7 +1745,7 @@ export function createChatParticipantHandler(
           { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolResult}` }
         )
 
-        if (editFailed) {
+        if (shouldStopAgentForToolFailure(toolCall.name, toolOutcome.status, toolResult)) {
           requestOptions.onStop?.('failed-tool', toolResult)
           response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
           return

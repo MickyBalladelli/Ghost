@@ -13,6 +13,7 @@ export const FAST_TEST_FILES = [
   'requestState.test.js',
   'settingsMigrations.test.js',
   'toolCallParser.test.js',
+  'toolFailurePolicy.test.js',
   'webviewAccessibility.test.js'
 ] as const
 

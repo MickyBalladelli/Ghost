@@ -20,7 +20,7 @@ These are concrete defects. Fix them before adding features.
 
 - [x] **Registered Language Model tools ignore Ghost denylist/allowlist.** `prepareInvocation` and `invoke` on registered LM tools now use `resolveLanguageModelToolPermission()`. Deny blocks the tool before it runs. Allow/ask lists control VS Code confirmation. Persisted `request` / `workspace` / `always` auto-accept can skip file-edit confirmation; `session` / `one-edit` / `current-file` still ask outside the Ghost view.
 
-- [ ] **A failed inspection tool aborts the whole request.** In `src/agent/chatParticipant.ts`, `editFailed` is true for any tool whose status is `failed` / `denied` / `blocked` or whose text matches `/^Tool error:/`. After two path-recovery retries, a missing-file `ghost_read_file` (or a failed search / list) stops the agent instead of letting it list the tree and try another path. `GHOST_RETRY_POLICIES.failedTool` exists and is unused. Continue after recoverable inspection failures; stop only on denied/blocked mutations, user rejection, or exhausted edit retries.
+- [x] **A failed inspection tool aborts the whole request.** Inspection failures (`ghost_read_file`, search, list, diagnostics, git context) no longer stop the agent. Path-recovery hints use `GHOST_RETRY_POLICIES.failedTool` (two retries), then Ghost continues so the model can list the tree or try another path. The request still stops on denied/blocked tools, cancellation, user rejection, or a failed file mutation.
 
 - [ ] **Overlapping-edit guard blocks legitimate follow-up edits.** `getEditLoopReason()` in `src/agent/editLoopGuard.ts` treats any later hunk whose line range overlaps a previous successful edit as a loop. After “edit lines 10–20”, a real refinement of line 12 is stopped. Keep the repeated-signature and inverse-hunk checks; allow overlapping ranges after a fresh read of that file, or only flag overlap when the fingerprint matches.
 
@@ -145,7 +145,7 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 ## Suggested order of work
 
 1. Fix auto-accept scopes (`one-edit`, `current-file`, legacy `auto` → `always`) and add tests (`ghostApprovalPolicy.ts`).
-2. Soften the agent stop policy (failed reads, overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
+2. Soften remaining agent stop policy (overlapping edits, canonical paths, early return after streamed text) in `chatParticipant.ts` + `editLoopGuard.ts`.
 3. Reduce default context pressure (prompt size + 4096 output reserve).
 4. Tighten `describesWorkspaceChange` and native tool schemas.
 5. Remove Hello World, fix `watch`, add ESLint or drop it.
