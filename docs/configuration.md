@@ -76,7 +76,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `ghost.enableConversationPersistence` | boolean | `false` | Persist Ghost conversations and preferences in VS Code storage. Disable to keep chat history in memory only. |
+| `ghost.enableConversationPersistence` | boolean | `true` | Persist Ghost conversations and preferences in VS Code storage. Disable to keep chat history in memory only. |
 | `ghost.enableDebugLogging` | boolean | `false` | Legacy setting. Use ghost.logLevel instead. |
 | `ghost.logLevel` | string; one of `off`, `error`, `warn`, `info`, `debug` | `off` | Local-only Ghost log level. Logs appear in the Ghost Logs output channel and never include detected secrets. |
 

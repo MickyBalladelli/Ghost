@@ -162,7 +162,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   mode: 'agent',
   fileEditApproval: 'confirm',
   autoAcceptScope: 'confirm',
-  enableConversationPersistence: false,
+  enableConversationPersistence: true,
   enableDebugLogging: false,
   logLevel: 'off',
   toolAllowlist: [...GHOST_TOOL_NAMES],

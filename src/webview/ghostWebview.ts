@@ -426,7 +426,7 @@ let controls: ControlSettings = {
   mode: 'agent',
   autoAcceptScope: 'confirm',
   fileEditApproval: 'confirm',
-  enableConversationPersistence: false,
+  enableConversationPersistence: true,
   terminalEnvironmentAllowlist: ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
 }
 let availableModels: string[] = []
@@ -471,6 +471,50 @@ let uiPreferences: UiPreferences = {
   firstRunSetupComplete: false,
   workspaceOnly: false
 }
+
+const restorePersistedState = (persisted: GhostState): void => {
+  const conversations = (persisted.conversations ?? [])
+    .filter(conversation => Boolean(conversation) && typeof conversation === 'object')
+    .map(conversation => recoverInterruptedConversation(normalizeConversation(conversation)))
+  if (conversations.length === 0) {
+    conversations.push(createConversation())
+  }
+  const activeConversationId = conversations.some(conversation => conversation.id === persisted.activeConversationId)
+    ? persisted.activeConversationId
+    : conversations[0].id
+  state = {
+    schemaVersion: persistenceSchemaVersion,
+    conversations,
+    activeConversationId,
+    promptHistory: normalizePromptHistory(persisted.promptHistory),
+    presets: Array.isArray(persisted.presets) ? persisted.presets : [],
+    showReasoning: persisted.showReasoning === true,
+    preferences: persisted.preferences
+  }
+  migrateLegacyPromptHistory(conversations, activeConversationId, persisted.promptHistory)
+  showReasoning = state.showReasoning === true
+  const preferences = persisted.preferences ?? {}
+  if (typeof preferences.assistantName === 'string') uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
+  if (typeof preferences.assistantAvatar === 'string') uiPreferences.assistantAvatar = preferences.assistantAvatar.slice(0, 4)
+  if (typeof preferences.accentColor === 'string') uiPreferences.accentColor = preferences.accentColor
+  if (typeof preferences.compactLayout === 'boolean') uiPreferences.compactLayout = preferences.compactLayout
+  if (typeof preferences.showThinkingDetails === 'boolean') uiPreferences.showThinkingDetails = preferences.showThinkingDetails
+  if (typeof preferences.verboseToolDetails === 'boolean') uiPreferences.showToolProgress = preferences.verboseToolDetails
+  if (typeof preferences.showDiagnostics === 'boolean') uiPreferences.showDiagnostics = preferences.showDiagnostics
+  if (typeof preferences.autoContext === 'boolean') uiPreferences.autoContext = preferences.autoContext
+  if (typeof preferences.customSystemInstructions === 'string') uiPreferences.customSystemInstructions = preferences.customSystemInstructions.slice(0, 8000)
+  if (typeof preferences.composerHeight === 'number') composerHeight = Math.min(320, Math.max(80, Math.floor(preferences.composerHeight)))
+  if (typeof preferences.promptRows === 'number') promptRows = settingsStore.clampPromptRows(preferences.promptRows)
+  if (typeof preferences.promptHistoryLimit === 'number') uiPreferences.promptHistoryLimit = settingsStore.clampPromptHistoryLimit(preferences.promptHistoryLimit, defaultPromptHistoryLimit)
+  if (typeof preferences.workspaceRoot === 'string') uiPreferences.workspaceRoot = preferences.workspaceRoot
+  if (typeof preferences.firstRunSetupComplete === 'boolean') uiPreferences.firstRunSetupComplete = preferences.firstRunSetupComplete
+  if (typeof preferences.workspaceOnly === 'boolean') uiPreferences.workspaceOnly = preferences.workspaceOnly
+  trimPromptHistories()
+  applyUiPreferences()
+  render(true)
+  restoreDraft()
+}
+
 let persistenceReady = false
 let persistenceTimer: number | undefined
 let settingsTimer: number | undefined
@@ -536,7 +580,10 @@ const persistenceStatusElement = document.getElementById('persistence-status') a
 const providerAreaToggleElement = document.getElementById('toggle-provider-area') as HTMLButtonElement
 const providerAreaContentElement = document.getElementById('provider-area-content') as HTMLElement
 const providerElement = document.getElementById('provider') as HTMLSelectElement
-const modelElement = document.getElementById('model') as HTMLSelectElement
+const modelElement = document.getElementById('model') as HTMLInputElement
+const modelAutocompleteElement = document.getElementById('model-autocomplete') as HTMLElement
+const modelOptionsElement = document.getElementById('model-options') as HTMLElement
+const modelOptionsToggleElement = document.getElementById('model-options-toggle') as HTMLButtonElement
 const modelProfileElement = document.getElementById('model-profile') as HTMLSelectElement
 const modelProfileEffectiveElement = document.getElementById('model-profile-effective') as HTMLElement
 const modelCapabilitiesElement = document.getElementById('model-capabilities') as HTMLElement
@@ -1277,24 +1324,84 @@ providerAreaToggleElement.addEventListener('click', () => {
   updateProviderAreaVisibility()
 })
 
+let activeModelOptionIndex = -1
+
+const modelChoices = (): string[] => Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
+
+const closeModelOptions = (restoreSelection = false): void => {
+  modelOptionsElement.hidden = true
+  modelElement.setAttribute('aria-expanded', 'false')
+  modelElement.removeAttribute('aria-activedescendant')
+  activeModelOptionIndex = -1
+  if (restoreSelection) modelElement.value = controls.chatModel
+}
+
+const setActiveModelOption = (index: number): void => {
+  const options = Array.from(modelOptionsElement.querySelectorAll<HTMLElement>('[role="option"]'))
+  if (options.length === 0) return
+  activeModelOptionIndex = (index + options.length) % options.length
+  options.forEach((option, optionIndex) => {
+    const active = optionIndex === activeModelOptionIndex
+    option.classList.toggle('active', active)
+  })
+  const activeOption = options[activeModelOptionIndex]
+  modelElement.setAttribute('aria-activedescendant', activeOption.id)
+  activeOption.scrollIntoView({ block: 'nearest' })
+}
+
+const renderModelOptions = (show = true): void => {
+  const rawQuery = modelElement.value.trim()
+  const query = rawQuery === controls.chatModel ? '' : rawQuery.toLocaleLowerCase()
+  const choices = modelChoices()
+    .filter(model => !query || model.toLocaleLowerCase().includes(query))
+    .sort((left, right) => {
+      const leftStarts = left.toLocaleLowerCase().startsWith(query)
+      const rightStarts = right.toLocaleLowerCase().startsWith(query)
+      return leftStarts === rightStarts ? left.localeCompare(right) : leftStarts ? -1 : 1
+    })
+  modelOptionsElement.replaceChildren()
+  for (const [index, model] of choices.slice(0, 100).entries()) {
+    const option = document.createElement('button')
+    option.type = 'button'
+    option.id = `model-option-${index}`
+    option.className = 'model-option'
+    option.dataset.model = model
+    option.setAttribute('role', 'option')
+    option.setAttribute('aria-selected', String(model === controls.chatModel))
+    option.textContent = model
+    modelOptionsElement.append(option)
+  }
+  if (choices.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'model-option-empty'
+    empty.textContent = 'No matching models'
+    modelOptionsElement.append(empty)
+  } else if (choices.length > 100) {
+    const more = document.createElement('div')
+    more.className = 'model-option-empty'
+    more.textContent = `${choices.length - 100} more matches — keep typing`
+    modelOptionsElement.append(more)
+  }
+  modelOptionsElement.hidden = !show
+  modelElement.setAttribute('aria-expanded', String(show))
+  activeModelOptionIndex = -1
+  modelElement.removeAttribute('aria-activedescendant')
+}
+
+const selectChatModel = (model: string): void => {
+  if (!modelChoices().includes(model)) return
+  controls.chatModel = model
+  modelElement.value = model
+  closeModelOptions()
+  renderControls()
+  sendSettingsUpdate()
+  saveState()
+}
+
 const renderControls = () => {
   renderProviderOptions(providerElement, controls.provider)
-  modelElement.textContent = ''
-  const models = Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
-  for (const model of models) {
-    const option = document.createElement('option')
-    option.value = model
-    option.textContent = model
-    modelElement.append(option)
-  }
-  if (models.length === 0) {
-    const option = document.createElement('option')
-    option.value = ''
-    option.textContent = 'No models found'
-    option.disabled = true
-    modelElement.append(option)
-  }
   modelElement.value = controls.chatModel
+  closeModelOptions()
   modelProfileElement.textContent = ''
   const defaultProfileOption = document.createElement('option')
   defaultProfileOption.value = ''
@@ -2750,7 +2857,8 @@ const observeDeferredMessages = (): void => {
 
 const scrollMessages = (force: boolean) => {
   requestAnimationFrame(() => {
-    if (force || userIsAtBottom) {
+    const followingActiveRequest = activeRequest?.conversationId === state.activeConversationId
+    if (force || followingActiveRequest || userIsAtBottom) {
       messagesElement.scrollTo({ top: messagesElement.scrollHeight, behavior: 'auto' })
       userIsAtBottom = true
     }
@@ -2826,7 +2934,8 @@ const renderMessages = (forceScroll: boolean) => {
   }
   reconcileMessagePane(fragment)
   observeDeferredMessages()
-  if (!forceScroll && !userIsAtBottom) {
+  const followingActiveRequest = activeRequest?.conversationId === state.activeConversationId
+  if (!forceScroll && !userIsAtBottom && !followingActiveRequest) {
     requestAnimationFrame(() => {
       messagesElement.scrollTop = previousScrollTop
     })
@@ -3459,6 +3568,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     if (persistenceReady) {
       return
     }
+    restorePersistedState(message.state as GhostState)
     persistenceReady = true
     return
   }
@@ -4173,9 +4283,55 @@ addTerminalEnvironmentElement.addEventListener('click', () => {
   renderPermissionControls()
 })
 
-modelElement.addEventListener('change', () => {
-  controls.chatModel = modelElement.value
-  sendSettingsUpdate()
+modelElement.addEventListener('focus', () => {
+  modelElement.select()
+  renderModelOptions()
+})
+modelElement.addEventListener('input', () => renderModelOptions())
+modelElement.addEventListener('keydown', event => {
+  const options = Array.from(modelOptionsElement.querySelectorAll<HTMLElement>('[role="option"]'))
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (modelOptionsElement.hidden) renderModelOptions()
+    const nextIndex = activeModelOptionIndex < 0
+      ? event.key === 'ArrowDown' ? 0 : options.length - 1
+      : activeModelOptionIndex + (event.key === 'ArrowDown' ? 1 : -1)
+    setActiveModelOption(nextIndex)
+    return
+  }
+  if (event.key === 'Enter') {
+    const selected = options[activeModelOptionIndex]?.dataset.model
+      ?? modelChoices().find(model => model.toLocaleLowerCase() === modelElement.value.trim().toLocaleLowerCase())
+    if (selected) {
+      event.preventDefault()
+      selectChatModel(selected)
+    }
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeModelOptions(true)
+  }
+})
+modelElement.addEventListener('blur', () => {
+  window.setTimeout(() => {
+    if (!modelAutocompleteElement.contains(document.activeElement)) closeModelOptions(true)
+  }, 0)
+})
+modelOptionsToggleElement.addEventListener('mousedown', event => event.preventDefault())
+modelOptionsToggleElement.addEventListener('click', () => {
+  if (modelOptionsElement.hidden) {
+    modelElement.focus()
+    modelElement.select()
+    renderModelOptions()
+  } else {
+    closeModelOptions(true)
+  }
+})
+modelOptionsElement.addEventListener('mousedown', event => event.preventDefault())
+modelOptionsElement.addEventListener('click', event => {
+  const option = (event.target as HTMLElement).closest<HTMLElement>('[data-model]')
+  if (option?.dataset.model) selectChatModel(option.dataset.model)
 })
 modelProfileElement.addEventListener('change', () => {
   controls.modelProfile = modelProfileElement.value
@@ -4368,8 +4524,7 @@ quickProviderElement.addEventListener('change', () => {
   providerElement.dispatchEvent(new Event('change'))
 })
 quickModelElement.addEventListener('change', () => {
-  modelElement.value = quickModelElement.value
-  modelElement.dispatchEvent(new Event('change'))
+  selectChatModel(quickModelElement.value)
 })
 quickRefreshModelsElement.addEventListener('click', () => {
   quickRefreshModelsElement.disabled = true

@@ -515,7 +515,9 @@ export class OpenCodeClient implements ProviderClient {
     let streamError: Error | undefined
     const streamController = new AbortController()
     const messageController = new AbortController()
+    let markSessionFinished: ((status: 'idle' | 'error') => void) | undefined
     const onAbort = (): void => {
+      markSessionFinished?.('error')
       streamController.abort()
       messageController.abort()
     }
@@ -529,7 +531,6 @@ export class OpenCodeClient implements ProviderClient {
     }
     let markStreamConnected: (() => void) | undefined
     const streamConnected = new Promise<void>(resolve => { markStreamConnected = resolve })
-    let markSessionFinished: ((status: 'idle' | 'error') => void) | undefined
     const sessionFinished = new Promise<'idle' | 'error'>(resolve => { markSessionFinished = resolve })
     let sawSessionActivity = false
     const streamPromise = this.consumeEvents(session.id, options.directory, streamController.signal, async event => {
@@ -566,6 +567,7 @@ export class OpenCodeClient implements ProviderClient {
       markStreamConnected?.()
       if (!streamController.signal.aborted) {
         streamError = error instanceof Error ? error : new Error(errorText(error))
+        markSessionFinished?.('error')
         streamController.abort()
       }
     })
@@ -590,27 +592,36 @@ export class OpenCodeClient implements ProviderClient {
       const model = modelSelection(options.model)
       if (model) body.model = model
       options.onProgress?.(`OpenCode session ${session.id}`)
-      let messageResolved = false
+      type MessageOutcome = { type: 'message'; payload: unknown } | { type: 'message-error'; error: Error }
+      type SessionOutcome = { type: 'session'; status: 'idle' | 'error' }
       const messageRequest = this.request(`/session/${encodeURIComponent(session.id)}/message`, {
         method: 'POST',
         directory: options.directory,
         timeoutMs: options.timeoutMs,
         signal: messageController.signal,
         body
-      }).then(payload => {
-        messageResolved = true
-        return payload
-      })
-      const payload = await Promise.race([
+      }).then(payload => ({ type: 'message', payload }) as MessageOutcome).catch(error => ({
+        type: 'message-error',
+        error: error instanceof Error ? error : new Error(errorText(error))
+      }) as MessageOutcome)
+      const firstOutcome = await Promise.race<MessageOutcome | SessionOutcome>([
         messageRequest,
-        sessionFinished.then(async status => {
-          if (messageResolved) return messageRequest
-          messageController.abort()
-          await messageRequest.catch(() => undefined)
-          if (status === 'error') throw streamError ?? new Error('OpenCode session failed')
-          return this.latestAssistantMessage(session.id, options.directory, options.signal)
-        })
+        sessionFinished.then(status => ({ type: 'session', status }))
       ])
+      let payload: unknown
+      if (firstOutcome.type === 'message') {
+        payload = firstOutcome.payload
+      } else {
+        const status = firstOutcome.type === 'session'
+          ? firstOutcome.status
+          : await sessionFinished
+        if (status === 'error') {
+          throw streamError ?? (firstOutcome.type === 'message-error' ? firstOutcome.error : new Error('OpenCode session failed'))
+        }
+        messageController.abort()
+        await messageRequest
+        payload = await this.latestAssistantMessage(session.id, options.directory, options.signal)
+      }
       if (streamError) throw streamError
       const finalText = messageText(payload)
       if (!streamedText && finalText) {

@@ -594,7 +594,7 @@
         },
         "ghost.enableConversationPersistence": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Persist Ghost conversations and preferences in VS Code storage. Disable to keep chat history in memory only."
         },
         "ghost.enableDebugLogging": {

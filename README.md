@@ -226,7 +226,7 @@ File-edit auto-accept scopes are `confirm`, `one-edit`, `current-file`, `request
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.enableConversationPersistence` | `false` | Save conversations and preferences in VS Code storage. |
+| `ghost.enableConversationPersistence` | `true` | Save conversations and preferences in VS Code storage. |
 | `ghost.enableDebugLogging` | `false` | Enable local, telemetry-free debug logging in the extension host. |
 
 The **Settings** panel also includes:
@@ -252,7 +252,7 @@ The panel also manages prompt presets. Saving a preset closes the panel. When co
 
 ### Persistence and privacy
 
-`ghost.enableConversationPersistence` is off by default. When enabled, Ghost saves conversations and preferences in VS Code storage, not in the project files. Global state stores prompt history, presets, display preferences, and provider UI preferences. Workspace state stores conversations and the active conversation. State is schema-versioned, bounded, compacted, and migrated; unchanged autosave writes are skipped. Common credentials and secrets are redacted before storage, export, diagnostics, display, and clipboard copies.
+`ghost.enableConversationPersistence` is on by default. When enabled, Ghost saves conversations and preferences in VS Code storage, not in the project files. Global state stores prompt history, presets, display preferences, and provider UI preferences. Workspace state stores conversations and the active conversation. State is schema-versioned, bounded, compacted, and migrated; unchanged autosave writes are skipped. Common credentials and secrets are redacted before storage, export, diagnostics, display, and clipboard copies.
 
 Ghost has no telemetry service. Requests are sent only to the provider URL selected in Ghost. If you use a remote OpenAI-compatible or MLX endpoint, the interface marks the connection as external.
 

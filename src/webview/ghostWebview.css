@@ -293,6 +293,83 @@ button:focus-visible {
   width: 100%;
 }
 
+.model-field {
+  flex: 2 1 300px;
+  min-width: min(100%, 300px);
+  position: relative;
+  z-index: 5;
+}
+
+.model-autocomplete {
+  display: flex;
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.model-autocomplete input {
+  min-width: 0;
+  padding: 3px 28px 3px 5px;
+  width: 100%;
+}
+
+.model-options-toggle {
+  background: transparent;
+  border: 0;
+  color: var(--vscode-input-foreground);
+  height: 100%;
+  min-width: 24px;
+  padding: 0 5px;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.model-options-toggle:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--ghost-border));
+}
+
+.model-options {
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-focusBorder, var(--ghost-border));
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+  left: 0;
+  max-height: min(320px, 50vh);
+  min-width: 100%;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 20;
+}
+
+.model-options[hidden] {
+  display: none;
+}
+
+.model-option {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.model-option:hover,
+.model-option.active {
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground));
+  color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+}
+
+.model-option-empty {
+  color: var(--vscode-descriptionForeground);
+  padding: 7px 8px;
+}
+
 select,
 input[type='text'],
 input[type='search'],
