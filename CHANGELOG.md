@@ -1,8 +1,11 @@
 # Changelog
 
 All notable changes to this extension are documented here.
-## 1.2.3 - 2026-08-22
+## 1.2.5 - 2026-08-22
 
+
+
+## 1.2.3 - 2026-08-2
 - Keep the viewport in place after approving a tool, and focus only a later pending approval instead of jumping to an older card.
 - Remember completed first-run setup globally, independent of conversation-history persistence, so the setup dialog stays dismissed across projects and reloads.
 - Restore saved conversations on reload, keep autosave enabled by default, and support history search, rename, duplicate, branch, and delete management.
@@ -14,6 +17,7 @@ All notable changes to this extension are documented here.
 - Save the settings gear as a standalone SVG for easy viewing.
 - Put Settings beside the provider collapse button, move Refresh models beside Provider, and remove Quick switch.
 - Store Ghost's OpenCode safety defaults in the global `~/.config/opencode/opencode.json` instead of the project root.
+- Add the root `update-version.sh` helper for patch version bumps.
 - Replace the model dropdown with an accessible searchable combobox that filters models while typing and supports mouse, arrow-key, and Enter selection.
 - Keep a healthy OpenCode session running when its long-lived message HTTP call closes or times out, wait for the session idle event, and recover the final assistant response instead of failing with `fetch failed`.
 
