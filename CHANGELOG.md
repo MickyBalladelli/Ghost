@@ -1,6 +1,10 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.6 - 2026-08-22
+
+
+
 ## 1.2.5 - 2026-08-22
 
 - Store Ghost's OpenCode safety defaults in the global `~/.config/opencode/opencode.json` instead of the project root.
@@ -8,6 +12,10 @@ All notable changes to this extension are documented here.
 - Keep the Provider selector wide enough and wrap Refresh models in narrow layouts.
 - Order the workflow menu as Agent, Ask, Edit, Explain.
 - Place Search, Up, and Down beside Send in the composer footer.
+- Give Send an icon and make the composer action buttons matching squares.
+- Round the composer search icon.
+- Restore prompt history from older conversation messages and keep Search available when history is empty.
+- Restore the immediate webview conversation snapshot after VS Code refreshes.
 - Add the root `update-version.sh` helper for patch version bumps.
 - Separate inline completion from chat workflow modes and add an Enable inline completion setting.
 - Move the chat workflow selector into the composer footer beside Send.

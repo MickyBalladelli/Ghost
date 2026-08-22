@@ -1963,8 +1963,22 @@ textarea {
 .prompt-history-button {
   font-size: 1em;
   line-height: 1;
-  min-width: 22px;
-  padding: 2px 5px;
+}
+
+.composer-action-button {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 30px;
+  height: 30px;
+  justify-content: center;
+  min-height: 30px;
+  min-width: 30px;
+  padding: 5px;
+}
+
+.composer-action-button .ui-icon {
+  height: 16px;
+  width: 16px;
 }
 
 .stop-button {
@@ -1982,10 +1996,6 @@ textarea {
   max-width: 150px;
   min-width: 0;
   padding: 3px 5px;
-}
-
-#send {
-  flex: 0 0 auto;
 }
 
 .status-footer {

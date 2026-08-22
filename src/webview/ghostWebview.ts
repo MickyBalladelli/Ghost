@@ -313,12 +313,20 @@ const normalizeCompletionRecord = (value: unknown): CompletionRecord | undefined
 
 const normalizeConversation = (value: Partial<Conversation>): Conversation => {
   const timestamp = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
+  const messages = Array.isArray(value.messages) ? value.messages.map(message => normalizeMessage(message)) : []
+  const savedPromptHistory = normalizePromptHistory(value.promptHistory)
+  const promptHistory = savedPromptHistory.length > 0
+    ? savedPromptHistory
+    : normalizePromptHistory(messages
+      .filter(message => message.role === 'user' && message.content.trim().length > 0)
+      .map(message => message.content)
+      .reverse())
   return {
     id: typeof value.id === 'string' ? value.id : createId('conversation'),
     title: typeof value.title === 'string' ? value.title : 'New conversation',
-    messages: Array.isArray(value.messages) ? value.messages.map(message => normalizeMessage(message)) : [],
+    messages,
     draft: typeof value.draft === 'string' ? value.draft : '',
-    promptHistory: normalizePromptHistory(value.promptHistory),
+    promptHistory,
     ...(value.taskPlan && Array.isArray(value.taskPlan.steps) ? { taskPlan: value.taskPlan } : {}),
     ...(normalizeCompletionRecord(value.completionRecord) ? { completionRecord: normalizeCompletionRecord(value.completionRecord) } : {}),
     ...(value.activeRequestId ? { activeRequestId: value.activeRequestId } : {}),
@@ -2899,7 +2907,7 @@ const updateComposer = () => {
   sendElement.hidden = busy
   sendElement.disabled = busy || promptElement.value.trim().length === 0
   const entries = promptHistory()
-  searchPromptHistoryElement.disabled = busy || entries.length === 0
+  searchPromptHistoryElement.disabled = busy
   previousPromptElement.disabled = busy || entries.length === 0 || historyIndex >= entries.length - 1
   nextPromptElement.disabled = busy || historyIndex < 0
   stopElement.hidden = !busy
@@ -3591,7 +3599,19 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     if (persistenceReady) {
       return
     }
-    restorePersistedState(message.state as GhostState)
+    const persisted = message.state as GhostState
+    const hasLocalContent = state.conversations.some(conversation => conversation.messages.length > 0 || Boolean(conversation.draft) || conversation.promptHistory.length > 0) || (state.presets?.length ?? 0) > 0
+    const hasStoredContent = persisted.conversations?.some(conversation => {
+      if (!conversation || typeof conversation !== 'object') return false
+      const candidate = conversation as Conversation
+      return Array.isArray(candidate.messages) && (candidate.messages.length > 0 || Boolean(candidate.draft) || (Array.isArray(candidate.promptHistory) && candidate.promptHistory.length > 0))
+    }) || (persisted.presets?.length ?? 0) > 0
+    if (hasLocalContent && !hasStoredContent) {
+      persistenceReady = true
+      post('persist-state', { state: createPersistedState() })
+      return
+    }
+    restorePersistedState(persisted)
     persistenceReady = true
     return
   }
@@ -4882,6 +4902,11 @@ const disposeWebviewResources = (): void => {
 }
 
 window.addEventListener('pagehide', disposeWebviewResources, { once: true })
+
+const restoredWebviewState = vscode.getState<GhostState>()
+if (restoredWebviewState && (restoredWebviewState.schemaVersion === 1 || restoredWebviewState.schemaVersion === persistenceSchemaVersion) && Array.isArray(restoredWebviewState.conversations)) {
+  restorePersistedState(restoredWebviewState)
+}
 
 render(false)
 restoreDraft()
