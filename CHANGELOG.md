@@ -4,7 +4,8 @@ All notable changes to this extension are documented here.
 
 ## 1.2.1 - 2026-08-21
 
-- Retry offline provider health checks every 2 seconds until the selected provider comes online.
+- Keep unchanged provider polls from redrawing the webview, preserving text selection and input focus.
+- Poll provider health every 2 seconds while Ghost is open, detecting both reconnection and disconnection.
 - Fix OpenCode model discovery in the provider controls. OpenCode models no longer fall back to the model selected for another provider.
 - Add OpenCode 1.x as a delegated-agent provider through a user-managed `opencode serve`: typed health/model/agent/session APIs, Basic Auth in SecretStorage, serialized workspace-scoped session reuse, SSE permission handling, streamed tool progress, final diff checks, cancellation/abort, and new/select/rename/fork/delete session commands.
 - Guard OpenCode with Ghost workspace containment and allow/ask/deny policy. OpenCode requests require `edit`, `bash`, and `external_directory` to be guarded, reject mutations in Ask/Explain mode, and never start or stop the user's server. Document the decision not to ship the opposite-direction MCP bridge.
