@@ -1993,9 +1993,10 @@ textarea {
   border: 1px solid var(--ghost-border);
   color: var(--vscode-input-foreground, var(--vscode-foreground));
   flex: 0 0 auto;
-  max-width: 150px;
+  max-width: 96px;
   min-width: 0;
   padding: 3px 5px;
+  width: 96px;
 }
 
 .status-footer {

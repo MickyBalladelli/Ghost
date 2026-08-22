@@ -3,6 +3,7 @@
 All notable changes to this extension are documented here.
 ## 1.2.6 - 2026-08-22
 
+- Raise the default agent request time limit from 60 to 180 minutes.
 
 
 ## 1.2.5 - 2026-08-22
@@ -12,6 +13,7 @@ All notable changes to this extension are documented here.
 - Keep the Provider selector wide enough and wrap Refresh models in narrow layouts.
 - Order the workflow menu as Agent, Ask, Edit, Explain.
 - Place Search, Up, and Down beside Send in the composer footer.
+- Shorten the Agent workflow label and reduce the workflow selector width.
 - Give Send an icon and make the composer action buttons matching squares.
 - Round the composer search icon.
 - Restore prompt history from older conversation messages and keep Search available when history is empty.

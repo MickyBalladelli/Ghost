@@ -139,7 +139,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   autocompleteModel: 'qwen2.5-coder:1.5b',
   providerRequestTimeoutMinutes: 15,
   inlineCompletionTimeoutMs: 30000,
-  requestTimeLimitMinutes: 60,
+  requestTimeLimitMinutes: 180,
   jsonMode: false,
   modelProfile: '',
   modelAliases: {},
