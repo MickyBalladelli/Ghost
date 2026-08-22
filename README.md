@@ -28,7 +28,7 @@ Current release: `1.2.5`
 - Eleven workspace tools with allowlists, denylists, approval prompts, and visible progress.
 - Stable Coding, Balanced, and Creative model profiles with provider capability reporting.
 - Source-editor edit previews with Accept/Reject controls, selected-hunk approval, and restore actions for applied edits.
-- Ask, Edit, Agent, Explain, and Inline workflow modes.
+- Ask, Edit, Agent, and Explain workflow modes, plus separate inline code completion.
 - Conversation history popup, prompt history, reusable presets, import/export, retry, regenerate, and cancellation.
 - Configurable assistant name, avatar, accent color, layout, context, and response behavior.
 - Keyboard-friendly interface with visible focus, screen-reader status updates, high-contrast theme support, reduced motion, and narrow-panel layout support.
@@ -207,7 +207,7 @@ For parameter names, provider differences, and tuning examples, see [OLLAMA_PARA
 | `ghost.presencePenalty` | `0.0` | Penalizes tokens already used. Positive values encourage new topics; negative values allow reuse. |
 | `ghost.repeatPenalty` | `1.05` | Ollama repeat penalty. `1` disables it; values above `1` penalize repeated text more. |
 | `ghost.responseLength` | `balanced` | Choose `short`, `balanced`, `long`, or `unlimited`. |
-| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `explain`, or `inline`. Ask answers without editing. Edit proposes file changes. Agent implements approved workspace changes; file writes still need approval. |
+| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, or `explain`. Ask answers without editing. Edit proposes file changes. Agent implements approved workspace changes; file writes still need approval. |
 
 ### Agent permissions
 

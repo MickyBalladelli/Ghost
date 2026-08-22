@@ -3,6 +3,9 @@
 All notable changes to this extension are documented here.
 ## 1.2.5 - 2026-08-22
 
+- Store Ghost's OpenCode safety defaults in the global `~/.config/opencode/opencode.json` instead of the project root.
+- Add the root `update-version.sh` helper for patch version bumps.
+- Separate inline completion from chat workflow modes and add an Enable inline completion setting.
 
 
 ## 1.2.3 - 2026-08-2
@@ -16,8 +19,6 @@ All notable changes to this extension are documented here.
 - Replace the asymmetric settings gear path with a symmetric round gear.
 - Save the settings gear as a standalone SVG for easy viewing.
 - Put Settings beside the provider collapse button, move Refresh models beside Provider, and remove Quick switch.
-- Store Ghost's OpenCode safety defaults in the global `~/.config/opencode/opencode.json` instead of the project root.
-- Add the root `update-version.sh` helper for patch version bumps.
 - Replace the model dropdown with an accessible searchable combobox that filters models while typing and supports mouse, arrow-key, and Enter selection.
 - Keep a healthy OpenCode session running when its long-lived message HTTP call closes or times out, wait for the session idle event, and recover the final assistant response instead of failing with `fetch failed`.
 

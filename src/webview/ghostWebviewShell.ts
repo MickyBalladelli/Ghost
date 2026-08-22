@@ -130,9 +130,15 @@ const createSettingsContent = (): HTMLDivElement => {
     settingRow('Repeat penalty', input('repeat-penalty', 'number', { min: 0, max: 3, step: 0.05, value: 1.05 }), 'repeat-penalty', undefined, 'not-opencode'),
     settingRow('Max context tokens', input('max-context', 'number', { min: 1, step: 256, value: 8192 }), 'max-context'),
     settingRow('Response length', select('response-length', [option('short', 'Short'), option('balanced', 'Balanced'), option('long', 'Long'), option('unlimited', 'Unlimited')]), 'response-length', undefined, 'not-opencode'),
-    settingRow('Workflow mode', select('mode', [option('ask', 'Ask'), option('edit', 'Edit'), option('agent', 'Agent — implement changes'), option('explain', 'Explain'), option('inline', 'Inline / Completion')]), 'mode'),
+    settingRow('Workflow mode', select('mode', [option('ask', 'Ask'), option('edit', 'Edit'), option('agent', 'Agent — implement changes'), option('explain', 'Explain')]), 'mode'),
     [createElement('p', { className: 'settings-help', 'data-provider-scope': 'not-opencode' }, ['Provider parameter details: ', createElement('a', { href: 'https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md', target: '_blank', rel: 'noreferrer' }, ['open the parameter guide'])])],
     [button('restore-generation-defaults', 'Restore generation defaults', { className: 'secondary settings-inline-action', 'data-provider-scope': 'not-opencode' })]
+  )
+
+  grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'inline completion' }, ['Inline completion']))
+  appendRows(
+    [checkboxSetting('enable-inline-completions', 'Enable inline code completion', 'Show Ghost suggestions while typing.')],
+    [createElement('p', { className: 'settings-help' }, ['Inline completion uses the separate autocomplete model and does not change the chat workflow.'])]
   )
 
   grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'agent safety' }, ['Agent safety']))

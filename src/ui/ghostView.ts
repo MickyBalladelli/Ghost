@@ -2233,6 +2233,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         responseLength: settings.responseLength,
         mode: settings.mode,
         autoAcceptScope: this.effectiveAutoAcceptScope(),
+        enableInlineCompletions: settings.enableInlineCompletions,
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
         mlxUrl: settings.mlxUrl,
@@ -2464,6 +2465,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (update.mode) {
       await ghostConfig.update('mode', update.mode, target)
+    }
+    if (typeof update.enableInlineCompletions === 'boolean') {
+      await ghostConfig.update('enableInlineCompletions', update.enableInlineCompletions, target)
     }
     if (update.autoAcceptScope) {
       if (update.autoAcceptScope !== 'confirm' && this.effectiveAutoAcceptScope() !== update.autoAcceptScope) {

@@ -550,11 +550,10 @@
             "ask",
             "edit",
             "agent",
-            "explain",
-            "inline"
+            "explain"
           ],
           "default": "agent",
-          "description": "Default workflow mode for the Ghost interface."
+          "description": "Default chat workflow mode for the Ghost interface."
         },
         "ghost.fileEditApproval": {
           "type": "string",

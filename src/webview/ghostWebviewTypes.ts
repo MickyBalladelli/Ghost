@@ -109,6 +109,7 @@ export interface ControlSettings {
   mode: GhostMode
   autoAcceptScope: AutoAcceptScope
   fileEditApproval: AutoAcceptScope
+  enableInlineCompletions: boolean
   enableConversationPersistence: boolean
 }
 

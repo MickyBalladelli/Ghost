@@ -426,6 +426,7 @@ let controls: ControlSettings = {
   mode: 'agent',
   autoAcceptScope: 'confirm',
   fileEditApproval: 'confirm',
+  enableInlineCompletions: true,
   enableConversationPersistence: true,
   terminalEnvironmentAllowlist: ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
 }
@@ -604,6 +605,7 @@ const repeatPenaltyElement = document.getElementById('repeat-penalty') as HTMLIn
 const maxContextElement = document.getElementById('max-context') as HTMLInputElement
 const responseLengthElement = document.getElementById('response-length') as HTMLSelectElement
 const modeElement = document.getElementById('mode') as HTMLSelectElement
+const enableInlineCompletionsElement = document.getElementById('enable-inline-completions') as HTMLInputElement
 const restoreGenerationDefaultsElement = document.getElementById('restore-generation-defaults') as HTMLButtonElement
 const composerHeightElement = document.getElementById('composer-height') as HTMLInputElement
 const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputElement
@@ -830,6 +832,7 @@ const createPersistedState = () => compactPersistedState({
     repeatPenalty: controls.repeatPenalty,
     responseLength: controls.responseLength,
     mode: controls.mode,
+    enableInlineCompletions: controls.enableInlineCompletions,
     autoAcceptScope: controls.fileEditApproval,
     enableConversationPersistence: controls.enableConversationPersistence,
     composerHeight,
@@ -978,6 +981,7 @@ const sendSettingsUpdate = () => {
         repeatPenalty: controls.repeatPenalty,
         responseLength: controls.responseLength,
         mode: controls.mode,
+        enableInlineCompletions: controls.enableInlineCompletions,
         autoAcceptScope: controls.fileEditApproval,
         enableConversationPersistence: controls.enableConversationPersistence,
         workspaceOnly: uiPreferences.workspaceOnly,
@@ -1450,6 +1454,7 @@ const renderControls = () => {
   maxContextElement.value = String(controls.maxContextTokens)
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
+  enableInlineCompletionsElement.checked = controls.enableInlineCompletions
   fileEditApprovalElement.value = controls.fileEditApproval
   const openCodeFileEditScope = controls.fileEditApproval === 'request' || controls.fileEditApproval === 'workspace' || controls.fileEditApproval === 'always'
     ? controls.fileEditApproval
@@ -4410,6 +4415,11 @@ modeElement.addEventListener('change', () => {
   controls.mode = modeElement.value as GhostMode
   sendSettingsUpdate()
 })
+enableInlineCompletionsElement.addEventListener('change', () => {
+  controls.enableInlineCompletions = enableInlineCompletionsElement.checked
+  sendSettingsUpdate()
+  renderControls()
+})
 fileEditApprovalElement.addEventListener('change', () => {
   const value = fileEditApprovalElement.value
   controls.fileEditApproval = value === 'one-edit' || value === 'current-file' || value === 'request' || value === 'session' || value === 'workspace' || value === 'always' ? value : 'confirm'
@@ -4668,7 +4678,7 @@ presetSelectElement.addEventListener('change', () => {
   }
   presetNameElement.value = preset.name
   presetPromptElement.value = preset.prompt
-  controls.mode = preset.mode
+  controls.mode = preset.mode === 'inline' ? 'agent' : preset.mode
   controls.temperature = preset.temperature
   controls.maxContextTokens = preset.maxContextTokens
   controls.responseLength = preset.responseLength

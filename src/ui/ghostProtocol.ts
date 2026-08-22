@@ -132,6 +132,7 @@ export interface GhostSettingsUpdate {
   mode?: GhostMode
   fileEditApproval?: GhostAutoAcceptScope | 'auto'
   autoAcceptScope?: GhostAutoAcceptScope
+  enableInlineCompletions?: boolean
   enableConversationPersistence?: boolean
   enableDebugLogging?: boolean
   logLevel?: GhostLogLevel
@@ -274,6 +275,7 @@ export type GhostExtensionMessage =
         responseLength: GhostResponseLength
         mode: GhostMode
         autoAcceptScope: GhostAutoAcceptScope
+        enableInlineCompletions: boolean
         enableConversationPersistence: boolean
         ollamaUrl: string
         mlxUrl: string
@@ -450,6 +452,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.fileEditApproval === undefined || ['confirm', 'auto', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.fileEditApproval as string)) &&
     (value.autoAcceptScope === undefined || ['confirm', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.autoAcceptScope as string)) &&
+    (value.enableInlineCompletions === undefined || typeof value.enableInlineCompletions === 'boolean') &&
     (value.enableConversationPersistence === undefined || typeof value.enableConversationPersistence === 'boolean') &&
     (value.enableDebugLogging === undefined || typeof value.enableDebugLogging === 'boolean') &&
     (value.logLevel === undefined || ['off', 'error', 'warn', 'info', 'debug'].includes(value.logLevel as string)) &&

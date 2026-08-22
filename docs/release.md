@@ -113,7 +113,7 @@ Manually verify the important user paths:
 - model discovery and provider health show useful status;
 - OpenCode rejects an incompatible server and permissive `edit`/`bash`/`external_directory` config, stores Basic Auth only in SecretStorage, scopes sessions to the selected workspace, streams a guarded request, answers a permission, reports the final diff, and aborts on Stop;
 - OpenCode new/select/rename/fork/delete session commands and agent selection work against a disposable server profile;
-- Ask, Edit, Agent, Explain, and Inline modes respond;
+- Ask, Edit, Agent, and Explain modes respond; inline completion remains a separate editor feature;
 - file reads, approved edits, diff preview, restore, and terminal approval work;
 - cancellation removes active thinking state and pending approvals;
 - history, import/export, persistence, redaction, and reset work;
