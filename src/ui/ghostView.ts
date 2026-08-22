@@ -94,6 +94,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
   private static readonly providerStatusCacheTtlMs = 30_000
+  private static readonly providerRetryIntervalMs = 2_000
+  private providerRetryTimer?: ReturnType<typeof setTimeout>
+  private providerRetryKey?: string
 
   private readonly chatHandler: vscode.ChatRequestHandler
 
@@ -2079,6 +2082,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const connection: 'online' | 'offline' = providerStatus.connection
+    if (connection === 'offline') {
+      this.scheduleProviderRetry(settings)
+    } else {
+      this.stopProviderRetry()
+    }
     let models = providerStatus.models
     if (models.length === 0 && settings.provider !== 'opencode') {
       models = [settings.chatModel]
@@ -2150,6 +2158,32 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       context: workspaceContext,
       tools: allowedTools
     })
+  }
+
+  private scheduleProviderRetry(settings: GhostSettings): void {
+    const retryKey = providerStatusKey(settings, Boolean(this.providerApiKey?.(settings.provider)))
+    if (this.providerRetryKey !== retryKey) {
+      this.stopProviderRetry()
+      this.providerRetryKey = retryKey
+    }
+    if (this.providerRetryTimer !== undefined) {
+      return
+    }
+    this.providerRetryTimer = setTimeout(() => {
+      this.providerRetryTimer = undefined
+      if (this.disposed || this.providerRetryKey !== retryKey) {
+        return
+      }
+      void this.sendControlsState(true)
+    }, GhostViewProvider.providerRetryIntervalMs)
+  }
+
+  private stopProviderRetry(): void {
+    if (this.providerRetryTimer !== undefined) {
+      clearTimeout(this.providerRetryTimer)
+      this.providerRetryTimer = undefined
+    }
+    this.providerRetryKey = undefined
   }
 
   private async testProvider(): Promise<void> {
@@ -2395,6 +2429,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   dispose(): void {
+    this.stopProviderRetry()
     this.webviewLifecycle.dispose()
     this.cancelRequests()
     for (const request of this.requests.values()) {
