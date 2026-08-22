@@ -88,7 +88,7 @@ Ghost already has strong edit safety (workspace jail, hunk context, rebase, atom
 
 - [x] **Webview defaults `toolAllowlist` to `[]`.** Before the host `controls-state` arrives, `src/webview/ghostWebview.ts` treats every tool as Ask. Default to `GHOST_TOOL_NAMES` (or a loading state) so the Context popup is not wrong on first paint.
 
-- [x] **Provider timeout vs request time-limit are easy to confuse.** `providerRequestTimeoutMinutes` and `requestTimeLimitMinutes` both default to 15 minutes. The Ghost view can report “provider did not respond” when the agent safety budget expired during tool rounds (`src/ui/ghostView.ts`). Label them separately in Settings and use a stop reason that names the limit that fired.
+- [x] **Provider timeout vs request time-limit are easy to confuse.** `providerRequestTimeoutMinutes` defaults to 15 minutes and `requestTimeLimitMinutes` defaults to 60 minutes. The Ghost view can report “provider did not respond” when the agent safety budget expired during tool rounds (`src/ui/ghostView.ts`). Label them separately in Settings and use a stop reason that names the limit that fired.
 
 ---
 

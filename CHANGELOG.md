@@ -8,6 +8,7 @@ All notable changes to this extension are documented here.
 - Restore saved conversations on reload, keep autosave enabled by default, and support history search, rename, duplicate, branch, and delete management.
 - Give the model selector extra width for long model names.
 - Keep the active request's latest message scrolled into view.
+- Raise the default agent request time limit to 60 minutes.
 - Replace the model dropdown with an accessible searchable combobox that filters models while typing and supports mouse, arrow-key, and Enter selection.
 - Keep a healthy OpenCode session running when its long-lived message HTTP call closes or times out, wait for the session idle event, and recover the final assistant response instead of failing with `fetch failed`.
 
