@@ -381,9 +381,15 @@ textarea {
 }
 
 .settings-button {
-  min-height: 28px;
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 32px;
+  height: 32px;
+  justify-content: center;
+  min-height: 32px;
   min-width: 32px;
-  padding: 3px 6px;
+  overflow: visible;
+  padding: 5px;
 }
 
 .ui-icon {
@@ -393,8 +399,10 @@ textarea {
 }
 
 .settings-button .ui-icon {
-  height: 20px;
-  width: 20px;
+  flex: 0 0 18px;
+  height: 18px;
+  overflow: visible;
+  width: 18px;
 }
 
 .model-profile-effective {

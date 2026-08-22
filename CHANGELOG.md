@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 ## 1.2.2 - 2026-08-21
 
 - Settings update for OpenCode
+- Prevent the settings gear from being clipped in the provider control strip.
 - Show only settings OpenCode can use, expose its username, agent, session reuse, and password controls, and stop sending unsupported sampling/profile options to OpenCode requests.
 
 ## 1.2.1 - 2026-08-21
