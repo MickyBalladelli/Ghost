@@ -2,7 +2,7 @@
 
 All notable changes to this extension are documented here.
 
-## 1.1.96 - 2026-08-21
+## 1.2.1 - 2026-08-21
 
 - Add OpenCode 1.x as a delegated-agent provider through a user-managed `opencode serve`: typed health/model/agent/session APIs, Basic Auth in SecretStorage, serialized workspace-scoped session reuse, SSE permission handling, streamed tool progress, final diff checks, cancellation/abort, and new/select/rename/fork/delete session commands.
 - Guard OpenCode with Ghost workspace containment and allow/ask/deny policy. OpenCode requests require `edit`, `bash`, and `external_directory` to be guarded, reject mutations in Ask/Explain mode, and never start or stop the user's server. Document the decision not to ship the opposite-direction MCP bridge.
