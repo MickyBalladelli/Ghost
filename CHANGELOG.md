@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.2.1 - 2026-08-21
 
+- Show OpenCode permission requests as readable inline Ghost approval cards, with once or session scope, instead of intrusive raw-JSON dialogs.
 - Add project-level OpenCode permission defaults for guarded edits, shell commands, and external directories.
 - Create safe OpenCode project permissions automatically when a user's workspace has no `opencode.json`.
 - Apply and verify OpenCode permission defaults through the live project config API so newly created config works without restarting the server.

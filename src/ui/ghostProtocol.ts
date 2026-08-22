@@ -227,7 +227,7 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-started'; sequence: number })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; diffPreview?: GhostToolDiffPreview; detail?: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; approvalKind?: 'tool' | 'provider-permission'; diffPreview?: GhostToolDiffPreview; detail?: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string; resultStatus?: 'completed' | 'rejected' | 'failed' })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'task-plan'; sequence: number; plan: GhostTaskPlan })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })

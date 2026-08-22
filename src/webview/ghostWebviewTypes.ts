@@ -187,6 +187,7 @@ export interface ToolCall {
   name: string
   arguments?: string
   requiresApproval?: boolean
+  approvalKind?: 'tool' | 'provider-permission'
   approval?: 'pending' | 'approved' | 'rejected'
   diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; previewKind?: 'staged' | 'text'; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'

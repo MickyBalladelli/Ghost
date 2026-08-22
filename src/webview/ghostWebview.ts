@@ -2428,11 +2428,15 @@ const toolActionText = (toolCall: ToolCall): string => {
 
   const path = typeof args.path === 'string' ? args.path.trim() : ''
   const command = typeof args.command === 'string' ? args.command.trim() : ''
-  const target = path || command
+  const genericTarget = typeof args.target === 'string' ? args.target.trim() : ''
+  const target = path || command || genericTarget
   const displayedTarget = target.length > 180 ? `${target.slice(0, 177)}…` : target
   const readScope = toolCall.name === 'ghost_read_file' ? readScopeText(args, toolCall.result) : ''
   const readScopeSuffix = readScope ? ` · ${readScope}` : ''
-  const base = toolCall.name === 'ghost_read_file'
+  const action = typeof args.action === 'string' ? args.action.trim() : ''
+  const base = toolCall.name === 'opencode_permission'
+    ? `OpenCode wants to ${action || 'continue'}${displayedTarget ? `: ${displayedTarget}` : ''}`
+    : toolCall.name === 'ghost_read_file'
     ? `I'm reading file${displayedTarget ? ` ${displayedTarget}` : ''}${readScopeSuffix}`
     : toolCall.name === 'ghost_write_file'
       ? `I'm writing file${displayedTarget ? ` ${displayedTarget}` : ''}`
@@ -2525,7 +2529,9 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
-      ? `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool call once">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool for the session">Approve for session</button><button type="button" data-tool-action="approve-forever" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Always approve this tool">Approve forever</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+      ? part.toolCall.approvalKind === 'provider-permission'
+        ? `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this permission once">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this permission for the session">Approve for session</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+        : `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool call once">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool for the session">Approve for session</button><button type="button" data-tool-action="approve-forever" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Always approve this tool">Approve forever</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
     const fileAction = part.toolCall.diffPreview
       ? `<button type="button" class="secondary" data-tool-action="open-file" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Open file</button>`
@@ -3666,6 +3672,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       name: message.tool ?? 'Unknown tool',
       arguments: message.arguments ? JSON.stringify(message.arguments, null, 2) : undefined,
       requiresApproval: message.requiresApproval !== false,
+      approvalKind: message.approvalKind,
       diffPreview: message.diffPreview,
       approval: message.requiresApproval === false ? 'approved' as const : 'pending' as const,
       status: 'requested' as const,
@@ -3675,6 +3682,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       existingTool.name = message.tool ?? existingTool.name
       existingTool.arguments = message.arguments ? JSON.stringify(message.arguments, null, 2) : existingTool.arguments
       existingTool.requiresApproval = message.requiresApproval !== false
+      existingTool.approvalKind = message.approvalKind ?? existingTool.approvalKind
       existingTool.diffPreview = message.diffPreview ?? existingTool.diffPreview
       existingTool.status = existingTool.approval === 'approved' ? 'running' : 'requested'
     } else {

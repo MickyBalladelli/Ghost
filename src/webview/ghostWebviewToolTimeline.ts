@@ -15,7 +15,8 @@ const ghostToolTimeline: GhostToolTimelineApi = {
       ghost_apply_edit: 'Applying edit',
       ghost_apply_transaction: 'Applying file transaction',
       ghost_run_terminal_command: 'Running command',
-      ghost_list_directory: 'Listing directory'
+      ghost_list_directory: 'Listing directory',
+      opencode_permission: 'OpenCode needs permission'
     }
     return labels[name] ?? `Running ${name}`
   }

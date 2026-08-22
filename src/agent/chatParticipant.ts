@@ -17,6 +17,7 @@ import { parseFileTransaction } from '../tools/transactionWorkflow'
 import { auditTerminalCommand } from '../tools/terminalAudit'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler, parseNativeLocalToolCall } from './toolCallParser'
+import type { LocalToolName } from './toolCallParser'
 import { GHOST_NATIVE_TOOL_DEFINITIONS, JSON_OBJECT_RESPONSE_FORMAT } from './nativeTooling'
 import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
@@ -536,9 +537,19 @@ export interface GhostRequestOptions {
   responseFormat?: ChatResponseFormat
   images?: ChatVisionImage[]
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
+  approveProviderPermission?: (permission: GhostProviderPermissionRequest) => Promise<GhostToolApproval>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
   confirmBudgetContinue?: (reason: string) => Promise<boolean>
   onStop?: (reason: GhostStopReason, message: string) => void
+}
+
+export interface GhostProviderPermissionRequest {
+  provider: GhostProvider
+  key: string
+  action: string
+  detail: string
+  arguments: Record<string, unknown>
+  policyTool?: LocalToolName
 }
 
 export interface GhostToolApproval {
@@ -1003,7 +1014,7 @@ function isInsideDirectory(filePath: string, directory: string): boolean {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
 }
 
-function openCodePermissionTool(permission: OpenCodePermissionRequest): string {
+function openCodeGhostTool(permission: OpenCodePermissionRequest): LocalToolName | undefined {
   const type = `${permission.type} ${permission.title}`.toLowerCase()
   if (/\b(?:edit|write|patch|replace)\b/.test(type)) return 'ghost_apply_edit'
   if (/\b(?:bash|shell|terminal|command)\b/.test(type)) return 'ghost_run_terminal_command'
@@ -1011,6 +1022,12 @@ function openCodePermissionTool(permission: OpenCodePermissionRequest): string {
   if (/\b(?:glob|list)\b/.test(type)) return 'ghost_list_directory'
   if (/\bread\b/.test(type)) return 'ghost_read_file'
   if (/\bgit\b/.test(type)) return 'ghost_git_context'
+  return undefined
+}
+
+function openCodePermissionTool(permission: OpenCodePermissionRequest): string {
+  const ghostTool = openCodeGhostTool(permission)
+  if (ghostTool) return ghostTool
   return `opencode:${permission.type}`
 }
 
@@ -1022,11 +1039,58 @@ function permissionMetadataPath(permission: OpenCodePermissionRequest): string |
   return undefined
 }
 
+function permissionMetadataCommand(permission: OpenCodePermissionRequest): string | undefined {
+  for (const key of ['command', 'cmd']) {
+    const value = permission.metadata[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+function openCodePermissionPresentation(permission: OpenCodePermissionRequest): GhostProviderPermissionRequest {
+  const ghostTool = openCodeGhostTool(permission)
+  const permissionPatterns = Array.isArray(permission.pattern) ? permission.pattern : permission.pattern ? [permission.pattern] : []
+  const metadataPath = permissionMetadataPath(permission)
+  const metadataCommand = permissionMetadataCommand(permission)
+  const patternTarget = permissionPatterns.find(pattern => typeof pattern === 'string' && pattern.trim())?.trim()
+  const target = metadataCommand ?? metadataPath ?? patternTarget
+  const action = ghostTool === 'ghost_apply_edit'
+    ? 'edit workspace files'
+    : ghostTool === 'ghost_run_terminal_command'
+      ? 'run a command'
+      : ghostTool === 'ghost_search_workspace'
+        ? 'search the workspace'
+        : ghostTool === 'ghost_list_directory'
+          ? 'list workspace files'
+          : ghostTool === 'ghost_read_file'
+            ? 'read a workspace file'
+            : ghostTool === 'ghost_git_context'
+              ? 'inspect Git state'
+              : `use ${permission.type.replace(/[_-]+/g, ' ')}`
+  const safeTarget = target ? redactSensitiveText(target).slice(0, 1000) : undefined
+  const safeTitle = redactSensitiveText(permission.title).replace(/\s+/g, ' ').trim().slice(0, 500)
+  return {
+    provider: 'opencode',
+    key: openCodePermissionTool(permission),
+    action,
+    detail: `OpenCode wants to ${action}${safeTarget ? `: ${safeTarget}` : safeTitle ? `. ${safeTitle}` : '.'}`,
+    arguments: {
+      action,
+      ...(metadataPath ? { path: redactSensitiveText(metadataPath).slice(0, 1000) } : {}),
+      ...(metadataCommand ? { command: redactSensitiveText(metadataCommand).slice(0, 2000) } : {}),
+      ...(!metadataPath && !metadataCommand && patternTarget ? { target: redactSensitiveText(patternTarget).slice(0, 1000) } : {})
+    },
+    ...(ghostTool ? { policyTool: ghostTool } : {})
+  }
+}
+
 async function approveOpenCodePermission(
   permission: OpenCodePermissionRequest,
   settings: ReturnType<GhostConfig['getSettings']>,
   directory: string,
   requestApprovals: Set<string>,
+  sessionApprovals: Set<string>,
+  approveProviderPermission: GhostRequestOptions['approveProviderPermission'],
   mode: GhostRequestOptions['mode']
 ): Promise<'once' | 'reject'> {
   const toolName = openCodePermissionTool(permission)
@@ -1046,15 +1110,11 @@ async function approveOpenCodePermission(
   if (/external[_ -]?directory/i.test(permission.type)) return 'reject'
   if (mode !== 'edit' && mode !== 'agent' && (isFileEditTool(toolName) || toolName === 'ghost_run_terminal_command')) return 'reject'
   if (toolName === 'ghost_run_terminal_command') {
-    const metadataCommand = typeof permission.metadata.command === 'string'
-      ? permission.metadata.command
-      : typeof permission.metadata.cmd === 'string'
-        ? permission.metadata.cmd
-        : undefined
+    const metadataCommand = permissionMetadataCommand(permission)
     const commands = [metadataCommand, ...permissionPatterns].filter((command): command is string => Boolean(command))
     if (commands.some(command => auditTerminalCommand(command).blocked)) return 'reject'
   }
-  if (requestApprovals.has(toolName)) return 'once'
+  if (requestApprovals.has(toolName) || sessionApprovals.has(toolName)) return 'once'
 
   const asksByPolicy = !allowlist.includes(toolName) || asklist.includes(toolName)
   const fileEdit = isFileEditTool(toolName)
@@ -1063,19 +1123,23 @@ async function approveOpenCodePermission(
     && (settings.autoAcceptScope === 'request' || settings.autoAcceptScope === 'workspace' || settings.autoAcceptScope === 'always')
   if ((!requiresToolApproval(toolName) && !asksByPolicy) || autoAcceptedEdit) return 'once'
 
-  const metadata = redactSensitiveText(JSON.stringify(permission.metadata, null, 2)).slice(0, 2000)
+  const presentation = openCodePermissionPresentation(permission)
+  if (approveProviderPermission) {
+    const approval = await approveProviderPermission(presentation)
+    if (approval.decision === 'request') requestApprovals.add(toolName)
+    if (approval.decision === 'session' || approval.decision === 'always') sessionApprovals.add(toolName)
+    return approval.decision === 'reject' ? 'reject' : 'once'
+  }
+
   const selection = await vscode.window.showWarningMessage(
-    permission.title,
-    {
-      modal: true,
-      detail: `${permission.type}${permission.pattern ? `\nPattern: ${Array.isArray(permission.pattern) ? permission.pattern.join(', ') : permission.pattern}` : ''}${metadata && metadata !== '{}' ? `\n\n${metadata}` : ''}`
-    },
+    'OpenCode needs permission',
+    { modal: true, detail: presentation.detail },
     'Allow once',
-    'Allow for request',
+    'Allow for session',
     'Reject'
   )
-  if (selection === 'Allow for request') {
-    requestApprovals.add(toolName)
+  if (selection === 'Allow for session') {
+    sessionApprovals.add(toolName)
     return 'once'
   }
   return selection === 'Allow once' ? 'once' : 'reject'
@@ -1090,7 +1154,8 @@ async function runOpenCodeRequest(
   response: vscode.ChatResponseStream,
   token: vscode.CancellationToken,
   statusBar: GhostStatusBar | undefined,
-  storage: GhostStorage | undefined
+  storage: GhostStorage | undefined,
+  sessionApprovals: Set<string>
 ): Promise<void> {
   const directory = openCodeWorkspaceDirectory(requestOptions.workspaceRoot)
   if (!directory) {
@@ -1137,7 +1202,15 @@ async function runOpenCodeRequest(
       signal: cancellation.signal,
       onText: delta => response.markdown(redactSensitiveText(delta)),
       onProgress: detail => response.progress(redactSensitiveText(detail)),
-      onPermission: permission => approveOpenCodePermission(permission, settings, directory, requestApprovals, requestOptions.mode)
+      onPermission: permission => approveOpenCodePermission(
+        permission,
+        settings,
+        directory,
+        requestApprovals,
+        sessionApprovals,
+        requestOptions.approveProviderPermission,
+        requestOptions.mode
+      )
     })
     if (settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles
@@ -1386,6 +1459,7 @@ export function createChatParticipantHandler(
   const llmFactory = options.llmFactory ?? createDefaultLlmFactory(configuration, options.providerApiKey)
   const toolExecutor = options.toolExecutor ?? new LocalToolExecutor()
   const statusBar = options.statusBar
+  const openCodeSessionApprovals = new Set<string>()
 
   return async (request, _context, response, token) => {
     if (!request.prompt.trim()) {
@@ -1494,7 +1568,8 @@ export function createChatParticipantHandler(
         response,
         token,
         statusBar,
-        options.openCodeSessionStorage
+        options.openCodeSessionStorage,
+        openCodeSessionApprovals
       )
       return
     }
