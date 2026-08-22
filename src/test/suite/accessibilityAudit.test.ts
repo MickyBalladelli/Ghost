@@ -16,7 +16,6 @@ suite('Accessibility contract audit', () => {
       'terminal-environment-permissions-modal',
       'privacy-modal',
       'context-modal',
-      'quick-switch-modal',
       'first-run-modal',
       'history-modal',
       'prompt-history-modal'
@@ -57,8 +56,6 @@ suite('Accessibility contract audit', () => {
       'persistence-status',
       'screen-reader-status',
       'status-text',
-      'quick-connection-status',
-      'quick-connection-details',
       'setup-provider-status',
       'setup-model-status',
       'setup-test-status',

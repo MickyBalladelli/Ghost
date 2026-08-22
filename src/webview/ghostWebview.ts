@@ -664,7 +664,6 @@ const resetSystemInstructionsElement = document.getElementById('reset-system-ins
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
-const quickSwitchModalElement = document.getElementById('quick-switch-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
 const promptHistoryModalElement = document.getElementById('prompt-history-modal') as HTMLElement
 const editToolModalElement = document.getElementById('edit-tool-modal') as HTMLElement
@@ -676,13 +675,6 @@ const historySearchElement = document.getElementById('history-search') as HTMLIn
 const historyBookmarksOnlyElement = document.getElementById('history-bookmarks-only') as HTMLInputElement
 const historySearchSummaryElement = document.getElementById('history-search-summary') as HTMLElement
 const historyListElement = document.getElementById('history-list') as HTMLElement
-const quickSwitchElement = document.getElementById('quick-switch') as HTMLButtonElement
-const quickProviderElement = document.getElementById('quick-provider') as HTMLSelectElement
-const quickModelElement = document.getElementById('quick-model') as HTMLSelectElement
-const quickConnectionStatusElement = document.getElementById('quick-connection-status') as HTMLElement
-const quickConnectionDetailsElement = document.getElementById('quick-connection-details') as HTMLElement
-const copyDiagnosticsElement = document.getElementById('copy-diagnostics') as HTMLButtonElement
-const quickRefreshModelsElement = document.getElementById('quick-refresh-models') as HTMLButtonElement
 const firstRunModalElement = document.getElementById('first-run-modal') as HTMLElement
 const setupProviderStatusElement = document.getElementById('setup-provider-status') as HTMLElement
 const setupCheckProviderElement = document.getElementById('setup-check-provider') as HTMLButtonElement
@@ -1204,35 +1196,6 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
   modelCapabilitiesElement.title = summary
 }
 
-const renderQuickSwitch = (): void => {
-  renderProviderOptions(quickProviderElement, controls.provider)
-  quickModelElement.textContent = ''
-  const models = Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
-  for (const model of models) {
-    const option = document.createElement('option')
-    option.value = model
-    option.textContent = model
-    quickModelElement.append(option)
-  }
-  if (models.length === 0) {
-    const option = document.createElement('option')
-    option.value = ''
-    option.textContent = 'No models found'
-    option.disabled = true
-    quickModelElement.append(option)
-  }
-  quickModelElement.value = controls.chatModel
-  const metadata = availableModelMetadata.find(item => item.id === controls.chatModel)
-  const connectionLabel = connection === 'online' ? 'Connected' : connection === 'offline' ? 'Offline' : 'Checking…'
-  quickConnectionStatusElement.textContent = `${connectionLabel} · ${controls.provider} · ${controls.chatModel}`
-  quickConnectionDetailsElement.textContent = [
-    `Endpoint: ${providerEndpoint()}`,
-    `Network: ${controls.networkAccess}`,
-    `Capabilities: ${metadata?.capabilities?.join(', ') || 'unknown'}`,
-    `Workspace root: ${uiPreferences.workspaceRoot || 'all roots'}`
-  ].join(' · ')
-}
-
 const renderFirstRunSetup = (): void => {
   const connectionLabel = connection === 'online' ? 'Connected' : connection === 'offline' ? 'Offline' : 'Checking…'
   setupProviderStatusElement.textContent = `${connectionLabel} · ${controls.provider} · ${providerEndpoint()}`
@@ -1604,7 +1567,6 @@ const renderControls = () => {
     : connection === 'offline'
       ? controls.networkAccess === 'external' ? 'Offline · external endpoint' : 'Offline'
       : 'Checking…'
-  renderQuickSwitch()
   renderFirstRunSetup()
 
   attachmentListElement.textContent = ''
@@ -4570,32 +4532,6 @@ document.getElementById('privacy-page')?.addEventListener('click', () => {
 document.getElementById('context-preview')?.addEventListener('click', () => {
   renderContextPreview()
   setModalVisibility(contextModalElement, true)
-})
-quickSwitchElement.addEventListener('click', () => {
-  renderQuickSwitch()
-  setModalVisibility(quickSwitchModalElement, true)
-})
-quickProviderElement.addEventListener('change', () => {
-  providerElement.value = quickProviderElement.value
-  providerElement.dispatchEvent(new Event('change'))
-})
-quickModelElement.addEventListener('change', () => {
-  selectChatModel(quickModelElement.value)
-})
-quickRefreshModelsElement.addEventListener('click', () => {
-  quickRefreshModelsElement.disabled = true
-  post('refresh-models')
-  setTransientTimeout(() => {
-    quickRefreshModelsElement.disabled = false
-  }, 1000)
-})
-copyDiagnosticsElement.addEventListener('click', () => {
-  const diagnostics = [
-    quickConnectionStatusElement.textContent,
-    quickConnectionDetailsElement.textContent,
-    `Models available: ${availableModels.join(', ') || 'none'}`
-  ].filter(Boolean).join('\n')
-  void copyText(diagnostics)
 })
 setupCheckProviderElement.addEventListener('click', () => {
   setupProviderStatusElement.textContent = 'Checking provider…'

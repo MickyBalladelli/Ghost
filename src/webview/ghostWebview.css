@@ -225,7 +225,7 @@ button:focus-visible {
   border-bottom: 1px solid var(--ghost-border);
   display: grid;
   gap: 6px;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   padding: 7px 10px;
 }
 
@@ -267,6 +267,8 @@ button:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   width: 100%;
 }
@@ -291,6 +293,24 @@ button:focus-visible {
 .provider-field select {
   max-width: none;
   width: 100%;
+}
+
+.provider-select-row {
+  align-items: stretch;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.provider-select-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.provider-refresh-models {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .model-field {
@@ -471,6 +491,8 @@ textarea {
   align-items: center;
   display: inline-flex;
   flex: 0 0 32px;
+  grid-column: 2;
+  grid-row: 1;
   height: 32px;
   justify-content: center;
   min-height: 32px;
@@ -1032,40 +1054,6 @@ textarea {
 .history-list {
   max-height: 260px;
   overflow: auto;
-}
-
-.quick-switch-button {
-  white-space: nowrap;
-}
-
-.quick-switch-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: auto minmax(0, 1fr);
-  margin: 12px 0;
-}
-
-.quick-switch-grid label {
-  align-self: center;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.85em;
-}
-
-.quick-switch-grid select {
-  min-width: 0;
-  padding: 5px 7px;
-}
-
-.diagnostic-card {
-  background: var(--vscode-textCodeBlock-background);
-  border: 1px solid var(--ghost-border);
-  border-radius: 4px;
-  padding: 10px;
-}
-
-.diagnostic-card p {
-  margin-bottom: 0;
-  overflow-wrap: anywhere;
 }
 
 .setup-check {
