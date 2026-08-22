@@ -191,7 +191,7 @@ interface GhostRequestEnvelope extends GhostWebviewEnvelope {
 
 export type GhostWebviewMessage =
   | (GhostWebviewEnvelope & { type: 'ready' })
-  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' })
+  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' | 'set-provider-api-key' })
   | (GhostWebviewEnvelope & { type: 'export'; state?: GhostPersistedState })
   | (GhostWebviewEnvelope & { type: 'persist-state'; state: GhostPersistedState })
   | (GhostRequestEnvelope & {
@@ -505,7 +505,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return false
   }
 
-  if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
+  if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'set-provider-api-key', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
     return true
   }
   if (value.type === 'export') {

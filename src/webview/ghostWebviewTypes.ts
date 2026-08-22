@@ -298,16 +298,16 @@ export interface WebviewRequestOptions {
   model: string
   modelProfile: string
   modelRole?: ModelRole
-  temperature: number
-  topP: number
-  topK: number
-  minP: number
-  presencePenalty: number
-  repeatPenalty: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  minP?: number
+  presencePenalty?: number
+  repeatPenalty?: number
   maxContextTokens: number
   maxTokens?: number
   mode: GhostMode
-  showReasoning: boolean
+  showReasoning?: boolean
   customSystemInstructions: string
   workspaceRoot?: string
   additionalContext?: string

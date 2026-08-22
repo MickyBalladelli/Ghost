@@ -95,13 +95,17 @@ const modal = (id: string, title: string, titleId: string, content: Node, footer
     ])
   ])
 
-const settingRow = (text: string, control: Node, id?: string, title?: string): Node[] => [
-  label(text, id, title ? { title } : {}),
-  control
-]
+const settingRow = (text: string, control: Node, id?: string, title?: string, providerScope?: string): Node[] => {
+  const scope = providerScope ? { 'data-provider-scope': providerScope } : {}
+  if (providerScope && control instanceof HTMLElement) control.dataset.providerScope = providerScope
+  return [
+    label(text, id, { ...(title ? { title } : {}), ...scope }),
+    control
+  ]
+}
 
-const checkboxSetting = (id: string, text: string, title?: string, checked = false): HTMLLabelElement =>
-  createElement('label', { className: 'settings-checkbox', htmlFor: id, ...(title ? { title } : {}) }, [
+const checkboxSetting = (id: string, text: string, title?: string, checked = false, providerScope?: string): HTMLLabelElement =>
+  createElement('label', { className: 'settings-checkbox', htmlFor: id, ...(title ? { title } : {}), ...(providerScope ? { 'data-provider-scope': providerScope } : {}) }, [
     input(id, 'checkbox', { checked }),
     text
   ])
@@ -112,23 +116,24 @@ const createSettingsContent = (): HTMLDivElement => {
 
   grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'generation' }, ['Generation']))
   appendRows(
-    settingRow('Temperature', input('temperature', 'range', { min: 0, max: 2, step: 0.1, value: 0.3, title: 'Temperature: 0 is most focused; 1 is balanced; 2 is most varied.' }), 'temperature', 'Controls randomness. An output value is shown beside the label.'),
-    [createElement('output', { id: 'temperature-value' }, ['0.3'])],
-    settingRow('Top P', input('top-p', 'number', { min: 0, max: 1, step: 0.01, value: 0.9 }), 'top-p'),
-    settingRow('Top K', input('top-k', 'number', { min: 0, step: 1, value: 20 }), 'top-k'),
-    settingRow('Min P', input('min-p', 'number', { min: 0, max: 1, step: 0.01, value: 0.05 }), 'min-p'),
-    settingRow('Presence penalty', input('presence-penalty', 'number', { min: -2, max: 2, step: 0.1, value: 0 }), 'presence-penalty'),
-    settingRow('Repeat penalty', input('repeat-penalty', 'number', { min: 0, max: 3, step: 0.05, value: 1.05 }), 'repeat-penalty'),
+    settingRow('Temperature', input('temperature', 'range', { min: 0, max: 2, step: 0.1, value: 0.3, title: 'Temperature: 0 is most focused; 1 is balanced; 2 is most varied.' }), 'temperature', 'Controls randomness. An output value is shown beside the label.', 'not-opencode'),
+    [createElement('output', { id: 'temperature-value', 'data-provider-scope': 'not-opencode' }, ['0.3'])],
+    settingRow('Top P', input('top-p', 'number', { min: 0, max: 1, step: 0.01, value: 0.9 }), 'top-p', undefined, 'not-opencode'),
+    settingRow('Top K', input('top-k', 'number', { min: 0, step: 1, value: 20 }), 'top-k', undefined, 'not-opencode'),
+    settingRow('Min P', input('min-p', 'number', { min: 0, max: 1, step: 0.01, value: 0.05 }), 'min-p', undefined, 'not-opencode'),
+    settingRow('Presence penalty', input('presence-penalty', 'number', { min: -2, max: 2, step: 0.1, value: 0 }), 'presence-penalty', undefined, 'not-opencode'),
+    settingRow('Repeat penalty', input('repeat-penalty', 'number', { min: 0, max: 3, step: 0.05, value: 1.05 }), 'repeat-penalty', undefined, 'not-opencode'),
     settingRow('Max context tokens', input('max-context', 'number', { min: 1, step: 256, value: 8192 }), 'max-context'),
-    settingRow('Response length', select('response-length', [option('short', 'Short'), option('balanced', 'Balanced'), option('long', 'Long'), option('unlimited', 'Unlimited')]), 'response-length'),
+    settingRow('Response length', select('response-length', [option('short', 'Short'), option('balanced', 'Balanced'), option('long', 'Long'), option('unlimited', 'Unlimited')]), 'response-length', undefined, 'not-opencode'),
     settingRow('Workflow mode', select('mode', [option('ask', 'Ask'), option('edit', 'Edit'), option('agent', 'Agent — implement changes'), option('explain', 'Explain'), option('inline', 'Inline / Completion')]), 'mode'),
-    [createElement('p', { className: 'settings-help' }, ['Provider parameter details: ', createElement('a', { href: 'https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md', target: '_blank', rel: 'noreferrer' }, ['open the parameter guide'])])],
-    [button('restore-generation-defaults', 'Restore generation defaults', { className: 'secondary settings-inline-action' })]
+    [createElement('p', { className: 'settings-help', 'data-provider-scope': 'not-opencode' }, ['Provider parameter details: ', createElement('a', { href: 'https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md', target: '_blank', rel: 'noreferrer' }, ['open the parameter guide'])])],
+    [button('restore-generation-defaults', 'Restore generation defaults', { className: 'secondary settings-inline-action', 'data-provider-scope': 'not-opencode' })]
   )
 
   grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'agent safety' }, ['Agent safety']))
   appendRows(
-    settingRow('File edit approval', select('file-edit-approval', [option('confirm', 'Confirm each edit'), option('one-edit', 'Auto-accept one edit'), option('current-file', 'Auto-accept current file'), option('request', 'Auto-accept this request'), option('session', 'Auto-accept this session'), option('workspace', 'Auto-accept this workspace'), option('always', 'Always auto-accept file edits')]), 'file-edit-approval'),
+    settingRow('File edit approval', select('file-edit-approval', [option('confirm', 'Confirm each edit'), option('one-edit', 'Auto-accept one edit'), option('current-file', 'Auto-accept current file'), option('request', 'Auto-accept this request'), option('session', 'Auto-accept this session'), option('workspace', 'Auto-accept this workspace'), option('always', 'Always auto-accept file edits')]), 'file-edit-approval', undefined, 'not-opencode'),
+    settingRow('File edit approval', select('opencode-file-edit-approval', [option('confirm', 'Confirm each edit'), option('request', 'Auto-accept each request'), option('workspace', 'Auto-accept this workspace'), option('always', 'Always auto-accept file edits')]), 'opencode-file-edit-approval', undefined, 'opencode'),
     [createElement('p', { className: 'settings-help' }, ['Auto-accept can change files without asking. Terminal and other dangerous tools always need approval.'])],
     settingRow('Composer size', input('composer-height', 'range', { min: 80, max: 320, step: 10, value: 180 }), 'composer-height'),
     settingRow('Prompt rows', input('prompt-rows', 'number', { min: 1, max: 12, step: 1, value: 3 }), 'prompt-rows'),
@@ -147,30 +152,35 @@ const createSettingsContent = (): HTMLDivElement => {
   appendProviderRows(
     settingRow('Provider endpoint', input('provider-endpoint', 'url', { placeholder: 'http://localhost:11434' }), 'provider-endpoint'),
     [createElement('p', { className: 'settings-help', id: 'provider-help' }, ['Endpoint for the selected provider.'])],
-    settingRow('Compatibility profile', select('openai-profile', [option('generic', 'OpenAI-compatible'), option('anthropic', 'Anthropic'), option('gemini', 'Google Gemini'), option('azure-openai', 'Azure OpenAI'), option('lm-studio', 'LM Studio'), option('llama-cpp', 'llama.cpp'), option('vllm', 'vLLM'), option('litellm', 'LiteLLM'), option('custom', 'Custom HTTP')]), 'openai-profile'),
-    settingRow('Azure API version', input('openai-api-version', 'text', { value: '2024-10-21', placeholder: '2024-10-21' }), 'openai-api-version'),
-    settingRow('Custom models path', input('openai-custom-models-path', 'text', { value: '/v1/models' }), 'openai-custom-models-path'),
-    settingRow('Custom chat path', input('openai-custom-chat-path', 'text', { value: '/v1/chat/completions' }), 'openai-custom-chat-path'),
-    settingRow('Custom response format', select('openai-custom-response-format', [option('openai-sse', 'OpenAI SSE'), option('json', 'One JSON response')]), 'openai-custom-response-format'),
-    settingRow('Custom JSON request template', textarea('openai-custom-request-template', { rows: 5, spellcheck: false, placeholder: '{"model":"{{model}}","messages":"{{messages}}","stream":"{{stream}}"}' }), 'openai-custom-request-template'),
-    settingRow('OpenAI API key header', input('openai-api-key-header', 'text', { value: 'Authorization' }), 'openai-api-key-header'),
-    settingRow('OpenAI API key prefix', input('openai-api-key-prefix', 'text', { value: 'Bearer' }), 'openai-api-key-prefix'),
-    settingRow('Organization header', input('openai-organization-header', 'text', { value: 'OpenAI-Organization' }), 'openai-organization-header'),
-    settingRow('Organization value', input('openai-organization', 'text', { placeholder: 'Optional organization ID' }), 'openai-organization'),
-    settingRow('Project header', input('openai-project-header', 'text', { value: 'OpenAI-Project' }), 'openai-project-header'),
-    settingRow('Project value', input('openai-project', 'text', { placeholder: 'Optional project ID' }), 'openai-project'),
-    settingRow('OpenAI proxy', input('openai-proxy', 'url', { placeholder: 'http://proxy.example:8080' }), 'openai-proxy'),
-    settingRow('OpenAI no-proxy hosts', input('openai-no-proxy', 'text', { placeholder: 'localhost, 127.0.0.1, ::1' }), 'openai-no-proxy'),
-    [checkboxSetting('openai-tls-reject-unauthorized', 'Verify OpenAI HTTPS certificates', undefined, true)],
-    settingRow('TLS CA file', input('openai-tls-ca-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-ca-file'),
-    settingRow('TLS client certificate', input('openai-tls-cert-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-cert-file'),
-    settingRow('TLS client key', input('openai-tls-key-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-key-file'),
-    [createElement('p', { className: 'settings-help' }, ['OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.'])],
+    settingRow('OpenCode username', input('opencode-username', 'text', { value: 'opencode', placeholder: 'opencode' }), 'opencode-username', undefined, 'opencode'),
+    settingRow('OpenCode agent', input('opencode-agent', 'text', { placeholder: 'Use server default' }), 'opencode-agent', undefined, 'opencode'),
+    settingRow('Session handling', select('opencode-session-reuse', [option('workspace', 'Reuse workspace session'), option('new', 'New session for every request')]), 'opencode-session-reuse', undefined, 'opencode'),
+    [button('set-opencode-password', 'Set OpenCode password…', { className: 'secondary settings-inline-action', 'data-provider-scope': 'opencode' })],
+    [createElement('p', { className: 'settings-help', 'data-provider-scope': 'opencode' }, ['Password is optional and stays in VS Code SecretStorage.'])],
+    settingRow('Compatibility profile', select('openai-profile', [option('generic', 'OpenAI-compatible'), option('anthropic', 'Anthropic'), option('gemini', 'Google Gemini'), option('azure-openai', 'Azure OpenAI'), option('lm-studio', 'LM Studio'), option('llama-cpp', 'llama.cpp'), option('vllm', 'vLLM'), option('litellm', 'LiteLLM'), option('custom', 'Custom HTTP')]), 'openai-profile', undefined, 'openai-compatible'),
+    settingRow('Azure API version', input('openai-api-version', 'text', { value: '2024-10-21', placeholder: '2024-10-21' }), 'openai-api-version', undefined, 'openai-compatible'),
+    settingRow('Custom models path', input('openai-custom-models-path', 'text', { value: '/v1/models' }), 'openai-custom-models-path', undefined, 'openai-compatible'),
+    settingRow('Custom chat path', input('openai-custom-chat-path', 'text', { value: '/v1/chat/completions' }), 'openai-custom-chat-path', undefined, 'openai-compatible'),
+    settingRow('Custom response format', select('openai-custom-response-format', [option('openai-sse', 'OpenAI SSE'), option('json', 'One JSON response')]), 'openai-custom-response-format', undefined, 'openai-compatible'),
+    settingRow('Custom JSON request template', textarea('openai-custom-request-template', { rows: 5, spellcheck: false, placeholder: '{"model":"{{model}}","messages":"{{messages}}","stream":"{{stream}}"}' }), 'openai-custom-request-template', undefined, 'openai-compatible'),
+    settingRow('OpenAI API key header', input('openai-api-key-header', 'text', { value: 'Authorization' }), 'openai-api-key-header', undefined, 'openai-compatible'),
+    settingRow('OpenAI API key prefix', input('openai-api-key-prefix', 'text', { value: 'Bearer' }), 'openai-api-key-prefix', undefined, 'openai-compatible'),
+    settingRow('Organization header', input('openai-organization-header', 'text', { value: 'OpenAI-Organization' }), 'openai-organization-header', undefined, 'openai-compatible'),
+    settingRow('Organization value', input('openai-organization', 'text', { placeholder: 'Optional organization ID' }), 'openai-organization', undefined, 'openai-compatible'),
+    settingRow('Project header', input('openai-project-header', 'text', { value: 'OpenAI-Project' }), 'openai-project-header', undefined, 'openai-compatible'),
+    settingRow('Project value', input('openai-project', 'text', { placeholder: 'Optional project ID' }), 'openai-project', undefined, 'openai-compatible'),
+    settingRow('OpenAI proxy', input('openai-proxy', 'url', { placeholder: 'http://proxy.example:8080' }), 'openai-proxy', undefined, 'openai-compatible'),
+    settingRow('OpenAI no-proxy hosts', input('openai-no-proxy', 'text', { placeholder: 'localhost, 127.0.0.1, ::1' }), 'openai-no-proxy', undefined, 'openai-compatible'),
+    [checkboxSetting('openai-tls-reject-unauthorized', 'Verify OpenAI HTTPS certificates', undefined, true, 'openai-compatible')],
+    settingRow('TLS CA file', input('openai-tls-ca-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-ca-file', undefined, 'openai-compatible'),
+    settingRow('TLS client certificate', input('openai-tls-cert-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-cert-file', undefined, 'openai-compatible'),
+    settingRow('TLS client key', input('openai-tls-key-file', 'text', { placeholder: 'Optional PEM file path' }), 'openai-tls-key-file', undefined, 'openai-compatible'),
+    [createElement('p', { className: 'settings-help', 'data-provider-scope': 'openai-compatible' }, ['OpenAI-compatible settings apply to that provider only. API key values stay in VS Code SecretStorage.'])],
     [button('test-provider', 'Test provider connection'), button('refresh-models', 'Refresh models', { className: 'secondary' })],
     [button('open-tool-permissions', 'Configure tool permissions…', { className: 'permission-action-button' })],
     [createElement('div', { className: 'settings-help' }, [createElement('strong', {}, ['Tool permissions']), createElement('br'), createElement('span', { id: 'tool-permissions-summary' }, ['Configure which tools Ghost can use.'])])],
-    [button('open-terminal-environment-permissions', 'Configure terminal environment…', { className: 'permission-action-button' })],
-    [createElement('div', { className: 'settings-help' }, [createElement('strong', {}, ['Terminal environment']), createElement('br'), createElement('span', { id: 'terminal-environment-permissions-summary' }, ['Configure which environment variables Ghost passes to commands.'])])]
+    [button('open-terminal-environment-permissions', 'Configure terminal environment…', { className: 'permission-action-button', 'data-provider-scope': 'not-opencode' })],
+    [createElement('div', { className: 'settings-help', 'data-provider-scope': 'not-opencode' }, [createElement('strong', {}, ['Terminal environment']), createElement('br'), createElement('span', { id: 'terminal-environment-permissions-summary' }, ['Configure which environment variables Ghost passes to commands.'])])]
   )
 
   grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'appearance' }, ['Appearance']))
@@ -182,7 +192,7 @@ const createSettingsContent = (): HTMLDivElement => {
 
   grid.append(createElement('div', { className: 'settings-section-heading', 'data-settings-section-heading': 'persistence' }, ['Persistence']))
   appendRows(
-    [checkboxSetting('show-reasoning', 'Show provider reasoning when explicitly returned')],
+    [checkboxSetting('show-reasoning', 'Show provider reasoning when explicitly returned', undefined, false, 'not-opencode')],
     [checkboxSetting('persist-conversations', 'Save conversations and preferences in VS Code storage')],
     [checkboxSetting('compact-layout', 'Compact conversation layout')],
     [checkboxSetting('show-thinking', 'Show thinking details')],
@@ -238,8 +248,8 @@ const createAppShell = (iconUri: string): HTMLDivElement => {
   const providerAreaContent = createElement('div', { className: 'provider-area-content', id: 'provider-area-content' }, [
     createElement('div', { className: 'provider-field' }, [label('Provider', 'provider', { className: 'control-label' }), select('provider', providerOptions, { 'aria-label': 'Model provider' })]),
     createElement('div', { className: 'provider-field' }, [label('Model', 'model', { className: 'control-label' }), select('model', [], { 'aria-label': 'Chat model' })]),
-    createElement('div', { className: 'provider-field' }, [label('Profile', 'model-profile', { className: 'control-label' }), select('model-profile', [], { 'aria-label': 'Model profile' })]),
-    createElement('span', { className: 'model-profile-effective', id: 'model-profile-effective', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),
+    createElement('div', { className: 'provider-field', 'data-provider-scope': 'not-opencode' }, [label('Profile', 'model-profile', { className: 'control-label' }), select('model-profile', [], { 'aria-label': 'Model profile' })]),
+    createElement('span', { className: 'model-profile-effective', id: 'model-profile-effective', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true', 'data-provider-scope': 'not-opencode' }),
     createElement('span', { className: 'model-capabilities', id: 'model-capabilities', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),
     createElement('span', { className: 'connection-indicator', id: 'connection-indicator', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }, [createElement('span', { className: 'status-dot', 'aria-hidden': 'true' }), createElement('span', { id: 'connection-text' }, ['Checking…'])]),
     createElement('span', { className: 'auto-accept-indicator', id: 'auto-accept-indicator', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }),

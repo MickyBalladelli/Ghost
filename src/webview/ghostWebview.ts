@@ -562,6 +562,10 @@ const promptRowsElement = document.getElementById('prompt-rows') as HTMLInputEle
 const promptHistoryLimitElement = document.getElementById('prompt-history-limit') as HTMLInputElement
 const providerEndpointElement = document.getElementById('provider-endpoint') as HTMLInputElement
 const providerHelpElement = document.getElementById('provider-help') as HTMLElement
+const openCodeUsernameElement = document.getElementById('opencode-username') as HTMLInputElement
+const openCodeAgentElement = document.getElementById('opencode-agent') as HTMLInputElement
+const openCodeSessionReuseElement = document.getElementById('opencode-session-reuse') as HTMLSelectElement
+const setOpenCodePasswordElement = document.getElementById('set-opencode-password') as HTMLButtonElement
 const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
 const openAiApiVersionElement = document.getElementById('openai-api-version') as HTMLInputElement
 const openAiCustomModelsPathElement = document.getElementById('openai-custom-models-path') as HTMLInputElement
@@ -593,6 +597,7 @@ const terminalEnvironmentPermissionsListElement = document.getElementById('termi
 const terminalEnvironmentNameElement = document.getElementById('terminal-environment-name') as HTMLInputElement
 const addTerminalEnvironmentElement = document.getElementById('add-terminal-environment') as HTMLButtonElement
 const fileEditApprovalElement = document.getElementById('file-edit-approval') as HTMLSelectElement
+const openCodeFileEditApprovalElement = document.getElementById('opencode-file-edit-approval') as HTMLSelectElement
 const assistantNameElement = document.getElementById('assistant-name') as HTMLInputElement
 const assistantAvatarElement = document.getElementById('assistant-avatar') as HTMLInputElement
 const accentColorElement = document.getElementById('accent-color') as HTMLInputElement
@@ -1028,7 +1033,10 @@ const setEnvironmentPolicy = (name: string, policy: 'allow' | 'ask' | 'deny'): v
 
 const renderPermissionControls = (): void => {
   toolPermissionsListElement.textContent = ''
-  for (const tool of Object.keys(toolDescriptions)) {
+  const policyTools = controls.provider === 'opencode'
+    ? ['ghost_read_file', 'ghost_search_workspace', 'ghost_git_context', 'ghost_apply_edit', 'ghost_run_terminal_command', 'ghost_list_directory']
+    : Object.keys(toolDescriptions)
+  for (const tool of policyTools) {
     const row = document.createElement('div')
     row.className = 'permission-row'
     const details = document.createElement('div')
@@ -1060,9 +1068,9 @@ const renderPermissionControls = (): void => {
     row.append(details, options)
     toolPermissionsListElement.append(row)
   }
-  const toolAllowCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'allow').length
-  const toolAskCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'ask').length
-  const toolDenyCount = Object.keys(toolDescriptions).filter(tool => getToolPolicy(tool) === 'deny').length
+  const toolAllowCount = policyTools.filter(tool => getToolPolicy(tool) === 'allow').length
+  const toolAskCount = policyTools.filter(tool => getToolPolicy(tool) === 'ask').length
+  const toolDenyCount = policyTools.filter(tool => getToolPolicy(tool) === 'deny').length
   toolPermissionsSummaryElement.textContent = `${toolAllowCount} allowed · ${toolAskCount} ask first · ${toolDenyCount} denied`
 
   terminalEnvironmentPermissionsListElement.textContent = ''
@@ -1224,12 +1232,22 @@ const renderSettingsSearch = (): void => {
   for (const section of sections) {
     const matches = !query || section.some(item => item.textContent?.toLowerCase().includes(query) || Array.from(item.querySelectorAll('[id]')).some(element => element.id.toLowerCase().includes(query)))
     for (const item of section) {
-      item.hidden = !matches || (item === providerSettingsFieldsElement && !providerSettingsExpanded)
+      item.hidden = !matches || !providerScopeMatches(item.dataset.providerScope) || (item === providerSettingsFieldsElement && !providerSettingsExpanded)
     }
   }
   const presetSection = document.querySelector<HTMLElement>('.preset-section')
   if (presetSection) {
     presetSection.hidden = Boolean(query) && !presetSection.textContent?.toLowerCase().includes(query)
+  }
+}
+
+const providerScopeMatches = (scope: string | undefined): boolean => (
+  !scope || (scope === 'not-opencode' ? controls.provider !== 'opencode' : scope === controls.provider)
+)
+
+const updateProviderScopedElements = (): void => {
+  for (const element of Array.from(document.querySelectorAll<HTMLElement>('[data-provider-scope]'))) {
+    element.hidden = !providerScopeMatches(element.dataset.providerScope)
   }
 }
 
@@ -1306,6 +1324,10 @@ const renderControls = () => {
   responseLengthElement.value = controls.responseLength
   modeElement.value = controls.mode
   fileEditApprovalElement.value = controls.fileEditApproval
+  const openCodeFileEditScope = controls.fileEditApproval === 'request' || controls.fileEditApproval === 'workspace' || controls.fileEditApproval === 'always'
+    ? controls.fileEditApproval
+    : 'confirm'
+  openCodeFileEditApprovalElement.value = openCodeFileEditScope
   const autoAcceptLabels: Record<AutoAcceptScope, string> = {
     confirm: 'Auto-accept off',
     'one-edit': 'Auto-accept: one edit',
@@ -1316,8 +1338,9 @@ const renderControls = () => {
     always: 'Auto-accept: always'
   }
   const autoAcceptPaused = activeRequest?.autoAcceptDisabled === true
-  autoAcceptIndicatorElement.textContent = autoAcceptPaused ? 'Auto-accept paused for request' : autoAcceptLabels[controls.fileEditApproval]
-  autoAcceptIndicatorElement.classList.toggle('enabled', controls.fileEditApproval !== 'confirm' && !autoAcceptPaused)
+  const displayedAutoAcceptScope = controls.provider === 'opencode' ? openCodeFileEditScope : controls.fileEditApproval
+  autoAcceptIndicatorElement.textContent = autoAcceptPaused ? 'Auto-accept paused for request' : autoAcceptLabels[displayedAutoAcceptScope]
+  autoAcceptIndicatorElement.classList.toggle('enabled', displayedAutoAcceptScope !== 'confirm' && !autoAcceptPaused)
   autoAcceptIndicatorElement.classList.toggle('paused', autoAcceptPaused)
   autoAcceptIndicatorElement.title = autoAcceptPaused ? 'Future file edits will ask for approval in this request.' : 'File edit approval scope'
   composerHeightElement.value = String(composerHeight)
@@ -1337,6 +1360,9 @@ const renderControls = () => {
   workspaceRootElement.disabled = contextData.folders.length <= 1
   promptElement.rows = promptRows
   providerEndpointElement.value = providerEndpoint()
+  openCodeUsernameElement.value = controls.openCodeUsername
+  openCodeAgentElement.value = controls.openCodeAgent
+  openCodeSessionReuseElement.value = controls.openCodeSessionReuse
   openAiApiKeyHeaderElement.value = controls.openaiApiKeyHeader
   openAiProfileElement.value = controls.openaiProfile
   openAiApiVersionElement.value = controls.openaiApiVersion
@@ -1385,6 +1411,7 @@ const renderControls = () => {
       : controls.provider === 'opencode'
         ? 'OpenCode headless server. Ghost connects to it but never starts or stops it.'
         : 'Ollama endpoint.'
+  updateProviderScopedElements()
   renderPermissionControls()
   logLevelElement.value = controls.logLevel
   showReasoningElement.checked = showReasoning
@@ -1654,32 +1681,38 @@ editToolFormElement.addEventListener('submit', event => {
   }
 })
 
-const buildRequestOptions = (): WebviewRequestOptions => ({
-  provider: controls.provider,
-  model: controls.chatModel,
-  modelProfile: controls.modelProfile,
-  modelRole: controls.mode === 'agent' ? 'agent' : 'chat',
-  temperature: controls.temperature,
-  topP: controls.topP,
-  topK: controls.topK,
-  minP: controls.minP,
-  presencePenalty: controls.presencePenalty,
-  repeatPenalty: controls.repeatPenalty,
-  maxContextTokens: controls.maxContextTokens,
-  maxTokens: maxTokensForLength(controls.responseLength),
-  mode: controls.mode,
-  showReasoning,
-  customSystemInstructions: uiPreferences.customSystemInstructions,
-  workspaceRoot: uiPreferences.workspaceRoot || undefined,
-  context: uiPreferences.autoContext ? { ...contextEnabled } : {
-    workspace: false,
-    folders: false,
-    activeFile: false,
-    selection: false,
-    openFiles: false,
-    tools: contextEnabled.tools
+const buildRequestOptions = (): WebviewRequestOptions => {
+  const common: WebviewRequestOptions = {
+    provider: controls.provider,
+    model: controls.chatModel,
+    modelProfile: controls.provider === 'opencode' ? '' : controls.modelProfile,
+    modelRole: controls.mode === 'agent' ? 'agent' : 'chat',
+    maxContextTokens: controls.maxContextTokens,
+    mode: controls.mode,
+    customSystemInstructions: uiPreferences.customSystemInstructions,
+    workspaceRoot: uiPreferences.workspaceRoot || undefined,
+    context: uiPreferences.autoContext ? { ...contextEnabled } : {
+      workspace: false,
+      folders: false,
+      activeFile: false,
+      selection: false,
+      openFiles: false,
+      tools: contextEnabled.tools
+    }
   }
-})
+  if (controls.provider === 'opencode') return common
+  return {
+    ...common,
+    temperature: controls.temperature,
+    topP: controls.topP,
+    topK: controls.topK,
+    minP: controls.minP,
+    presencePenalty: controls.presencePenalty,
+    repeatPenalty: controls.repeatPenalty,
+    maxTokens: maxTokensForLength(controls.responseLength),
+    showReasoning
+  }
+}
 
 const addAttachment = (attachment: Attachment) => {
   if (attachments.length >= maxAttachments && !attachments.some(existing => existing.name === attachment.name && existing.path === attachment.path)) {
@@ -4101,6 +4134,17 @@ providerEndpointElement.addEventListener('change', () => {
   sendSettingsUpdate()
   queueModelRefresh()
 })
+const updateOpenCodeSettings = (): void => {
+  controls.openCodeUsername = openCodeUsernameElement.value.trim() || 'opencode'
+  controls.openCodeAgent = openCodeAgentElement.value.trim()
+  controls.openCodeSessionReuse = openCodeSessionReuseElement.value === 'new' ? 'new' : 'workspace'
+  sendSettingsUpdate()
+  saveState()
+}
+for (const element of [openCodeUsernameElement, openCodeAgentElement, openCodeSessionReuseElement]) {
+  element.addEventListener('change', updateOpenCodeSettings)
+}
+setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key'))
 const updateOpenAiSettings = () => {
   controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()
   controls.openaiApiKeyPrefix = openAiApiKeyPrefixElement.value.trim()
@@ -4231,6 +4275,13 @@ modeElement.addEventListener('change', () => {
 fileEditApprovalElement.addEventListener('change', () => {
   const value = fileEditApprovalElement.value
   controls.fileEditApproval = value === 'one-edit' || value === 'current-file' || value === 'request' || value === 'session' || value === 'workspace' || value === 'always' ? value : 'confirm'
+  controls.autoAcceptScope = controls.fileEditApproval
+  sendSettingsUpdate()
+  saveState()
+})
+openCodeFileEditApprovalElement.addEventListener('change', () => {
+  const value = openCodeFileEditApprovalElement.value
+  controls.fileEditApproval = value === 'request' || value === 'workspace' || value === 'always' ? value : 'confirm'
   controls.autoAcceptScope = controls.fileEditApproval
   sendSettingsUpdate()
   saveState()
