@@ -1955,7 +1955,11 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const adapter = createProviderAdapter(settings.provider, client)
     const online = await client.checkHealth(3000)
     if (!online) {
-      return { connection: 'offline', models: [], modelMetadata: [adapter.capabilities(settings.chatModel)] }
+      return {
+        connection: 'offline',
+        models: [],
+        modelMetadata: settings.provider === 'opencode' ? [] : [adapter.capabilities(settings.chatModel)]
+      }
     }
 
     let models: string[] = []
@@ -1967,7 +1971,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
     }
     const normalizedModels = [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
-    const metadataModels = [...new Set([...normalizedModels, settings.chatModel])]
+    const metadataModels = settings.provider === 'opencode'
+      ? normalizedModels
+      : [...new Set([...normalizedModels, settings.chatModel])]
     return {
       connection: 'online',
       models: normalizedModels,
@@ -2074,7 +2080,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
 
     const connection: 'online' | 'offline' = providerStatus.connection
     let models = providerStatus.models
-    if (models.length === 0) {
+    if (models.length === 0 && settings.provider !== 'opencode') {
       models = [settings.chatModel]
     }
     const modelMetadata = providerStatus.modelMetadata.map(toGhostModelMetadata)

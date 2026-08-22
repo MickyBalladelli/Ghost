@@ -428,7 +428,7 @@ let controls: ControlSettings = {
   enableConversationPersistence: false,
   terminalEnvironmentAllowlist: ['PATH', 'HOME', 'USER', 'USERNAME', 'SHELL', 'ComSpec', 'SystemRoot', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'TERM', 'CI', 'PWD']
 }
-let availableModels: string[] = [controls.chatModel]
+let availableModels: string[] = []
 let availableModelMetadata: ModelMetadata[] = [{
   id: controls.chatModel,
   label: controls.chatModel,
@@ -1151,10 +1151,18 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
 const renderQuickSwitch = (): void => {
   renderProviderOptions(quickProviderElement, controls.provider)
   quickModelElement.textContent = ''
-  for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
+  const models = Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
+  for (const model of models) {
     const option = document.createElement('option')
     option.value = model
     option.textContent = model
+    quickModelElement.append(option)
+  }
+  if (models.length === 0) {
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = 'No models found'
+    option.disabled = true
     quickModelElement.append(option)
   }
   quickModelElement.value = controls.chatModel
@@ -1253,13 +1261,21 @@ providerAreaToggleElement.addEventListener('click', () => {
 const renderControls = () => {
   renderProviderOptions(providerElement, controls.provider)
   modelElement.textContent = ''
-  for (const model of Array.from(new Set([controls.chatModel, ...availableModels]))) {
+  const models = Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
+  for (const model of models) {
     const option = document.createElement('option')
     option.value = model
     option.textContent = model
     modelElement.append(option)
   }
-    modelElement.value = controls.chatModel
+  if (models.length === 0) {
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = 'No models found'
+    option.disabled = true
+    modelElement.append(option)
+  }
+  modelElement.value = controls.chatModel
   modelProfileElement.textContent = ''
   const defaultProfileOption = document.createElement('option')
   defaultProfileOption.value = ''
@@ -3487,7 +3503,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
     const selectedModel = incomingModels.includes(message.settings.chatModel)
       ? message.settings.chatModel
-      : incomingModels[0] ?? message.settings.chatModel
+      : incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : message.settings.chatModel)
     controls = {
       ...message.settings,
       chatModel: selectedModel,
@@ -4039,6 +4055,9 @@ mentionMenuElement.addEventListener('click', event => {
 
 providerElement.addEventListener('change', () => {
   controls.provider = providerElement.value as GhostProvider
+  if (controls.provider === 'opencode') {
+    controls.chatModel = ''
+  }
   availableModels = []
   availableModelMetadata = []
   renderControls()
