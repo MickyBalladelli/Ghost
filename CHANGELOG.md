@@ -4,6 +4,9 @@ All notable changes to this extension are documented here.
 
 ## 1.2.1 - 2026-08-21
 
+- Add project-level OpenCode permission defaults for guarded edits, shell commands, and external directories.
+- Create safe OpenCode project permissions automatically when a user's workspace has no `opencode.json`.
+- Apply and verify OpenCode permission defaults through the live project config API so newly created config works without restarting the server.
 - Keep unchanged provider polls from redrawing the webview, preserving text selection and input focus.
 - Poll provider health every 2 seconds while Ghost is open, detecting both reconnection and disconnection.
 - Fix OpenCode model discovery in the provider controls. OpenCode models no longer fall back to the model selected for another provider.

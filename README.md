@@ -178,7 +178,7 @@ opencode serve --hostname 127.0.0.1 --port 4096
 
 Set `ghost.provider` to `opencode`. Ghost checks `/global/health`, requires a compatible OpenCode 1.x server, discovers `provider/model` ids, routes every request to the selected workspace root, and stores only the selected session id in VS Code workspace storage. Use **Ghost: New OpenCode Session**, **Ghost: Select OpenCode Session**, or **Ghost: Delete Current OpenCode Session** to manage it.
 
-OpenCode allows most tools by default. Ghost therefore refuses OpenCode requests until file edits and shell commands require approval. Add this to the project or global `opencode.json`:
+OpenCode allows most tools by default. Before each delegated request, Ghost creates these safe project defaults when `opencode.json` is missing, applies them through OpenCode's project config API, and verifies the effective permissions:
 
 ```json
 {

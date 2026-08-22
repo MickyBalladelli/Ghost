@@ -37,6 +37,7 @@ import { describesWorkspaceChange, isLikelyConversationalPrompt } from './worksp
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
 import { OpenCodeClient, OpenCodePermissionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
+import { ensureOpenCodeProjectConfig } from '../services/openCodeProjectConfig'
 import type { GhostStorage } from '../runtimeDependencies'
 import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy'
 
@@ -1098,6 +1099,7 @@ async function runOpenCodeRequest(
     response.markdown(message)
     return
   }
+  await ensureOpenCodeProjectConfig(directory)
   const key = openCodeSessionStorageKey(directory)
   const sessionId = settings.openCodeSessionReuse === 'workspace' ? storage?.get<string>(key) : undefined
   const mutatingMode = requestOptions.mode === 'edit' || requestOptions.mode === 'agent'
