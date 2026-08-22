@@ -3220,9 +3220,11 @@ const moveApprovalHunk = (card: HTMLElement, direction: 1 | -1): void => {
 
 const focusNextApprovalCard = (toolCallId: string): void => {
   window.requestAnimationFrame(() => {
-    const cards = Array.from(messagesElement.querySelectorAll<HTMLElement>('.tool-approval-card'))
-    const currentIndex = cards.findIndex(card => card.dataset.toolCallId === toolCallId)
-    const nextCard = cards[currentIndex + 1] ?? cards[currentIndex] ?? cards[0]
+    const toolCards = Array.from(messagesElement.querySelectorAll<HTMLElement>('.tool-progress[data-tool-call-id]'))
+    const currentIndex = toolCards.findIndex(card => card.dataset.toolCallId === toolCallId)
+    const nextCard = currentIndex < 0
+      ? undefined
+      : toolCards.slice(currentIndex + 1).find(card => card.classList.contains('tool-approval-card'))
     const focusTarget = nextCard?.querySelector<HTMLInputElement>('input') ?? nextCard?.querySelector<HTMLButtonElement>('button')
     focusTarget?.focus()
   })
@@ -3494,6 +3496,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       capabilities: ['chat']
     }))
     connection = message.connection
+    uiPreferences.firstRunSetupComplete = message.firstRunSetupComplete
     viewStatus = connection === 'offline' ? 'offline' : 'ready'
     contextData = { ...message.context, tools: message.tools }
     render(false)
@@ -3921,6 +3924,7 @@ const isExtensionMessage = (value: unknown): value is GhostExtensionMessage => {
       typeof message.settings === 'object' &&
       Array.isArray(message.models) &&
       (message.modelMetadata === undefined || Array.isArray(message.modelMetadata)) &&
+      typeof message.firstRunSetupComplete === 'boolean' &&
       (message.connection === 'online' || message.connection === 'offline' || message.connection === 'unknown')
     )
   }
@@ -4397,6 +4401,7 @@ setupTestRequestElement.addEventListener('click', () => {
 })
 finishFirstRunElement.addEventListener('click', () => {
   uiPreferences.firstRunSetupComplete = true
+  post('complete-first-run')
   setModalVisibility(firstRunModalElement, false)
 })
 document.getElementById('history')?.addEventListener('click', () => {

@@ -191,7 +191,7 @@ interface GhostRequestEnvelope extends GhostWebviewEnvelope {
 
 export type GhostWebviewMessage =
   | (GhostWebviewEnvelope & { type: 'ready' })
-  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' | 'set-provider-api-key' })
+  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' | 'set-provider-api-key' | 'complete-first-run' })
   | (GhostWebviewEnvelope & { type: 'export'; state?: GhostPersistedState })
   | (GhostWebviewEnvelope & { type: 'persist-state'; state: GhostPersistedState })
   | (GhostRequestEnvelope & {
@@ -312,6 +312,7 @@ export type GhostExtensionMessage =
       models: string[]
       modelMetadata?: GhostModelMetadata[]
       connection: 'online' | 'offline' | 'unknown'
+      firstRunSetupComplete: boolean
       context: {
         workspaceName: string
         folders: string[]
@@ -505,7 +506,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
     return false
   }
 
-  if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'set-provider-api-key', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
+  if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'set-provider-api-key', 'complete-first-run', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
     return true
   }
   if (value.type === 'export') {

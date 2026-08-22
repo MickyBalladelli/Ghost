@@ -114,10 +114,6 @@ Fast tests (`npm run test:fast`) never load VS Code. Host tests (`npm run test:h
 
 ## P4 — Docs, release, and developer experience
 
-- [ ] **Align versions.** After the next real release: `package.json` == lockfile == README “Current release” == latest `CHANGELOG.md` heading == examples in `docs/release.md`. Changelog currently skips several patch numbers (`1.1.91`, `1.1.81`, `1.1.80`, …); that is fine historically, but stop shipping silent `npm version patch` bumps.
-
-- [ ] **Add GitHub Actions** if automated gates are wanted later: `npm ci`, `compile`, `test:fast`, `security:audit`, `vsce package`, `release:check`, and host tests on Linux (xvfb), macOS, and Windows. Do not auto-publish from every push. Release docs currently describe local gates only.
-
 - [x] Keep **Dependabot** (or equivalent) if the dependency policy stays as written; otherwise rewrite `docs/dependency-policy.md`. The policy now describes local `npm ci` / `security:audit` checks and does not claim Dependabot or GitHub Actions.
 
 - [ ] First-run / README: README still documents `1.1.19` behavior in places that have since changed (timeouts, log level vs `enableDebugLogging`, auto-accept scopes). After the version sync, re-read Highlights, Settings, and Troubleshooting against `package.json`.

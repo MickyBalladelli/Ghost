@@ -102,6 +102,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private negotiatedProtocolVersion: GhostProtocolVersion = GHOST_WEBVIEW_PROTOCOL_VERSION
   private static readonly globalStateKey = 'ghost.global.v2'
   private static readonly workspaceStateKey = 'ghost.workspace.v2'
+  private static readonly firstRunSetupCompleteKey = 'ghost.global.firstRunSetupComplete'
   private static readonly providerStatusCacheTtlMs = 30_000
   private static readonly providerStatusPollIntervalMs = 2_000
   private providerStatusPollTimer?: ReturnType<typeof setTimeout>
@@ -2256,6 +2257,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       models,
       modelMetadata,
       connection,
+      firstRunSetupComplete: this.globalState?.get<boolean>(GhostViewProvider.firstRunSetupCompleteKey) === true,
       context: workspaceContext,
       tools: allowedTools
     })
@@ -2598,6 +2600,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         return
       case 'set-provider-api-key':
         await vscode.commands.executeCommand('ghost.setProviderApiKey')
+        return
+      case 'complete-first-run':
+        await this.globalState?.update(GhostViewProvider.firstRunSetupCompleteKey, true)
         return
       case 'submit':
         await this.submit(message.requestId, message.conversationId, message.prompt, message.options, message.attachments)

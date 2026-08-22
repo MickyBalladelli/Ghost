@@ -1,7 +1,13 @@
 # Changelog
 
 All notable changes to this extension are documented here.
-## 1.2.2 - 2026-08-21
+## 1.2.3 - 2026-08-22
+
+- Keep the viewport in place after approving a tool, and focus only a later pending approval instead of jumping to an older card.
+- Remember completed first-run setup globally, independent of conversation-history persistence, so the setup dialog stays dismissed across projects and reloads.
+
+
+## 1.2.2 - 2026-08-22
 
 - Settings update for OpenCode
 - Keep response text, progress, tools, approvals, results, and plan updates in chronological order so the newest request activity stays at the bottom.
