@@ -4,6 +4,8 @@ All notable changes to this extension are documented here.
 ## 1.2.5 - 2026-08-22
 
 - Store Ghost's OpenCode safety defaults in the global `~/.config/opencode/opencode.json` instead of the project root.
+- Stop patching OpenCode's project config API, which could recreate a workspace-local `opencode.json`.
+- Keep the Provider selector wide enough and wrap Refresh models in narrow layouts.
 - Add the root `update-version.sh` helper for patch version bumps.
 - Separate inline completion from chat workflow modes and add an Enable inline completion setting.
 - Move the chat workflow selector into the composer footer beside Send.

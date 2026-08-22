@@ -298,13 +298,14 @@ button:focus-visible {
 .provider-select-row {
   align-items: stretch;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
 
-.provider-select-row select {
+.control-strip .provider-select-row select {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 150px;
   width: auto;
 }
 

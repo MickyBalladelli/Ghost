@@ -178,7 +178,7 @@ opencode serve --hostname 127.0.0.1 --port 4096
 
 Set `ghost.provider` to `opencode`. Ghost checks `/global/health`, requires a compatible OpenCode 1.x server, discovers `provider/model` ids, routes every request to the selected workspace root, and stores only the selected session id in VS Code workspace storage. Use **Ghost: New OpenCode Session**, **Ghost: Select OpenCode Session**, or **Ghost: Delete Current OpenCode Session** to manage it.
 
-OpenCode allows most tools by default. Before each delegated request, Ghost creates these safe global defaults at `~/.config/opencode/opencode.json` when the file is missing, applies them through OpenCode's config API, and verifies the effective permissions:
+OpenCode allows most tools by default. Before each delegated request, Ghost creates these safe global defaults at `~/.config/opencode/opencode.json` when the file is missing and verifies the effective permissions:
 
 ```json
 {
@@ -190,6 +190,8 @@ OpenCode allows most tools by default. Before each delegated request, Ghost crea
   }
 }
 ```
+
+Ghost does not update OpenCode through `PATCH /config`, because OpenCode can save that API update as a project-local `opencode.json`. If the server was already running when Ghost created the global file, restart `opencode serve` so it loads the global permissions.
 
 Ghost answers OpenCode permission requests with one-request approvals only, applies its allow/ask/deny lists, rejects external-workspace paths, aborts the OpenCode session when Stop is pressed, and checks the final session diff. Ask and Explain mode reject edit and shell permissions. OpenCode performs its own edits, so Ghost's source-editor staged hunk preview is not used on this provider. Configure `OPENCODE_SERVER_PASSWORD` on the server and store the same password in VS Code SecretStorage when authentication is needed. Ghost refuses to send that password over non-loopback HTTP; use HTTPS for a remote server. Inline completion remains on Ollama or a FIM-capable OpenAI-compatible provider.
 

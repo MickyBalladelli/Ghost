@@ -82,9 +82,11 @@ suite('OpenCode client', () => {
   })
 
   test('rejects permissive OpenCode mutation defaults', async () => {
+    const methods: string[] = []
     const client = new OpenCodeClient('http://127.0.0.1:4096', {
-      fetchImpl: async input => {
+      fetchImpl: async (input, init) => {
         const url = new URL(String(input))
+        methods.push(init?.method ?? 'GET')
         if (url.pathname === '/global/health') return jsonResponse({ healthy: true, version: '1.18.4' })
         if (url.pathname === '/config') return jsonResponse({})
         return jsonResponse({}, 404)
@@ -93,8 +95,9 @@ suite('OpenCode client', () => {
 
     await assert.rejects(
       client.run({ prompt: 'Edit file', directory: '/workspace' }),
-      /permission\.edit and permission\.bash/
+      /requires guarded edit, bash, and external-directory permissions/
     )
+    assert.equal(methods.includes('PATCH'), false)
   })
 
   test('answers session permission events with a one-request response', async () => {

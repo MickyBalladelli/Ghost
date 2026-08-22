@@ -273,33 +273,6 @@ function guardedPermission(config: Record<string, unknown>, agent: string | unde
   return decision === 'ask' || decision === 'deny'
 }
 
-function safePermissionConfig(config: Record<string, unknown>, agent: string | undefined): Record<string, unknown> {
-  const rootPermission = record(config.permission) ?? {}
-  const permission: Record<string, unknown> = { ...rootPermission }
-  if (!guardedPermission(config, undefined, 'edit')) permission.edit = 'ask'
-  if (!guardedPermission(config, undefined, 'bash')) permission.bash = 'ask'
-  if (!guardedPermission(config, undefined, 'external_directory')) permission.external_directory = 'deny'
-
-  const patch: Record<string, unknown> = { permission }
-  if (!agent) return patch
-
-  const agents = record(config.agent) ?? {}
-  const selectedAgent = record(agents[agent])
-  if (!selectedAgent) return patch
-
-  const configWithSafeRoot = { ...config, permission }
-  const agentPermission = record(selectedAgent.permission) ?? {}
-  const safeAgentPermission: Record<string, unknown> = { ...agentPermission }
-  if (!guardedPermission(configWithSafeRoot, agent, 'edit')) safeAgentPermission.edit = 'ask'
-  if (!guardedPermission(configWithSafeRoot, agent, 'bash')) safeAgentPermission.bash = 'ask'
-  if (!guardedPermission(configWithSafeRoot, agent, 'external_directory')) safeAgentPermission.external_directory = 'deny'
-  patch.agent = {
-    ...agents,
-    [agent]: { ...selectedAgent, permission: safeAgentPermission }
-  }
-  return patch
-}
-
 export class OpenCodeClient implements ProviderClient {
   private readonly username: string
   private readonly password?: () => string | undefined
@@ -554,23 +527,7 @@ export class OpenCodeClient implements ProviderClient {
       let bashGuarded = guardedPermission(config, agent, 'bash')
       let externalDirectoryGuarded = guardedPermission(config, agent, 'external_directory')
       if (!editGuarded || !bashGuarded || !externalDirectoryGuarded) {
-        await this.request('/config', {
-          method: 'PATCH',
-          directory: options.directory,
-          signal: options.signal,
-          body: safePermissionConfig(config, agent)
-        })
-        config = record(await this.request('/config', {
-          method: 'GET',
-          directory: options.directory,
-          signal: options.signal
-        })) ?? {}
-        editGuarded = guardedPermission(config, agent, 'edit')
-        bashGuarded = guardedPermission(config, agent, 'bash')
-        externalDirectoryGuarded = guardedPermission(config, agent, 'external_directory')
-      }
-      if (!editGuarded || !bashGuarded || !externalDirectoryGuarded) {
-        throw new Error(`OpenCode safety setup failed for ${options.directory}. Ghost could not apply guarded edit, bash, and external-directory permissions through the OpenCode config API.`)
+        throw new Error(`OpenCode safety setup failed for ${options.directory}. Ghost requires guarded edit, bash, and external-directory permissions in ~/.config/opencode/opencode.json. Restart opencode serve after changing that file. Ghost will not create a project opencode.json.`)
       }
     }
 
