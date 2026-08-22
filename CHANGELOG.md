@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
+- Add a complete OpenCode integration backlog covering the headless HTTP API, sessions, streaming, permissions, workspace safety, and the optional MCP bridge.
 - Add fast tests for conversational prompts, agent stop policy, terminal audit/cwd jail, and the one-edit plus failed-read regressions. Move endpoint, redaction, and tool-result-limit helpers into `test:fast`. Document the first-run VS Code download for host tests.
 - Extract Ghost webview CSS to `src/webview/ghostWebview.css` and keep the CSP nonce on the stylesheet link.
 - Share protocol unions and tool names through `ghostProtocolTypes.ts` so the webview uses `autoAcceptScope` as the real setting.
