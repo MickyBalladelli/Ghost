@@ -1973,6 +1973,16 @@ textarea {
   flex: 0 0 auto;
 }
 
+.workflow-mode-select {
+  background: var(--vscode-input-background, transparent);
+  border: 1px solid var(--ghost-border);
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  flex: 0 0 auto;
+  max-width: 150px;
+  min-width: 0;
+  padding: 3px 5px;
+}
+
 #send {
   flex: 0 0 auto;
 }
