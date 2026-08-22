@@ -1,3 +1,5 @@
+import type { ModelPricing, ModelPricingStatus } from '../services/providerAdapter'
+
 export type GhostRequestStatus =
   | 'idle'
   | 'preparing'
@@ -125,6 +127,9 @@ export interface GhostModelMetadata {
     presencePenalty: boolean
     repeatPenalty: boolean
   }
+  displayName?: string
+  pricing?: ModelPricing
+  pricingStatus?: ModelPricingStatus
   capabilities?: string[]
 }
 

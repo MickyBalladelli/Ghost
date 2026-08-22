@@ -6,6 +6,14 @@ import { GhostError } from '../ghostErrors'
 export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions' | 'opencode-server'
 export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'rate-limit' | 'auth' | 'invalid-request' | 'http' | 'unknown'
+export type ModelPricingStatus = 'free' | 'paid' | 'unknown'
+
+export interface ModelPricing {
+  input?: number
+  output?: number
+  cacheRead?: number
+  cacheWrite?: number
+}
 
 export interface ModelCapabilityRecord {
   model: string
@@ -26,6 +34,9 @@ export interface ModelCapabilityRecord {
     presencePenalty: boolean
     repeatPenalty: boolean
   }
+  displayName?: string
+  pricing?: ModelPricing
+  pricingStatus?: ModelPricingStatus
 }
 
 export interface ProviderErrorOptions {

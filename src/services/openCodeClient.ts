@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 
-import type { ProviderClient } from './providerAdapter'
+import type { ModelPricing, ProviderClient } from './providerAdapter'
 import type { ChatRequestOptions } from './chatTypes'
 import { redactSensitiveText } from '../privacy/redact'
 
@@ -16,6 +16,16 @@ export interface OpenCodeHealth {
   version?: string
   compatible: boolean
   error?: string
+}
+
+export interface OpenCodeModelMetadata {
+  id: string
+  providerID: string
+  displayName?: string
+  contextWindow?: number
+  outputLimit?: number
+  pricing?: ModelPricing
+  pricingStatus: 'free' | 'paid' | 'unknown'
 }
 
 export interface OpenCodeSession {
@@ -80,6 +90,44 @@ const record = (value: unknown): Record<string, unknown> | undefined => (
 )
 
 const textValue = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined
+
+const finiteValue = (value: unknown): number | undefined => typeof value === 'number' && Number.isFinite(value) ? value : undefined
+
+const modelPricing = (value: Record<string, unknown> | undefined): Pick<OpenCodeModelMetadata, 'pricing' | 'pricingStatus'> => {
+  const rawCost = value?.cost
+  const costEntries = Array.isArray(rawCost) ? rawCost : [rawCost]
+  const entries = costEntries
+    .map(entry => record(entry))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+  const values = entries.flatMap(entry => {
+    const cache = record(entry.cache)
+    return [
+      finiteValue(entry.input),
+      finiteValue(entry.output),
+      finiteValue(cache?.read),
+      finiteValue(cache?.write)
+    ].filter((item): item is number => item !== undefined)
+  })
+  if (values.length === 0) {
+    return { pricingStatus: 'unknown' }
+  }
+  const first = entries[0]
+  const firstCache = record(first?.cache)
+  const input = finiteValue(first?.input)
+  const output = finiteValue(first?.output)
+  const cacheRead = finiteValue(firstCache?.read)
+  const cacheWrite = finiteValue(firstCache?.write)
+  const pricing: ModelPricing = {
+    ...(input === undefined ? {} : { input }),
+    ...(output === undefined ? {} : { output }),
+    ...(cacheRead === undefined ? {} : { cacheRead }),
+    ...(cacheWrite === undefined ? {} : { cacheWrite })
+  }
+  return {
+    pricing,
+    pricingStatus: values.some(item => item > 0) ? 'paid' : 'free'
+  }
+}
 
 const versionParts = (version: string): number[] => version
   .replace(/^v/i, '')
@@ -291,12 +339,12 @@ export class OpenCodeClient implements ProviderClient {
     return health.healthy && health.compatible
   }
 
-  async listModels(signal?: AbortSignal): Promise<string[]> {
+  async listModelsWithMetadata(signal?: AbortSignal): Promise<OpenCodeModelMetadata[]> {
     const payload = await this.request('/provider', { method: 'GET', signal })
     const body = record(payload)
     const providers = Array.isArray(body?.all) ? body.all : Array.isArray(body?.providers) ? body.providers : []
     const connected = new Set(Array.isArray(body?.connected) ? body.connected.filter(item => typeof item === 'string') as string[] : [])
-    const models: string[] = []
+    const models: OpenCodeModelMetadata[] = []
     for (const value of providers) {
       const provider = record(value)
       const providerID = textValue(provider?.id) ?? textValue(provider?.providerID)
@@ -306,19 +354,45 @@ export class OpenCodeClient implements ProviderClient {
         for (const modelValue of providerModels) {
           const model = record(modelValue)
           const modelID = textValue(model?.id) ?? textValue(model?.modelID) ?? textValue(modelValue)
-          if (modelID) models.push(`${providerID}/${modelID}`)
+          if (modelID) {
+            const limit = record(model?.limit)
+            models.push({
+              id: `${providerID}/${modelID}`,
+              providerID,
+              ...(textValue(model?.name) ? { displayName: textValue(model?.name) } : {}),
+              ...(finiteValue(limit?.context) === undefined ? {} : { contextWindow: finiteValue(limit?.context) }),
+              ...(finiteValue(limit?.output) === undefined ? {} : { outputLimit: finiteValue(limit?.output) }),
+              ...modelPricing(model)
+            })
+          }
         }
       } else {
         const modelRecord = record(providerModels)
         if (modelRecord) {
           for (const [modelID, modelValue] of Object.entries(modelRecord)) {
-            const resolvedID = textValue(record(modelValue)?.id) ?? textValue(record(modelValue)?.modelID) ?? modelID
-            if (resolvedID) models.push(`${providerID}/${resolvedID}`)
+            const model = record(modelValue)
+            const resolvedID = textValue(model?.id) ?? textValue(model?.modelID) ?? modelID
+            if (resolvedID) {
+              const limit = record(model?.limit)
+              models.push({
+                id: `${providerID}/${resolvedID}`,
+                providerID,
+                ...(textValue(model?.name) ? { displayName: textValue(model?.name) } : {}),
+                ...(finiteValue(limit?.context) === undefined ? {} : { contextWindow: finiteValue(limit?.context) }),
+                ...(finiteValue(limit?.output) === undefined ? {} : { outputLimit: finiteValue(limit?.output) }),
+                ...modelPricing(model)
+              })
+            }
           }
         }
       }
     }
-    return [...new Set(models)].sort()
+    return [...new Map(models.map(model => [model.id, model])).values()].sort((left, right) => left.id.localeCompare(right.id))
+  }
+
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    const models = await this.listModelsWithMetadata(signal)
+    return models.map(model => model.id)
   }
 
   async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {

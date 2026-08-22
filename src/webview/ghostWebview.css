@@ -370,6 +370,16 @@ button:focus-visible {
   padding: 7px 8px;
 }
 
+.model-options-separator {
+  border-top: 1px solid var(--ghost-border);
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 8px 4px;
+  text-transform: uppercase;
+}
+
 select,
 input[type='text'],
 input[type='search'],

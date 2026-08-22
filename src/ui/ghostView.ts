@@ -2063,22 +2063,36 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
     }
 
-    let models: string[] = []
-    if (client.listModels) {
-      try {
-        models = await client.listModels()
-      } catch (error) {
-        this.log('warn', 'provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
+    let normalizedModels: string[] = []
+    let modelMetadata: ReturnType<typeof adapter.capabilities>[] = []
+    try {
+      if (settings.provider === 'opencode' && client instanceof OpenCodeClient) {
+        const discoveredModels = await client.listModelsWithMetadata()
+        normalizedModels = [...new Set(discoveredModels.map(model => model.id))]
+        modelMetadata = discoveredModels.map(model => {
+          const capabilities = adapter.capabilities(model.id)
+          return {
+            ...capabilities,
+            ...(model.displayName ? { displayName: model.displayName } : {}),
+            ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+            ...(model.outputLimit === undefined ? {} : { outputLimit: model.outputLimit }),
+            ...(model.pricing ? { pricing: model.pricing } : {}),
+            pricingStatus: model.pricingStatus
+          }
+        })
+      } else {
+        const models = client.listModels ? await client.listModels() : []
+        normalizedModels = [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
+        const metadataModels = [...new Set([...normalizedModels, settings.chatModel])]
+        modelMetadata = metadataModels.map(model => adapter.capabilities(model))
       }
+    } catch (error) {
+      this.log('warn', 'provider is online but model discovery failed', error instanceof Error ? error.message : String(error))
     }
-    const normalizedModels = [...new Set(models.filter(model => typeof model === 'string' && model.trim()).map(model => model.trim()))]
-    const metadataModels = settings.provider === 'opencode'
-      ? normalizedModels
-      : [...new Set([...normalizedModels, settings.chatModel])]
     return {
       connection: 'online',
       models: normalizedModels,
-      modelMetadata: metadataModels.map(model => adapter.capabilities(model))
+      modelMetadata
     }
   }
 

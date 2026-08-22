@@ -1327,6 +1327,43 @@ providerAreaToggleElement.addEventListener('click', () => {
 let activeModelOptionIndex = -1
 
 const modelChoices = (): string[] => Array.from(new Set([controls.chatModel, ...availableModels].filter(Boolean)))
+const modelMetadataFor = (model: string): ModelMetadata | undefined => availableModelMetadata.find(metadata => metadata.id === model)
+
+const formatModelPrice = (value: number | undefined): string => {
+  if (value === undefined) return 'unknown'
+  if (value === 0) return 'free'
+  return `$${value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')} / 1M tokens`
+}
+
+const formatModelPricing = (metadata: ModelMetadata | undefined): string[] => {
+  if (!metadata || metadata.pricingStatus === undefined || metadata.pricingStatus === 'unknown') {
+    return ['Cost: unknown']
+  }
+  if (metadata.pricingStatus === 'free') {
+    return ['Cost: free']
+  }
+  const pricing = metadata.pricing
+  return [
+    `Input: ${formatModelPrice(pricing?.input)}`,
+    `Output: ${formatModelPrice(pricing?.output)}`,
+    ...(pricing?.cacheRead === undefined ? [] : [`Cache read: ${formatModelPrice(pricing.cacheRead)}`]),
+    ...(pricing?.cacheWrite === undefined ? [] : [`Cache write: ${formatModelPrice(pricing.cacheWrite)}`])
+  ]
+}
+
+const formatModelHover = (model: string): string => {
+  const metadata = modelMetadataFor(model)
+  if (!metadata) {
+    return `${model}\nMetadata unavailable`
+  }
+  return [
+    metadata.displayName && metadata.displayName !== model ? metadata.displayName : model,
+    ...formatModelPricing(metadata),
+    metadata.contextWindow ? `Context: ${metadata.contextWindow.toLocaleString()} tokens` : '',
+    metadata.outputLimit ? `Output: ${metadata.outputLimit.toLocaleString()} tokens` : '',
+    metadata.capabilities && metadata.capabilities.length > 0 ? `Capabilities: ${metadata.capabilities.join(', ')}` : ''
+  ].filter(Boolean).join('\n')
+}
 
 const closeModelOptions = (restoreSelection = false): void => {
   modelOptionsElement.hidden = true
@@ -1352,34 +1389,52 @@ const setActiveModelOption = (index: number): void => {
 const renderModelOptions = (show = true): void => {
   const rawQuery = modelElement.value.trim()
   const query = rawQuery === controls.chatModel ? '' : rawQuery.toLocaleLowerCase()
-  const choices = modelChoices()
+  const filteredChoices = modelChoices()
     .filter(model => !query || model.toLocaleLowerCase().includes(query))
     .sort((left, right) => {
+      const leftGroup = modelMetadataFor(left)?.pricingStatus === 'free' ? 0 : 1
+      const rightGroup = modelMetadataFor(right)?.pricingStatus === 'free' ? 0 : 1
+      if (leftGroup !== rightGroup) return leftGroup - rightGroup
       const leftStarts = left.toLocaleLowerCase().startsWith(query)
       const rightStarts = right.toLocaleLowerCase().startsWith(query)
       return leftStarts === rightStarts ? left.localeCompare(right) : leftStarts ? -1 : 1
     })
+  const freeChoices = filteredChoices.filter(model => modelMetadataFor(model)?.pricingStatus === 'free').slice(0, 100)
+  const otherChoices = filteredChoices.filter(model => modelMetadataFor(model)?.pricingStatus !== 'free').slice(0, Math.max(0, 100 - freeChoices.length))
+  const choices = [...freeChoices, ...otherChoices]
   modelOptionsElement.replaceChildren()
-  for (const [index, model] of choices.slice(0, 100).entries()) {
+  let optionIndex = 0
+  const appendModelOption = (model: string): void => {
     const option = document.createElement('button')
     option.type = 'button'
-    option.id = `model-option-${index}`
+    option.id = `model-option-${optionIndex}`
     option.className = 'model-option'
     option.dataset.model = model
     option.setAttribute('role', 'option')
     option.setAttribute('aria-selected', String(model === controls.chatModel))
+    option.title = formatModelHover(model)
     option.textContent = model
     modelOptionsElement.append(option)
+    optionIndex += 1
   }
-  if (choices.length === 0) {
+  freeChoices.forEach(appendModelOption)
+  if (freeChoices.length > 0 && otherChoices.length > 0) {
+    const separator = document.createElement('div')
+    separator.className = 'model-options-separator'
+    separator.setAttribute('role', 'separator')
+    separator.textContent = 'Other models'
+    modelOptionsElement.append(separator)
+  }
+  otherChoices.forEach(appendModelOption)
+  if (filteredChoices.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'model-option-empty'
     empty.textContent = 'No matching models'
     modelOptionsElement.append(empty)
-  } else if (choices.length > 100) {
+  } else if (filteredChoices.length > 100) {
     const more = document.createElement('div')
     more.className = 'model-option-empty'
-    more.textContent = `${choices.length - 100} more matches — keep typing`
+    more.textContent = `${filteredChoices.length - choices.length} more matches — keep typing`
     modelOptionsElement.append(more)
   }
   modelOptionsElement.hidden = !show
@@ -1401,6 +1456,7 @@ const selectChatModel = (model: string): void => {
 const renderControls = () => {
   renderProviderOptions(providerElement, controls.provider)
   modelElement.value = controls.chatModel
+  modelElement.title = formatModelHover(controls.chatModel)
   closeModelOptions()
   modelProfileElement.textContent = ''
   const defaultProfileOption = document.createElement('option')

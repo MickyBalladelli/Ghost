@@ -292,6 +292,9 @@ export interface ModelMetadata {
   supportsFIM?: boolean
   supportsStreaming?: boolean
   supportsSampling?: { temperature: boolean; topP: boolean; topK: boolean; minP: boolean; presencePenalty: boolean; repeatPenalty: boolean }
+  displayName?: string
+  pricing?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number }
+  pricingStatus?: 'free' | 'paid' | 'unknown'
   capabilities: string[]
 }
 

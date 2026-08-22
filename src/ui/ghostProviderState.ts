@@ -50,7 +50,7 @@ export const toGhostModelMetadata = (capability: ModelCapabilityRecord): GhostMo
   ].filter(Boolean)
   return {
     id: capability.model,
-    label: capability.model,
+    label: capability.displayName ?? capability.model,
     provider: capability.provider,
     contextWindow: capability.contextWindow,
     outputLimit: capability.outputLimit,
@@ -61,6 +61,9 @@ export const toGhostModelMetadata = (capability: ModelCapabilityRecord): GhostMo
     supportsFIM: capability.supportsFIM,
     supportsStreaming: capability.supportsStreaming,
     supportsSampling: capability.supportsSampling,
+    ...(capability.displayName ? { displayName: capability.displayName } : {}),
+    ...(capability.pricing ? { pricing: capability.pricing } : {}),
+    ...(capability.pricingStatus ? { pricingStatus: capability.pricingStatus } : {}),
     capabilities
   }
 }
