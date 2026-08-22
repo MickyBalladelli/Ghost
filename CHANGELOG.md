@@ -4,6 +4,9 @@ All notable changes to this extension are documented here.
 ## 1.2.2 - 2026-08-21
 
 - Settings update for OpenCode
+- Keep response text, progress, tools, approvals, results, and plan updates in chronological order so the newest request activity stays at the bottom.
+- Attach completion evidence to its request and distinguish completed tasks, unfinished work, unverified changes, completed responses, and stopped requests.
+- Finish Ghost requests when OpenCode reports an active session has become idle, recover the persisted final answer if the message HTTP call stays open, and explicitly close the event reader.
 - Prevent the settings gear from being clipped in the provider control strip.
 - Show only settings OpenCode can use, expose its username, agent, session reuse, and password controls, and stop sending unsupported sampling/profile options to OpenCode requests.
 

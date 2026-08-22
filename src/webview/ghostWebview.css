@@ -1358,6 +1358,21 @@ textarea {
   gap: 5px;
 }
 
+.request-summary-outcome {
+  display: grid;
+  gap: 2px;
+  margin-top: 7px;
+}
+
+.request-summary-outcome > span {
+  font-size: 0.9em;
+}
+
+.request-summary-outcome ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .request-action-card {
   border: 1px solid var(--vscode-widget-border, var(--ghost-border));
   border-left: 3px solid var(--ghost-accent);
@@ -1412,8 +1427,34 @@ textarea {
 
 .message-part-summary {
   display: grid;
-  gap: 4px;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.message-timeline-text {
+  min-width: 0;
+}
+
+.task-plan {
+  background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
+  border-left: 2px solid var(--ghost-accent);
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  padding: 6px 8px;
+}
+
+.task-plan > strong {
+  color: var(--vscode-foreground);
+}
+
+.task-plan ol {
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+
+.task-plan li.current {
+  color: var(--vscode-foreground);
+  font-weight: 600;
 }
 
 .progress-details {

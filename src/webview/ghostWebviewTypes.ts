@@ -146,6 +146,7 @@ export interface ChatMessage {
   parts: MessagePart[]
   responseStats?: ResponseStats
   requestSummary?: RequestSummary
+  completionRecord?: CompletionRecord
   status?: 'streaming' | 'error'
   requestStatus?: RequestStatus
   stopReason?: StopReason
@@ -178,6 +179,7 @@ export type MessagePart =
   | { kind: 'text'; text: string }
   | { kind: 'reasoning' | 'progress'; text: string; phase?: ProgressPhase; elapsedMs?: number; tokenCount?: number; tokensPerSecond?: number; model?: string }
   | { kind: 'tool'; toolCall: ToolCall }
+  | { kind: 'task-plan'; plan: TaskPlan }
   | { kind: 'error'; message: string; recoverable?: boolean }
   | { kind: 'warning'; message: string }
 

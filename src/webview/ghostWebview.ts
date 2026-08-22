@@ -283,6 +283,7 @@ const normalizeMessage = (value: Partial<ChatMessage>): ChatMessage => {
     parts,
     ...(responseStats ? { responseStats } : {}),
     ...(requestSummary ? { requestSummary } : {}),
+    ...(normalizeCompletionRecord(value.completionRecord) ? { completionRecord: normalizeCompletionRecord(value.completionRecord) } : {}),
     ...(value.status ? { status: value.status } : {}),
     ...(value.requestStatus ? { requestStatus: value.requestStatus } : {}),
     ...(value.stopReason ? { stopReason: value.stopReason } : {}),
@@ -2295,27 +2296,23 @@ const renderRequestActionCard = (message: ChatMessage): string => {
   return `<section class="request-action-card stopped" aria-label="Stopped request actions"><div class="request-action-card-heading"><strong>${escapeHtml(title)}</strong><span class="request-action-card-reason">${escapeHtml(detail)}</span><small>${escapeHtml(hint)}</small></div><div class="request-action-card-actions">${actions}</div></section>`
 }
 
-const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTMLElement => {
+const createMessageElement = (message: ChatMessage, _deferMarkdown = false): HTMLElement => {
   const article = document.createElement('article')
   article.className = `message ${message.role}${message.status === 'error' ? ' error' : ''}`
   article.dataset.messageId = message.id
   const partSummary = renderMessagePartSummary(message)
   const responseStats = renderResponseStats(message)
-  const messageState = message.status === 'streaming'
-    ? 'Thinking...'
-    : message.requestStatus === 'waiting-for-approval'
-      ? 'Waiting for approval...'
+  const messageState = message.requestStatus === 'waiting-for-approval'
+    ? 'Waiting for approval...'
+    : message.status === 'streaming'
+      ? 'Thinking...'
       : message.stopReason
         ? stopReasonLabel(message.stopReason)
       : ''
   const showThinkingPlaceholder = message.role === 'assistant' && (
     message.status === 'streaming' ||
-    ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-  )
-  const shouldDeferMarkdown = deferMarkdown && message.content.length > 500
-  const messageBody = shouldDeferMarkdown
-    ? '<p>Older message will render when visible.</p>'
-    : renderMarkdown(message.content, false)
+    ['preparing', 'connecting', 'thinking', 'streaming'].includes(message.requestStatus ?? '')
+  ) && message.requestStatus !== 'waiting-for-approval'
   const thinkingStatus = showThinkingPlaceholder
     ? `<div class="message-thinking-status message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</div>`
     : ''
@@ -2323,7 +2320,6 @@ const createMessageElement = (message: ChatMessage, deferMarkdown = false): HTML
     <div class="message-header"><strong>${message.role === 'user' ? 'You' : `${escapeHtml(uiPreferences.assistantAvatar)} ${escapeHtml(uiPreferences.assistantName || 'Ghost')}`}</strong><span class="message-state">${messageState}</span></div>
     ${partSummary}
     ${thinkingStatus}
-    <div class="message-body"${shouldDeferMarkdown ? ' data-deferred-markdown="true"' : ''}>${messageBody}</div>
     ${responseStats}
     ${renderRequestSummary(message)}
     ${renderRequestActionCard(message)}
@@ -2392,7 +2388,12 @@ const renderRequestSummary = (message: ChatMessage): string => {
   if (message.role !== 'assistant' || !message.requestSummary) return ''
   const summary = message.requestSummary
   const files = renderCopyablePathList(summary.changedFiles)
-  return `<section class="request-summary" aria-label="Request summary"><strong>Request summary</strong><div class="request-summary-grid"><div><span>Final status</span><b>${escapeHtml(summary.status)}</b></div><div><span>Elapsed</span><b>${formatElapsed(summary.elapsedMs)}</b></div><div><span>Model</span><b>${summary.model ? escapeHtml(summary.model) : 'Unknown'}</b></div><div><span>Provider</span><b>${summary.provider ? escapeHtml(summary.provider) : 'Unknown'}</b></div><div><span>Tokens</span><b>${summary.tokenCount}</b></div><div><span>Commands</span><b>${summary.commandCount}</b></div></div><div class="request-summary-files"><span>Changed files</span>${files}</div></section>`
+  const record = message.completionRecord
+  const renderOutcomeList = (label: string, values: string[]): string => `<div class="request-summary-outcome"><span>${escapeHtml(label)}</span>${values.length > 0 ? `<ul>${values.map(value => `<li>${escapeHtml(value)}</li>`).join('')}</ul>` : '<b>None reported</b>'}</div>`
+  const outcome = record
+    ? `${renderOutcomeList('Checks run', record.checksRun)}${renderOutcomeList('Failures', record.failures)}${renderOutcomeList('Remaining work', record.remainingWork)}`
+    : ''
+  return `<section class="request-summary" aria-label="Request outcome"><strong>${escapeHtml(summary.status)}</strong><div class="request-summary-grid"><div><span>Elapsed</span><b>${formatElapsed(summary.elapsedMs)}</b></div><div><span>Model</span><b>${summary.model ? escapeHtml(summary.model) : 'Unknown'}</b></div><div><span>Provider</span><b>${summary.provider ? escapeHtml(summary.provider) : 'Unknown'}</b></div><div><span>Tokens</span><b>${summary.tokenCount}</b></div><div><span>Commands</span><b>${summary.commandCount}</b></div></div><div class="request-summary-files"><span>Changed files</span>${files}</div>${outcome}</section>`
 }
 
 const renderRequestEventLog = (message: ChatMessage): string => {
@@ -2524,19 +2525,15 @@ const diffFileNames = (diffPreview: NonNullable<ToolCall['diffPreview']>): strin
   [...new Set((diffPreview.files?.length ? diffPreview.files : [diffPreview.path]).filter(Boolean))]
 )
 
+const renderTaskPlan = (plan: TaskPlan): string => {
+  const steps = plan.steps.map(step => `<li${step.id === plan.currentStep ? ' class="current"' : ''}${step.evidence ? ` title="${escapeAttribute(step.evidence)}"` : ''}><span class="task-plan-step-icon ${step.checked ? 'complete' : 'pending'}" aria-hidden="true">${step.checked ? '✓' : '○'}</span> ${escapeHtml(step.title)}</li>`).join('')
+  const blocked = plan.blockedReason ? `<div>Blocked: ${escapeHtml(plan.blockedReason)}</div>` : ''
+  const evidence = plan.completionEvidence.length > 0 ? `<div>Evidence: ${plan.completionEvidence.map(escapeHtml).join(' · ')}</div>` : ''
+  return `<section class="task-plan"><strong>Task plan</strong><ol>${steps}</ol>${blocked}${evidence}</section>`
+}
+
 const renderMessagePartSummary = (message: ChatMessage): string => {
-  const parts = message.parts.filter(part => part.kind !== 'text')
-  if (parts.length === 0) {
-    const eventLog = renderRequestEventLog(message)
-    return eventLog ? `<div class="message-part-summary">${eventLog}</div>` : ''
-  }
-  const progressParts = parts.filter((part): part is Extract<MessagePart, { kind: 'progress' | 'reasoning' }> => part.kind === 'progress' || part.kind === 'reasoning')
-  const toolParts = parts.filter((part): part is Extract<MessagePart, { kind: 'tool' }> => part.kind === 'tool')
-  const warningParts = parts.filter((part): part is Extract<MessagePart, { kind: 'warning' }> => part.kind === 'warning')
-  const errorParts = parts.filter((part): part is Extract<MessagePart, { kind: 'error' }> => part.kind === 'error')
-  const renderedProgress = uiPreferences.showThinkingDetails && progressParts.length > 0
-    ? `<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`
-    : ''
+  const parts = message.parts
   const renderToolCallProgress = (part: Extract<MessagePart, { kind: 'tool' }>): string => {
     const actionText = toolActionText(part.toolCall)
     const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
@@ -2591,37 +2588,38 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const approvalCardClass = part.toolCall.requiresApproval && part.toolCall.status === 'requested' ? ' tool-approval-card' : ''
     return `<div class="message-progress tool-progress ${toolStatusClass}${approvalCardClass}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }
-  const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-  const toolGroups: Array<Extract<MessagePart, { kind: 'tool' }>[]> = []
-  toolParts.forEach(part => {
-    const previousGroup = toolGroups[toolGroups.length - 1]
-    if (previousGroup && previousGroup[0].toolCall.name === part.toolCall.name) {
-      previousGroup.push(part)
-      return
+  const renderedParts: string[] = []
+  let progressParts: Array<Extract<MessagePart, { kind: 'progress' | 'reasoning' }>> = []
+  const flushProgress = (): void => {
+    if (uiPreferences.showThinkingDetails && progressParts.length > 0) {
+      renderedParts.push(`<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`)
     }
-    toolGroups.push([part])
-  })
-  const renderedTools = toolGroups.map(group => {
-    if (group.length === 1) {
-      return renderToolCallProgress(group[0])
+    progressParts = []
+  }
+  for (const part of parts) {
+    if (part.kind === 'progress' || part.kind === 'reasoning') {
+      progressParts.push(part)
+      continue
     }
-    const activeTool = [...group].reverse().find(part => part.toolCall.status === 'running' || part.toolCall.status === 'requested')
-    const latestTool = group[group.length - 1].toolCall
-    const groupFailed = group.some(part => part.toolCall.status === 'failed' || part.toolCall.status === 'rejected')
-    const groupComplete = !groupFailed && latestTool.status === 'completed'
-    const groupStatusClass = groupFailed ? 'tool-failure' : groupComplete ? 'tool-success' : ''
-    const groupStatusIcon = groupFailed ? '✕' : groupComplete ? '✓' : '•'
-    const groupDurationMs = group.reduce((total, part) => total + (toolDurationMs(part.toolCall) ?? 0), 0)
-    const groupHasDuration = group.some(part => toolDurationMs(part.toolCall) !== undefined)
-    const groupDuration = groupHasDuration ? ` · ${(groupDurationMs / 1000).toFixed(1)}s` : ''
-    const groupLabel = `${toolActionText(activeTool?.toolCall ?? group[group.length - 1].toolCall)} · ${group.length} calls${groupDuration}`
-    const animatedGroup = requestActive && Boolean(activeTool)
-    return `<details class="tool-timeline ${groupStatusClass}"${animatedGroup ? ' open' : ''}><summary class="message-progress tool-progress ${groupStatusClass}"><span class="tool-status-icon" aria-hidden="true">${groupStatusIcon}</span><strong>${animatedGroup ? animatedStatusLabel(groupLabel) : escapeHtml(groupLabel)}</strong></summary><div class="tool-timeline-items">${group.map(renderToolCallProgress).join('')}</div></details>`
-  }).join('')
-  const renderedPendingFileApproval = ''
-  const renderedWarnings = warningParts.map(part => `<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`).join('')
-  const renderedErrors = errorParts.map(part => `<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`).join('')
-  return `<div class="message-part-summary">${renderRequestEventLog(message)}${renderedProgress}${renderedPendingFileApproval}${renderedTools}${renderedWarnings}${renderedErrors}</div>`
+    flushProgress()
+    if (part.kind === 'text') {
+      renderedParts.push(`<div class="message-body message-timeline-text">${renderMarkdown(part.text, false)}</div>`)
+    } else if (part.kind === 'tool') {
+      renderedParts.push(renderToolCallProgress(part))
+    } else if (part.kind === 'task-plan') {
+      renderedParts.push(renderTaskPlan(part.plan))
+    } else if (part.kind === 'warning') {
+      renderedParts.push(`<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`)
+    } else if (part.kind === 'error') {
+      renderedParts.push(`<div class="message-progress error-progress">${escapeHtml(part.message)}</div>`)
+    }
+  }
+  flushProgress()
+  if (!parts.some(part => part.kind === 'text') && message.content) {
+    renderedParts.push(`<div class="message-body message-timeline-text">${renderMarkdown(message.content, false)}</div>`)
+  }
+  const eventLog = renderRequestEventLog(message)
+  return `<div class="message-part-summary message-timeline">${renderedParts.join('')}${eventLog}</div>`
 }
 
 const stateCard = (): string => {
@@ -2643,34 +2641,25 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
     renderMessages(false)
     return
   }
-  const body = element.querySelector<HTMLElement>('.message-body')
   const status = element.querySelector<HTMLElement>('.message-state')
-  const hasRenderedOutput = Boolean(body?.textContent?.trim())
   const showThinkingPlaceholder = message.role === 'assistant' && (
     message.status === 'streaming' ||
-    ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-  )
-  if (body && body.dataset.deferredMarkdown !== 'true' && (message.content.trim() || !hasRenderedOutput)) {
-    body.replaceChildren(renderMarkdownFragment(message.content, false))
-  }
+    ['preparing', 'connecting', 'thinking', 'streaming'].includes(message.requestStatus ?? '')
+  ) && message.requestStatus !== 'waiting-for-approval'
   if (status) {
-    status.textContent = message.status === 'streaming'
-      ? 'Thinking...'
-      : message.requestStatus === 'waiting-for-approval'
-        ? 'Waiting for approval...'
+    status.textContent = message.requestStatus === 'waiting-for-approval'
+      ? 'Waiting for approval...'
+      : message.status === 'streaming'
+        ? 'Thinking...'
         : ''
   }
   const existingSummary = element.querySelector<HTMLElement>('.message-part-summary')
   const summary = renderMessagePartSummary(message)
   if (existingSummary) {
-    const replacement = createMarkupFragment(summary || '<div class="message-part-summary" hidden></div>')
-    const replacementSummary = replacement.firstElementChild
-    existingSummary.replaceWith(replacement)
-    if (body && replacementSummary) {
-      body.before(replacementSummary)
-    }
+    replaceElementMarkup(existingSummary, summary)
   } else if (summary) {
-    body?.before(createMarkupFragment(summary))
+    const header = element.querySelector<HTMLElement>('.message-header')
+    header?.after(createMarkupFragment(summary))
   }
   const thinkingStatus = showThinkingPlaceholder
     ? `<div class="message-thinking-status message-placeholder">${animatedStatusLabel('Ghost is thinking…')}</div>`
@@ -2681,7 +2670,7 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
       const replacement = createMarkupFragment(thinkingStatus)
       const replacementStatus = replacement.firstElementChild
       existingThinkingStatus.replaceWith(replacement)
-      const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary') ?? body
+      const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary')
       if (summaryAnchor && replacementStatus) {
         summaryAnchor.after(replacementStatus)
       }
@@ -2689,7 +2678,7 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
       existingThinkingStatus.remove()
     }
   } else if (thinkingStatus) {
-    const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary') ?? body
+    const summaryAnchor = element.querySelector<HTMLElement>('.message-part-summary')
     summaryAnchor?.after(createMarkupFragment(thinkingStatus))
   }
   const existingStats = element.querySelector<HTMLElement>('.message-response-stats')
@@ -2740,8 +2729,8 @@ const lazyMessageObserver = typeof IntersectionObserver === 'undefined'
       delete body.dataset.deferredMarkdown
       const showThinkingPlaceholder = message.role === 'assistant' && (
         message.status === 'streaming' ||
-        ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
-      )
+        ['preparing', 'connecting', 'thinking', 'streaming'].includes(message.requestStatus ?? '')
+      ) && message.requestStatus !== 'waiting-for-approval'
       if (message.content.trim() || !body.textContent?.trim()) {
         body.replaceChildren(renderMarkdownFragment(message.content, false))
       }
@@ -2789,56 +2778,6 @@ const updateComposer = () => {
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
 }
 
-const createTaskPlanElement = (plan: TaskPlan): HTMLElement => {
-  const element = document.createElement('section')
-  element.className = 'task-plan'
-  const heading = document.createElement('strong')
-  heading.textContent = 'Task plan'
-  element.append(heading)
-  const list = document.createElement('ol')
-  for (const step of plan.steps) {
-    const item = document.createElement('li')
-    const icon = document.createElement('span')
-    icon.className = `task-plan-step-icon ${step.checked ? 'complete' : 'pending'}`
-    icon.textContent = step.checked ? '✓' : '○'
-    icon.setAttribute('aria-hidden', 'true')
-    item.append(icon, document.createTextNode(` ${step.title}`))
-    if (step.id === plan.currentStep) item.className = 'current'
-    if (step.evidence) item.title = step.evidence
-    list.append(item)
-  }
-  element.append(list)
-  if (plan.blockedReason) {
-    const blocked = document.createElement('div')
-    blocked.textContent = `Blocked: ${plan.blockedReason}`
-    element.append(blocked)
-  }
-  if (plan.completionEvidence.length > 0) {
-    const evidence = document.createElement('div')
-    evidence.textContent = `Evidence: ${plan.completionEvidence.join(' · ')}`
-    element.append(evidence)
-  }
-  return element
-}
-
-const createCompletionRecordElement = (record: CompletionRecord): HTMLElement => {
-  const element = document.createElement('section')
-  element.className = 'completion-record'
-  const heading = document.createElement('strong')
-  heading.textContent = 'Completion record'
-  element.append(heading)
-  const addList = (label: string, values: string[]) => {
-    const line = document.createElement('div')
-    line.textContent = `${label}: ${values.length > 0 ? values.join(' · ') : 'None'}`
-    element.append(line)
-  }
-  addList('Changed files', record.changedFiles)
-  addList('Checks run', record.checksRun)
-  addList('Failures', record.failures)
-  addList('Remaining work', record.remainingWork)
-  return element
-}
-
 const reconcileMessagePane = (fragment: DocumentFragment): void => {
   const desiredNodes = Array.from(fragment.childNodes)
   desiredNodes.forEach((node, index) => {
@@ -2884,12 +2823,6 @@ const renderMessages = (forceScroll: boolean) => {
         fragment.append(createMessageElement(message, messageIndex < conversation.messages.length - HOT_MESSAGE_COUNT))
       }
     }
-  }
-  if (conversation.taskPlan) {
-    fragment.append(createTaskPlanElement(conversation.taskPlan))
-  }
-  if (conversation.completionRecord) {
-    fragment.append(createCompletionRecordElement(conversation.completionRecord))
   }
   reconcileMessagePane(fragment)
   observeDeferredMessages()
@@ -3690,6 +3623,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     })
     screenReaderStatusElement.textContent = message.detail ?? 'Ghost is working'
     updateMessageElement(assistantMessage)
+    scrollMessages(false)
     updateStatus()
     return
   }
@@ -3724,13 +3658,14 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     assistantMessage.requestStatus = request.status
     screenReaderStatusElement.textContent = message.detail ?? toolCall.name
     updateMessageElement(assistantMessage)
+    scrollMessages(false)
     updateStatus()
     return
   }
   if (message.type === 'task-plan') {
     const plan = message.plan
     if (plan && Array.isArray(plan.steps)) {
-      conversation.taskPlan = {
+      const taskPlan: TaskPlan = {
         steps: plan.steps
           .filter(step => step && typeof step.id === 'string' && typeof step.title === 'string')
           .slice(0, 50)
@@ -3740,8 +3675,14 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
         completionEvidence: Array.isArray(plan.completionEvidence) ? plan.completionEvidence.filter(item => typeof item === 'string').slice(0, 10).map(item => item.slice(0, 1000)) : [],
         updatedAt: typeof plan.updatedAt === 'number' ? plan.updatedAt : Date.now()
       }
+      conversation.taskPlan = taskPlan
+      assistantMessage.parts = assistantMessage.parts.filter(part => part.kind !== 'task-plan')
+      assistantMessage.parts.push({ kind: 'task-plan', plan: taskPlan })
+      assistantMessage.updatedAt = Date.now()
       conversation.updatedAt = Date.now()
-      render(false)
+      updateMessageElement(assistantMessage)
+      scrollMessages(false)
+      updateStatus()
     }
     return
   }
@@ -3768,6 +3709,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     assistantMessage.status = 'streaming'
     screenReaderStatusElement.textContent = message.detail ?? message.tool ?? 'Tool completed'
     updateMessageElement(assistantMessage)
+    scrollMessages(false)
     updateStatus()
     return
   }
@@ -3786,6 +3728,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     notice = { kind: 'info', message: warning }
     screenReaderStatusElement.textContent = warning
     updateMessageElement(assistantMessage)
+    scrollMessages(false)
     updateStatus()
     return
   }
@@ -3802,6 +3745,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     appendErrorPart(assistantMessage, displayedError, true)
     notice = { kind: 'error', message: displayedError }
     updateMessageElement(assistantMessage)
+    scrollMessages(false)
     return
   }
   if (message.type === 'request-completed') {
@@ -3845,7 +3789,22 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     request.status = status
     assistantMessage.requestStatus = status
     assistantMessage.status = status === 'failed' ? 'error' : undefined
+    assistantMessage.completionRecord = status === 'completed' && hasMeaningfulCompletionRecord ? completionRecord : undefined
     const changedFiles = [...new Set([...(status === 'completed' ? completionRecord?.changedFiles ?? [] : []), ...summaryChangedFiles(assistantMessage)])].sort()
+    const hasUnfinishedWork = Boolean(completionRecord && (completionRecord.failures.length > 0 || completionRecord.remainingWork.length > 0))
+    const finalStatus = status === 'completed'
+      ? hasUnfinishedWork
+        ? 'Finished — work remains'
+        : hasMeaningfulCompletionRecord
+          ? 'Task completed'
+          : usedWorkspaceTools
+            ? 'Changes applied — verification not reported'
+            : 'Response complete'
+      : message.stopReason
+        ? stopReasonLabel(message.stopReason)
+        : status === 'cancelled'
+          ? 'Request cancelled'
+          : 'Request failed'
     assistantMessage.requestSummary = {
       changedFiles,
       commandCount: summaryCommandCount(assistantMessage),
@@ -3853,7 +3812,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       ...(message.model || request.model ? { model: message.model ?? request.model } : {}),
       ...(message.provider || request.provider ? { provider: message.provider ?? request.provider } : {}),
       tokenCount: typeof message.tokenCount === 'number' ? message.tokenCount : request.tokenCount,
-      status: status === 'completed' ? 'Completed' : message.stopReason ? stopReasonLabel(message.stopReason) : status === 'cancelled' ? 'Cancelled' : 'Failed'
+      status: finalStatus
     }
     if (eventLog.length > 0) {
       assistantMessage.eventLog = eventLog
@@ -3885,6 +3844,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     requests.delete(message.requestId)
     updateMessageElement(assistantMessage)
     render(false)
+    scrollMessages(false)
   }
 }
 

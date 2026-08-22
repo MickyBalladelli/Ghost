@@ -153,6 +153,14 @@ function eventSessionId(event: OpenCodeEvent): string | undefined {
     ?? textValue(record(properties?.info)?.sessionID)
 }
 
+function eventSessionStatus(event: OpenCodeEvent): 'idle' | 'busy' | 'retry' | undefined {
+  if (event.type === 'session.idle') return 'idle'
+  if (event.type !== 'session.status') return undefined
+  const status = record(record(event.properties)?.status)
+  const type = textValue(status?.type)
+  return type === 'idle' || type === 'busy' || type === 'retry' ? type : undefined
+}
+
 function eventTextDelta(event: OpenCodeEvent): string | undefined {
   const properties = record(event.properties)
   if (!properties) return undefined
@@ -506,7 +514,11 @@ export class OpenCodeClient implements ProviderClient {
     let toolCount = 0
     let streamError: Error | undefined
     const streamController = new AbortController()
-    const onAbort = (): void => streamController.abort()
+    const messageController = new AbortController()
+    const onAbort = (): void => {
+      streamController.abort()
+      messageController.abort()
+    }
     options.signal?.addEventListener('abort', onAbort, { once: true })
 
     const handlePermission = async (permission: OpenCodePermissionRequest): Promise<void> => {
@@ -517,25 +529,39 @@ export class OpenCodeClient implements ProviderClient {
     }
     let markStreamConnected: (() => void) | undefined
     const streamConnected = new Promise<void>(resolve => { markStreamConnected = resolve })
+    let markSessionFinished: ((status: 'idle' | 'error') => void) | undefined
+    const sessionFinished = new Promise<'idle' | 'error'>(resolve => { markSessionFinished = resolve })
+    let sawSessionActivity = false
     const streamPromise = this.consumeEvents(session.id, options.directory, streamController.signal, async event => {
+      const status = eventSessionStatus(event)
+      if (status === 'busy' || status === 'retry') sawSessionActivity = true
       const delta = eventTextDelta(event)
       if (delta) {
+        sawSessionActivity = true
         streamedText += delta
         options.onText?.(delta)
       }
       const progress = eventToolProgress(event)
       if (progress) {
+        sawSessionActivity = true
         toolCount += 1
         options.onProgress?.(progress)
       }
-      for (const file of changedFilesFromEvent(event)) changedFiles.add(file)
+      const eventFiles = changedFilesFromEvent(event)
+      if (eventFiles.length > 0) sawSessionActivity = true
+      for (const file of eventFiles) changedFiles.add(file)
       const permission = permissionFromEvent(event)
-      if (permission) await handlePermission(permission)
+      if (permission) {
+        sawSessionActivity = true
+        await handlePermission(permission)
+      }
       if (event.type === 'session.error' && eventSessionId(event) === session.id) {
         const properties = record(event.properties)
         const detail = record(properties?.error)
         streamError = new Error(textValue(detail?.message) ?? 'OpenCode session failed')
+        markSessionFinished?.('error')
       }
+      if (status === 'idle' && sawSessionActivity) markSessionFinished?.('idle')
     }, () => markStreamConnected?.()).catch(error => {
       markStreamConnected?.()
       if (!streamController.signal.aborted) {
@@ -564,13 +590,27 @@ export class OpenCodeClient implements ProviderClient {
       const model = modelSelection(options.model)
       if (model) body.model = model
       options.onProgress?.(`OpenCode session ${session.id}`)
-      const payload = await this.request(`/session/${encodeURIComponent(session.id)}/message`, {
+      let messageResolved = false
+      const messageRequest = this.request(`/session/${encodeURIComponent(session.id)}/message`, {
         method: 'POST',
         directory: options.directory,
         timeoutMs: options.timeoutMs,
-        signal: streamController.signal,
+        signal: messageController.signal,
         body
+      }).then(payload => {
+        messageResolved = true
+        return payload
       })
+      const payload = await Promise.race([
+        messageRequest,
+        sessionFinished.then(async status => {
+          if (messageResolved) return messageRequest
+          messageController.abort()
+          await messageRequest.catch(() => undefined)
+          if (status === 'error') throw streamError ?? new Error('OpenCode session failed')
+          return this.latestAssistantMessage(session.id, options.directory, options.signal)
+        })
+      ])
       if (streamError) throw streamError
       const finalText = messageText(payload)
       if (!streamedText && finalText) {
@@ -600,6 +640,7 @@ export class OpenCodeClient implements ProviderClient {
       await this.abortSession(session.id, options.directory)
       throw error
     } finally {
+      messageController.abort()
       streamController.abort()
       options.signal?.removeEventListener('abort', onAbort)
       await streamPromise
@@ -639,6 +680,16 @@ export class OpenCodeClient implements ProviderClient {
     })
   }
 
+  private async latestAssistantMessage(sessionId: string, directory: string, signal?: AbortSignal): Promise<unknown> {
+    const payload = await this.request(`/session/${encodeURIComponent(sessionId)}/message?limit=20`, {
+      method: 'GET',
+      directory,
+      signal
+    })
+    if (!Array.isArray(payload)) return undefined
+    return [...payload].reverse().find(value => textValue(record(record(value)?.info)?.role) === 'assistant')
+  }
+
   private async consumeEvents(
     sessionId: string,
     directory: string,
@@ -656,32 +707,42 @@ export class OpenCodeClient implements ProviderClient {
     }
     onConnected?.()
     const reader = response.body.getReader()
+    const cancelReader = (): void => { void reader.cancel().catch(() => undefined) }
+    signal.addEventListener('abort', cancelReader, { once: true })
     const decoder = new TextDecoder()
     let buffer = ''
-    while (!signal.aborted) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n')
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        const data = frame.split('\n')
-          .filter(line => line.startsWith('data:'))
-          .map(line => line.slice(5).trimStart())
-          .join('\n')
-        if (data) {
-          let event: OpenCodeEvent | undefined
-          try {
-            event = JSON.parse(data) as OpenCodeEvent
-          } catch {
-            // Ignore malformed or forward-incompatible events; the final message remains authoritative.
+    try {
+      while (!signal.aborted) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n')
+        let boundary = buffer.indexOf('\n\n')
+        while (boundary >= 0) {
+          const frame = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary + 2)
+          const data = frame.split('\n')
+            .filter(line => line.startsWith('data:'))
+            .map(line => line.slice(5).trimStart())
+            .join('\n')
+          if (data) {
+            let event: OpenCodeEvent | undefined
+            try {
+              event = JSON.parse(data) as OpenCodeEvent
+            } catch {
+              // Ignore malformed or forward-incompatible events; the final message remains authoritative.
+            }
+            const eventSession = event ? eventSessionId(event) : undefined
+            if (event && (!eventSession || eventSession === sessionId)) await onEvent(event)
           }
-          const eventSession = event ? eventSessionId(event) : undefined
-          if (event && (!eventSession || eventSession === sessionId)) await onEvent(event)
+          boundary = buffer.indexOf('\n\n')
         }
-        boundary = buffer.indexOf('\n\n')
       }
+    } catch (error) {
+      if (!signal.aborted) throw error
+    } finally {
+      signal.removeEventListener('abort', cancelReader)
+      if (signal.aborted) await reader.cancel().catch(() => undefined)
+      reader.releaseLock()
     }
   }
 
