@@ -7,7 +7,8 @@ export type GhostStatus = 'ready' | 'generating' | 'offline'
 const PROVIDER_LABELS: Record<GhostProvider, string> = {
   ollama: 'Ollama',
   'mlx-vlm': 'MLX/VLM',
-  'openai-compatible': 'OpenAI-compatible'
+  'openai-compatible': 'OpenAI-compatible',
+  opencode: 'OpenCode'
 }
 
 const STATUS_ICONS: Record<GhostStatus, string> = {

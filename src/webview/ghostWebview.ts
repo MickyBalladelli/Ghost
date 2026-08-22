@@ -69,7 +69,8 @@ const defaultGenerationSettings = {
 const providerChoices: Array<{ value: GhostProvider; label: string }> = [
   { value: 'ollama', label: 'Ollama' },
   { value: 'mlx-vlm', label: 'MLX / VLM' },
-  { value: 'openai-compatible', label: 'OpenAI-compatible' }
+  { value: 'openai-compatible', label: 'OpenAI-compatible' },
+  { value: 'opencode', label: 'OpenCode' }
 ]
 
 const renderProviderOptions = (element: HTMLSelectElement, selectedProvider: GhostProvider): void => {
@@ -384,6 +385,10 @@ let controls: ControlSettings = {
   openaiTlsCaFile: '',
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
+  openCodeUrl: 'http://127.0.0.1:4096',
+  openCodeUsername: 'opencode',
+  openCodeAgent: '',
+  openCodeSessionReuse: 'workspace',
   // Keep in sync with GHOST_TOOL_NAMES in src/config.ts (webview scripts cannot import host modules).
   toolAllowlist: [
     'ghost_read_file',
@@ -760,6 +765,10 @@ const createPersistedState = () => compactPersistedState({
     openaiTlsCaFile: controls.openaiTlsCaFile,
     openaiTlsCertFile: controls.openaiTlsCertFile,
     openaiTlsKeyFile: controls.openaiTlsKeyFile,
+    openCodeUrl: controls.openCodeUrl,
+    openCodeUsername: controls.openCodeUsername,
+    openCodeAgent: controls.openCodeAgent,
+    openCodeSessionReuse: controls.openCodeSessionReuse,
     toolAllowlist: controls.toolAllowlist,
     toolAsklist: controls.toolAsklist,
     toolDenylist: controls.toolDenylist,
@@ -901,6 +910,10 @@ const sendSettingsUpdate = () => {
         openaiTlsCaFile: controls.openaiTlsCaFile,
         openaiTlsCertFile: controls.openaiTlsCertFile,
         openaiTlsKeyFile: controls.openaiTlsKeyFile,
+        openCodeUrl: controls.openCodeUrl,
+        openCodeUsername: controls.openCodeUsername,
+        openCodeAgent: controls.openCodeAgent,
+        openCodeSessionReuse: controls.openCodeSessionReuse,
         toolAllowlist: controls.toolAllowlist,
         toolAsklist: controls.toolAsklist,
         toolDenylist: controls.toolDenylist,
@@ -944,7 +957,9 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
   ? controls.mlxUrl
   : controls.provider === 'openai-compatible'
     ? controls.openaiUrl
-    : controls.ollamaUrl
+    : controls.provider === 'opencode'
+      ? controls.openCodeUrl
+      : controls.ollamaUrl
 
 const openAiDefaultEndpoints: Record<OpenAiProfile, string> = {
   generic: 'http://localhost:8001/v1',
@@ -1351,7 +1366,9 @@ const renderControls = () => {
     ? 'MLX VLM OpenAI-compatible endpoint.'
     : controls.provider === 'openai-compatible'
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
-      : 'Ollama endpoint.'
+      : controls.provider === 'opencode'
+        ? 'OpenCode headless server. Ghost connects to it but never starts or stops it.'
+        : 'Ollama endpoint.'
   renderPermissionControls()
   logLevelElement.value = controls.logLevel
   showReasoningElement.checked = showReasoning
@@ -4049,6 +4066,8 @@ providerEndpointElement.addEventListener('change', () => {
     controls.mlxUrl = endpoint
   } else if (controls.provider === 'openai-compatible') {
     controls.openaiUrl = endpoint
+  } else if (controls.provider === 'opencode') {
+    controls.openCodeUrl = endpoint
   } else {
     controls.ollamaUrl = endpoint
   }

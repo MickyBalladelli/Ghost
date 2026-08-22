@@ -13,6 +13,7 @@ export interface LlmProviderClients {
   ollamaClient: LlmClient
   mlxClient?: LlmClient
   openaiCompatibleClient?: LlmClient
+  openCodeClient?: LlmClient
 }
 
 export interface ResolvedLlmClient {
@@ -30,7 +31,7 @@ const MLX_SWITCH_ACTION = 'Switch to MLX VLM'
 const KEEP_PROVIDER_ACTION = 'Keep Current Provider'
 
 function isProvider(value: string): value is GhostProvider {
-  return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible'
+  return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible' || value === 'opencode'
 }
 
 export class LlmFactory {
@@ -96,7 +97,8 @@ export class LlmFactory {
     const clients = new Set<ProviderClient>([
       this.clients.ollamaClient,
       ...(this.clients.mlxClient ? [this.clients.mlxClient] : []),
-      ...(this.clients.openaiCompatibleClient ? [this.clients.openaiCompatibleClient] : [])
+      ...(this.clients.openaiCompatibleClient ? [this.clients.openaiCompatibleClient] : []),
+      ...(this.clients.openCodeClient ? [this.clients.openCodeClient] : [])
     ])
     for (const client of clients) {
       client.dispose?.()
@@ -120,6 +122,11 @@ export class LlmFactory {
 
     if (provider === 'mlx-vlm') {
       return this.getMlxClient()
+    }
+
+    if (provider === 'opencode') {
+      if (!this.clients.openCodeClient) throw new Error('No OpenCode client has been configured')
+      return this.clients.openCodeClient
     }
 
     if (!this.clients.openaiCompatibleClient) {

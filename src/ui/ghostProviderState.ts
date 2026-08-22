@@ -33,6 +33,10 @@ export const providerStatusKey = (settings: GhostSettings, apiKeyConfigured: boo
   openaiTlsCaFile: settings.openaiTlsCaFile,
   openaiTlsCertFile: settings.openaiTlsCertFile,
   openaiTlsKeyFile: settings.openaiTlsKeyFile,
+  openCodeUrl: settings.openCodeUrl,
+  openCodeUsername: settings.openCodeUsername,
+  openCodeAgent: settings.openCodeAgent,
+  openCodeSessionReuse: settings.openCodeSessionReuse,
   apiKeyConfigured
 })
 

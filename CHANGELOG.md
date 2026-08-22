@@ -4,7 +4,8 @@ All notable changes to this extension are documented here.
 
 ## 1.1.96 - 2026-08-21
 
-- Add a complete OpenCode integration backlog covering the headless HTTP API, sessions, streaming, permissions, workspace safety, and the optional MCP bridge.
+- Add OpenCode 1.x as a delegated-agent provider through a user-managed `opencode serve`: typed health/model/agent/session APIs, Basic Auth in SecretStorage, serialized workspace-scoped session reuse, SSE permission handling, streamed tool progress, final diff checks, cancellation/abort, and new/select/rename/fork/delete session commands.
+- Guard OpenCode with Ghost workspace containment and allow/ask/deny policy. OpenCode requests require `edit`, `bash`, and `external_directory` to be guarded, reject mutations in Ask/Explain mode, and never start or stop the user's server. Document the decision not to ship the opposite-direction MCP bridge.
 - Add fast tests for conversational prompts, agent stop policy, terminal audit/cwd jail, and the one-edit plus failed-read regressions. Move endpoint, redaction, and tool-result-limit helpers into `test:fast`. Document the first-run VS Code download for host tests.
 - Extract Ghost webview CSS to `src/webview/ghostWebview.css` and keep the CSP nonce on the stylesheet link.
 - Share protocol unions and tool names through `ghostProtocolTypes.ts` so the webview uses `autoAcceptScope` as the real setting.

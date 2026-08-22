@@ -81,6 +81,10 @@ export interface ControlSettings {
   openaiTlsCaFile: string
   openaiTlsCertFile: string
   openaiTlsKeyFile: string
+  openCodeUrl: string
+  openCodeUsername: string
+  openCodeAgent: string
+  openCodeSessionReuse: 'workspace' | 'new'
   toolAllowlist: string[]
   toolAsklist: string[]
   toolDenylist: string[]

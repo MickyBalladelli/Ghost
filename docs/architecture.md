@@ -11,7 +11,7 @@ Ghost is a VS Code extension host with a browser-like webview. The host is the a
 │  ├─ context collection, settings, persistence, redaction                       │
 │  ├─ approvals, staged edits, recovery records, cancellation                     │
 │  ├─ chatParticipant tool loop                                                   │
-│  └─ provider adapters ── transport ── Ollama / MLX / OpenAI-compatible server   │
+│  └─ provider adapters ── transport ── Ollama / MLX / OpenAI / OpenCode server  │
 │       │                                                                         │
 │       └─ local tools ── workspace files, search, diagnostics, terminal, git     │
 └───────────────────────────────┬────────────────────────────────────────────────┘
@@ -138,6 +138,8 @@ sequenceDiagram
 ```
 
 `src/services/providerRequestBuilders.ts` keeps unsupported parameters out of provider payloads. `providerAdapter.ts` exposes a common stream and capability contract, while Ollama, MLX/VLM, and OpenAI-compatible clients handle their wire formats. Transport code owns timeouts, abort signals, proxy/TLS settings, authentication headers, keep-alive agents, and diagnostic errors. Incomplete stream records are buffered until complete; invalid UTF-8 and malformed provider output become bounded Ghost errors.
+
+OpenCode follows a separate delegated-agent path. The host connects to a user-managed `opencode serve`, scopes calls with the selected workspace directory, serializes and reuses a workspace session when configured, listens to SSE, and sends the prompt through the synchronous session message endpoint. This lets Ghost answer permission requests while OpenCode runs. Stop aborts both the local request and OpenCode session. Final diffs are checked for workspace containment. Ghost refuses the request unless OpenCode config guards `edit`, `bash`, and `external_directory` with `ask` or `deny`.
 
 ## Persistence schema and privacy
 

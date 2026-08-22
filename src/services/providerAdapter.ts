@@ -3,8 +3,8 @@ import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 import type { FimCompletionOptions } from './fim'
 import { GhostError } from '../ghostErrors'
 
-export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible'
-export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions'
+export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
+export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions' | 'opencode-server'
 export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'rate-limit' | 'auth' | 'invalid-request' | 'http' | 'unknown'
 
 export interface ModelCapabilityRecord {
@@ -115,6 +115,17 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     supportsFIM: true,
     supportsStreaming: true,
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
+  },
+  opencode: {
+    contextWindow: 32768,
+    outputLimit: 8192,
+    nativeApi: 'opencode-server',
+    supportsTools: false,
+    supportsJsonMode: false,
+    supportsVision: false,
+    supportsFIM: false,
+    supportsStreaming: true,
+    supportsSampling: { temperature: false, topP: false, topK: false, minP: false, presencePenalty: false, repeatPenalty: false }
   }
 }
 

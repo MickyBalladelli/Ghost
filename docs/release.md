@@ -109,8 +109,10 @@ node scripts/smokeVsix.js ./ghost-ai-coding-assistant-1.1.96.vsix
 Manually verify the important user paths:
 
 - extension activates and the Ghost view opens;
-- Ollama, MLX/VLM, and OpenAI-compatible provider settings load;
+- Ollama, MLX/VLM, OpenAI-compatible, and OpenCode provider settings load;
 - model discovery and provider health show useful status;
+- OpenCode rejects an incompatible server and permissive `edit`/`bash`/`external_directory` config, stores Basic Auth only in SecretStorage, scopes sessions to the selected workspace, streams a guarded request, answers a permission, reports the final diff, and aborts on Stop;
+- OpenCode new/select/rename/fork/delete session commands and agent selection work against a disposable server profile;
 - Ask, Edit, Agent, Explain, and Inline modes respond;
 - file reads, approved edits, diff preview, restore, and terminal approval work;
 - cancellation removes active thinking state and pending approvals;

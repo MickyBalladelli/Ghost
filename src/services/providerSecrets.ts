@@ -5,7 +5,8 @@ import type { GhostProvider } from '../config'
 const SECRET_KEYS: Record<GhostProvider, string> = {
   ollama: 'ghost.providerKey.ollama',
   'mlx-vlm': 'ghost.providerKey.mlx-vlm',
-  'openai-compatible': 'ghost.providerKey.openai-compatible'
+  'openai-compatible': 'ghost.providerKey.openai-compatible',
+  opencode: 'ghost.providerKey.opencode'
 }
 
 export class ProviderSecrets implements vscode.Disposable {

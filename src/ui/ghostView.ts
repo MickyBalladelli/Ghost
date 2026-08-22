@@ -13,6 +13,7 @@ import { OllamaClient } from '../services/ollamaClient'
 import { createProviderAdapter } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { OpenCodeClient } from '../services/openCodeClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { applyGhostEdit, parseGhostEdit } from '../tools/editWorkflow'
@@ -1941,7 +1942,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private async readProviderStatus(settings: GhostSettings): Promise<ProviderStatus> {
-    const client = settings.provider === 'mlx-vlm'
+    const client = settings.provider === 'opencode'
+      ? new OpenCodeClient(settings.openCodeUrl, {
+          username: settings.openCodeUsername,
+          password: () => this.providerApiKey?.('opencode')
+        })
+      : settings.provider === 'mlx-vlm'
       ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
@@ -2119,6 +2125,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         openaiTlsCaFile: settings.openaiTlsCaFile,
         openaiTlsCertFile: settings.openaiTlsCertFile,
         openaiTlsKeyFile: settings.openaiTlsKeyFile,
+        openCodeUrl: settings.openCodeUrl,
+        openCodeUsername: settings.openCodeUsername,
+        openCodeAgent: settings.openCodeAgent,
+        openCodeSessionReuse: settings.openCodeSessionReuse,
         toolAllowlist: settings.toolAllowlist ?? [...GHOST_TOOL_NAMES],
         toolAsklist: settings.toolAsklist ?? [],
         toolDenylist: settings.toolDenylist ?? [],
@@ -2126,7 +2136,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
         logLevel: effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging),
-        networkAccess: isExternalEndpoint(settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
+        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       modelMetadata,
@@ -2175,6 +2185,18 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
       await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+    }
+    if (typeof update.openCodeUrl === 'string' && update.openCodeUrl.trim()) {
+      await ghostConfig.update('openCodeUrl', update.openCodeUrl.trim(), target)
+    }
+    if (typeof update.openCodeUsername === 'string' && update.openCodeUsername.trim()) {
+      await ghostConfig.update('openCodeUsername', update.openCodeUsername.trim(), target)
+    }
+    if (typeof update.openCodeAgent === 'string') {
+      await ghostConfig.update('openCodeAgent', update.openCodeAgent.trim(), target)
+    }
+    if (update.openCodeSessionReuse === 'workspace' || update.openCodeSessionReuse === 'new') {
+      await ghostConfig.update('openCodeSessionReuse', update.openCodeSessionReuse, target)
     }
     if (typeof update.openaiProfile === 'string') {
       await ghostConfig.update('openaiProfile', update.openaiProfile, target)

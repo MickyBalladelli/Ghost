@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
-Ghost runs chat and agent tools against Ollama, MLX/VLM, or another OpenAI-compatible server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM is chat and vision only. Your code stays on your machine when you use a local provider.
+Ghost runs chat and agent tools against Ollama, MLX/VLM, another OpenAI-compatible server, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM is chat and vision only. Your code stays on your machine when you use a local provider.
 
 Current release: `1.1.96`
 
@@ -21,6 +21,7 @@ Current release: `1.1.96`
 - Local chat through the Ghost view and the native `@local` chat participant.
 - Ollama support with automatic API compatibility handling.
 - MLX/VLM and generic OpenAI-compatible provider support.
+- OpenCode headless-server integration with workspace sessions, streamed progress, model discovery, permissions, cancellation, and diffs.
 - Inline code completion with a fast Fill-in-the-Middle model.
 - Workspace context from the workspace, folders, active editor, selection, and open files.
 - Text-file attachments for focused requests.
@@ -37,7 +38,7 @@ Current release: `1.1.96`
 
 - VS Code 1.125 or newer
 - Node.js 20 or newer and npm when running Ghost from source
-- Ollama, MLX/VLM, or another OpenAI-compatible local server
+- Ollama, MLX/VLM, another OpenAI-compatible local server, or OpenCode 1.x
 
 For the default Ollama setup, install [Ollama](https://ollama.com) and pull the recommended models:
 
@@ -128,10 +129,14 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.provider` | `ollama` | Select `ollama`, `mlx-vlm`, or `openai-compatible`. |
+| `ghost.provider` | `ollama` | Select `ollama`, `mlx-vlm`, `openai-compatible`, or `opencode`. |
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
+| `ghost.openCodeUrl` | `http://127.0.0.1:4096` | User-managed `opencode serve` URL. Ghost does not start or stop it. |
+| `ghost.openCodeUsername` | `opencode` | Basic Auth username. Store the server password with **Ghost: Set Provider API Key**. |
+| `ghost.openCodeAgent` | empty | Optional OpenCode agent id; empty uses OpenCode's default. |
+| `ghost.openCodeSessionReuse` | `workspace` | Resume the selected workspace session or use `new` for every request. |
 | `ghost.openaiApiKeyHeader` / `ghost.openaiApiKeyPrefix` | `Authorization` / `Bearer` | Select the API-key header format; the key stays in VS Code SecretStorage. |
 | `ghost.openaiOrganization` / `ghost.openaiProject` | empty | Optional organization and project values, sent with their configurable headers. |
 | `ghost.openaiProxy` / `ghost.openaiNoProxy` | empty / localhost list | Route OpenAI-compatible traffic through a proxy with host bypass rules. Proxy URLs must not contain credentials. |
@@ -159,8 +164,34 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | Ollama | Yes | Yes | Yes | Client-dependent | Temperature, Top P, Top K, Min P, presence penalty, repeat penalty |
 | MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
+| OpenCode | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 
 OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent mode is unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need file edits. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+
+### OpenCode setup
+
+Start OpenCode yourself in the workspace or point Ghost at an existing server:
+
+```bash
+opencode serve --hostname 127.0.0.1 --port 4096
+```
+
+Set `ghost.provider` to `opencode`. Ghost checks `/global/health`, requires a compatible OpenCode 1.x server, discovers `provider/model` ids, routes every request to the selected workspace root, and stores only the selected session id in VS Code workspace storage. Use **Ghost: New OpenCode Session**, **Ghost: Select OpenCode Session**, or **Ghost: Delete Current OpenCode Session** to manage it.
+
+OpenCode allows most tools by default. Ghost therefore refuses OpenCode requests until file edits and shell commands require approval. Add this to the project or global `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask",
+    "external_directory": "deny"
+  }
+}
+```
+
+Ghost answers OpenCode permission requests with one-request approvals only, applies its allow/ask/deny lists, rejects external-workspace paths, aborts the OpenCode session when Stop is pressed, and checks the final session diff. Ask and Explain mode reject edit and shell permissions. OpenCode performs its own edits, so Ghost's source-editor staged hunk preview is not used on this provider. Configure `OPENCODE_SERVER_PASSWORD` on the server and store the same password in VS Code SecretStorage when authentication is needed. Ghost refuses to send that password over non-loopback HTTP; use HTTPS for a remote server. Inline completion remains on Ollama or a FIM-capable OpenAI-compatible provider.
 
 ### Response settings
 
@@ -274,6 +305,12 @@ Run these from the Command Palette:
 - `Ghost: Reset Interface` — delete all Ghost conversations and preferences after confirmation
 - `Ghost: Export Interface`
 - `Ghost: Clear Interface`
+- `Ghost: New OpenCode Session`
+- `Ghost: Select OpenCode Session`
+- `Ghost: Rename Current OpenCode Session`
+- `Ghost: Fork Current OpenCode Session`
+- `Ghost: Delete Current OpenCode Session`
+- `Ghost: Select OpenCode Agent`
 
 There are no default keyboard shortcuts. Add your own in **Keyboard Shortcuts** if desired. Click the Ghost status bar item to check provider health.
 
@@ -303,6 +340,10 @@ Check the tool allowlist and denylist in **Settings** or VS Code settings. File 
 ### OpenAI-compatible endpoint fails
 
 Check the API mode and endpoint suffix. Most OpenAI-compatible servers use `/v1`; Ollama normally uses its base URL without `/v1`.
+
+### OpenCode request is rejected before it starts
+
+Check that `opencode serve` is reachable, uses a compatible 1.x version, and sees the selected workspace. OpenCode is permissive by default, so its effective `permission.edit` and `permission.bash` rules must be `ask` or `deny`, and `permission.external_directory` must be `ask` or `deny`. Save dirty editor files before Agent or Edit mode. When Basic Auth is enabled, run **Ghost: Set Provider API Key** and enter the OpenCode server password.
 
 ### A file edit fails
 

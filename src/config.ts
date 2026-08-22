@@ -5,7 +5,7 @@ import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION, legacyFileEditAppr
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostFileEditApproval = 'confirm' | 'auto'
@@ -66,6 +66,10 @@ export interface GhostSettings {
   openaiTlsCaFile: string
   openaiTlsCertFile: string
   openaiTlsKeyFile: string
+  openCodeUrl: string
+  openCodeUsername: string
+  openCodeAgent: string
+  openCodeSessionReuse: 'workspace' | 'new'
   chatModel: string
   autocompleteModel: string
   providerRequestTimeoutMinutes: number
@@ -127,6 +131,10 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiTlsCaFile: '',
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
+  openCodeUrl: 'http://127.0.0.1:4096',
+  openCodeUsername: 'opencode',
+  openCodeAgent: '',
+  openCodeSessionReuse: 'workspace',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
   providerRequestTimeoutMinutes: 15,
@@ -249,6 +257,10 @@ export class GhostConfig {
       openaiTlsCaFile: configuration.get('openaiTlsCaFile', DEFAULT_GHOST_SETTINGS.openaiTlsCaFile),
       openaiTlsCertFile: configuration.get('openaiTlsCertFile', DEFAULT_GHOST_SETTINGS.openaiTlsCertFile),
       openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
+      openCodeUrl: configuration.get('openCodeUrl', DEFAULT_GHOST_SETTINGS.openCodeUrl),
+      openCodeUsername: configuration.get('openCodeUsername', DEFAULT_GHOST_SETTINGS.openCodeUsername),
+      openCodeAgent: configuration.get('openCodeAgent', DEFAULT_GHOST_SETTINGS.openCodeAgent),
+      openCodeSessionReuse: configuration.get('openCodeSessionReuse', DEFAULT_GHOST_SETTINGS.openCodeSessionReuse),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
       providerRequestTimeoutMinutes: configuration.get('providerRequestTimeoutMinutes', DEFAULT_GHOST_SETTINGS.providerRequestTimeoutMinutes),

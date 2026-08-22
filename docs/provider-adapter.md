@@ -67,9 +67,12 @@ Capability values are defaults in `providerAdapter.ts`. A client without `fetchF
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | `ollama` | Ollama | Yes | Yes | Yes | Client-dependent | temperature, top P/K, min P, presence, repeat |
 | `mlx-vlm` | MLX OpenAI-compatible chat | No | No | Yes | No | temperature, top P, presence |
+| `opencode` | OpenCode headless server | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 | `openai-compatible` | OpenAI chat completions | Yes | Yes | No by default | Client-dependent | temperature, top P, presence |
 
 All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX has no native tools, so Agent mode depends on JSON-in-text parsing and is unreliable; prefer Ollama or OpenAI-compatible for workspace edits.
+
+OpenCode is a delegated-agent adapter, not an OpenAI-compatible transport. `openCodeClient.ts` talks to the headless server's provider, session, message, permission-reply, diff, and SSE endpoints. `chatParticipant.ts` bypasses Ghost's model/tool loop for this provider because OpenCode owns its agent loop. Ghost still owns workspace selection, connection credentials, permission policy, cancellation, UI streaming, and the selected workspace session id. OpenCode's `edit`, `bash`, and `external_directory` permissions must resolve to `ask` or `deny`; permissive defaults are rejected before a prompt is sent.
 
 ## Provider-neutral request types
 

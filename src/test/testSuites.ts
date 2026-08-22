@@ -11,6 +11,7 @@ export const FAST_TEST_FILES = [
   'inlineFimPolicy.test.js',
   'nativeToolSupport.test.js',
   'ollamaClient.test.js',
+  'openCodeClient.fast.test.js',
   'persistenceModel.test.js',
   'propertyFuzz.test.js',
   'protocol.test.js',

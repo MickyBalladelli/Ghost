@@ -224,7 +224,7 @@ const createSettingsModal = (): HTMLDivElement => {
 }
 
 const createAppShell = (iconUri: string): HTMLDivElement => {
-  const providerOptions = [option('ollama', 'Ollama'), option('mlx-vlm', 'MLX / VLM'), option('openai-compatible', 'OpenAI-compatible')]
+  const providerOptions = [option('ollama', 'Ollama'), option('mlx-vlm', 'MLX / VLM'), option('openai-compatible', 'OpenAI-compatible'), option('opencode', 'OpenCode')]
   const header = createElement('header', { className: 'header' }, [
     createElement('div', { className: 'brand' }, [ghostFace(iconUri, 'brand-mark ghost-face'), createElement('div', {}, [createElement('div', { className: 'title' }, ['Ghost']), createElement('div', { className: 'subtitle' }, ['AI coding assistant'])])]),
     createElement('div', { className: 'header-actions' }, [

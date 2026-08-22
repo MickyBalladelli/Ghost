@@ -1,7 +1,7 @@
 {
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
-  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, and OpenAI-compatible model servers",
+  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, and OpenCode",
   "version": "1.1.96",
   "publisher": "MickyBalladelli",
   "author": {
@@ -87,6 +87,30 @@
       {
         "command": "ghost.rejectEditPreview",
         "title": "Ghost: Reject Staged Edit"
+      },
+      {
+        "command": "ghost.newOpenCodeSession",
+        "title": "Ghost: New OpenCode Session"
+      },
+      {
+        "command": "ghost.selectOpenCodeSession",
+        "title": "Ghost: Select OpenCode Session"
+      },
+      {
+        "command": "ghost.deleteOpenCodeSession",
+        "title": "Ghost: Delete Current OpenCode Session"
+      },
+      {
+        "command": "ghost.renameOpenCodeSession",
+        "title": "Ghost: Rename Current OpenCode Session"
+      },
+      {
+        "command": "ghost.forkOpenCodeSession",
+        "title": "Ghost: Fork Current OpenCode Session"
+      },
+      {
+        "command": "ghost.selectOpenCodeAgent",
+        "title": "Ghost: Select OpenCode Agent"
       }
     ],
     "viewsContainers": {
@@ -122,6 +146,34 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
+        },
+        "ghost.openCodeUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:4096",
+          "description": "User-managed OpenCode headless server URL. Ghost never starts or stops this server."
+        },
+        "ghost.openCodeUsername": {
+          "type": "string",
+          "default": "opencode",
+          "description": "HTTP Basic Auth username for OpenCode. Store the password with Ghost: Set Provider API Key."
+        },
+        "ghost.openCodeAgent": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenCode agent id. Leave empty to use the OpenCode default agent."
+        },
+        "ghost.openCodeSessionReuse": {
+          "type": "string",
+          "enum": [
+            "workspace",
+            "new"
+          ],
+          "enumDescriptions": [
+            "Resume the selected OpenCode session for this workspace.",
+            "Create a fresh OpenCode session for every Ghost request."
+          ],
+          "default": "workspace",
+          "description": "How Ghost reuses OpenCode sessions."
         },
         "ghost.openaiUrl": {
           "type": "string",
@@ -422,12 +474,14 @@
           "enum": [
             "ollama",
             "mlx-vlm",
-            "openai-compatible"
+            "openai-compatible",
+            "opencode"
           ],
           "enumDescriptions": [
             "Use the Ollama API.",
             "Use an MLX VLM OpenAI-compatible server.",
-            "Use another OpenAI-compatible server."
+            "Use another OpenAI-compatible server.",
+            "Delegate requests to a user-managed OpenCode headless server."
           ],
           "default": "ollama",
           "description": "Ghost model provider.",
@@ -682,7 +736,7 @@
       {
         "id": "ghost.agent",
         "name": "local",
-        "description": "Local AI coding assistant for Ollama, MLX/VLM, and OpenAI-compatible servers",
+        "description": "Local AI coding assistant for Ollama, MLX/VLM, OpenAI-compatible servers, and OpenCode",
         "isSticky": true
       }
     ],

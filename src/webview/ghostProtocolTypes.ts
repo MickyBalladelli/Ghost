@@ -1,5 +1,5 @@
 export type GhostViewStatus = 'ready' | 'offline'
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible'
+export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import * as fs from 'node:fs'
+import * as path from 'node:path'
 import { TextDecoder } from 'node:util'
 
 import { LocalToolExecutor } from '../tools/localToolExecutor'
@@ -35,6 +36,9 @@ import { parseTaskPlanMarker } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
+import { OpenCodeClient, OpenCodePermissionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
+import type { GhostStorage } from '../runtimeDependencies'
+import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy'
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
@@ -492,6 +496,7 @@ export interface ChatParticipantOptions {
   statusBar?: GhostStatusBar
   providerApiKey?: (provider: GhostProvider) => string | undefined
   approveTool?: (call: LocalToolCall, requestKey: string) => Promise<GhostToolApproval>
+  openCodeSessionStorage?: GhostStorage
 }
 
 export interface GhostContextSelection {
@@ -968,12 +973,197 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
       openaiCompatibleClient: createProfiledProviderClient(
         settings,
         () => providerApiKey?.('openai-compatible')
-      )
+      ),
+      openCodeClient: new OpenCodeClient(settings.openCodeUrl, {
+        username: settings.openCodeUsername,
+        password: () => providerApiKey?.('opencode')
+      })
     },
     {
       configuration: vscode.workspace.getConfiguration('ghost')
     }
   )
+}
+
+function openCodeWorkspaceDirectory(requestedRoot?: string): string | undefined {
+  const folders = vscode.workspace.workspaceFolders?.map(folder => path.resolve(folder.uri.fsPath)) ?? []
+  if (requestedRoot) {
+    const resolved = path.resolve(requestedRoot)
+    if (folders.includes(resolved)) return resolved
+  }
+  const activeFolder = vscode.window.activeTextEditor
+    ? vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri)
+    : undefined
+  return activeFolder?.uri.fsPath ?? folders[0]
+}
+
+function isInsideDirectory(filePath: string, directory: string): boolean {
+  const relative = path.relative(path.resolve(directory), path.resolve(filePath))
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+}
+
+function openCodePermissionTool(permission: OpenCodePermissionRequest): string {
+  const type = `${permission.type} ${permission.title}`.toLowerCase()
+  if (/\b(?:edit|write|patch|replace)\b/.test(type)) return 'ghost_apply_edit'
+  if (/\b(?:bash|shell|terminal|command)\b/.test(type)) return 'ghost_run_terminal_command'
+  if (/\b(?:grep|search)\b/.test(type)) return 'ghost_search_workspace'
+  if (/\b(?:glob|list)\b/.test(type)) return 'ghost_list_directory'
+  if (/\bread\b/.test(type)) return 'ghost_read_file'
+  if (/\bgit\b/.test(type)) return 'ghost_git_context'
+  return `opencode:${permission.type}`
+}
+
+function permissionMetadataPath(permission: OpenCodePermissionRequest): string | undefined {
+  for (const key of ['path', 'file', 'filename', 'filepath', 'filePath', 'directory', 'cwd', 'workdir', 'workingDirectory']) {
+    const value = permission.metadata[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+async function approveOpenCodePermission(
+  permission: OpenCodePermissionRequest,
+  settings: ReturnType<GhostConfig['getSettings']>,
+  directory: string,
+  requestApprovals: Set<string>,
+  mode: GhostRequestOptions['mode']
+): Promise<'once' | 'reject'> {
+  const toolName = openCodePermissionTool(permission)
+  const denylist = settings.toolDenylist ?? []
+  const allowlist = settings.toolAllowlist ?? []
+  const asklist = settings.toolAsklist ?? []
+  if (denylist.includes(toolName)) return 'reject'
+
+  const permissionPatterns = Array.isArray(permission.pattern) ? permission.pattern : permission.pattern ? [permission.pattern] : []
+  const candidatePaths = [permissionMetadataPath(permission)]
+  if (isFileEditTool(toolName)) candidatePaths.push(...permissionPatterns)
+  for (const candidatePath of candidatePaths) {
+    if (!candidatePath) continue
+    const resolved = path.isAbsolute(candidatePath) ? candidatePath : path.resolve(directory, candidatePath)
+    if (!isInsideDirectory(resolved, directory)) return 'reject'
+  }
+  if (/external[_ -]?directory/i.test(permission.type)) return 'reject'
+  if (mode !== 'edit' && mode !== 'agent' && (isFileEditTool(toolName) || toolName === 'ghost_run_terminal_command')) return 'reject'
+  if (toolName === 'ghost_run_terminal_command') {
+    const metadataCommand = typeof permission.metadata.command === 'string'
+      ? permission.metadata.command
+      : typeof permission.metadata.cmd === 'string'
+        ? permission.metadata.cmd
+        : undefined
+    const commands = [metadataCommand, ...permissionPatterns].filter((command): command is string => Boolean(command))
+    if (commands.some(command => auditTerminalCommand(command).blocked)) return 'reject'
+  }
+  if (requestApprovals.has(toolName)) return 'once'
+
+  const asksByPolicy = !allowlist.includes(toolName) || asklist.includes(toolName)
+  const fileEdit = isFileEditTool(toolName)
+  const autoAcceptedEdit = fileEdit
+    && !asksByPolicy
+    && (settings.autoAcceptScope === 'request' || settings.autoAcceptScope === 'workspace' || settings.autoAcceptScope === 'always')
+  if ((!requiresToolApproval(toolName) && !asksByPolicy) || autoAcceptedEdit) return 'once'
+
+  const metadata = redactSensitiveText(JSON.stringify(permission.metadata, null, 2)).slice(0, 2000)
+  const selection = await vscode.window.showWarningMessage(
+    permission.title,
+    {
+      modal: true,
+      detail: `${permission.type}${permission.pattern ? `\nPattern: ${Array.isArray(permission.pattern) ? permission.pattern.join(', ') : permission.pattern}` : ''}${metadata && metadata !== '{}' ? `\n\n${metadata}` : ''}`
+    },
+    'Allow once',
+    'Allow for request',
+    'Reject'
+  )
+  if (selection === 'Allow for request') {
+    requestApprovals.add(toolName)
+    return 'once'
+  }
+  return selection === 'Allow once' ? 'once' : 'reject'
+}
+
+async function runOpenCodeRequest(
+  client: OpenCodeClient,
+  contextPrompt: string,
+  requestOptions: GhostRequestOptions,
+  settings: ReturnType<GhostConfig['getSettings']>,
+  model: string,
+  response: vscode.ChatResponseStream,
+  token: vscode.CancellationToken,
+  statusBar: GhostStatusBar | undefined,
+  storage: GhostStorage | undefined
+): Promise<void> {
+  const directory = openCodeWorkspaceDirectory(requestOptions.workspaceRoot)
+  if (!directory) {
+    const message = 'OpenCode needs an open workspace folder.'
+    requestOptions.onStop?.('invalid-model-response', message)
+    response.markdown(message)
+    return
+  }
+  const key = openCodeSessionStorageKey(directory)
+  const sessionId = settings.openCodeSessionReuse === 'workspace' ? storage?.get<string>(key) : undefined
+  const mutatingMode = requestOptions.mode === 'edit' || requestOptions.mode === 'agent'
+  const dirtyFiles = vscode.workspace.textDocuments
+    .filter(document => document.isDirty && document.uri.scheme === 'file' && isInsideDirectory(document.uri.fsPath, directory))
+    .map(document => vscode.workspace.asRelativePath(document.uri, false))
+  if (dirtyFiles.length > 0 && mutatingMode) {
+    const message = `Save or revert dirty editor files before OpenCode runs: ${dirtyFiles.join(', ')}`
+    requestOptions.onStop?.('approval-rejected', message)
+    response.markdown(message)
+    return
+  }
+  const cancellation = createCancellationSignal(token)
+  const requestApprovals = new Set<string>()
+  let finalStatus: 'ready' | 'offline' = 'ready'
+  statusBar?.setStatus('generating')
+  try {
+    const system = [
+      `You are OpenCode running behind the Ghost VS Code extension. Work only inside ${directory}.`,
+      requestOptions.customSystemInstructions?.trim() ?? '',
+      'Never access paths outside this workspace. Do not weaken or bypass permission rules.',
+      mutatingMode
+        ? 'Complete the requested workspace task and report the actual result.'
+        : 'Answer and inspect only. Do not modify files or run shell commands.'
+    ].filter(Boolean).join('\n')
+    const result = await client.run({
+      prompt: redactSensitiveText(contextPrompt),
+      directory,
+      sessionId,
+      title: `Ghost · ${vscode.workspace.name ?? path.basename(directory)}`,
+      model,
+      agent: settings.openCodeAgent,
+      system: redactSensitiveText(system),
+      timeoutMs: Math.max(1, Math.floor(settings.providerRequestTimeoutMinutes)) * 60 * 1000,
+      signal: cancellation.signal,
+      onText: delta => response.markdown(redactSensitiveText(delta)),
+      onProgress: detail => response.progress(redactSensitiveText(detail)),
+      onPermission: permission => approveOpenCodePermission(permission, settings, directory, requestApprovals, requestOptions.mode)
+    })
+    if (settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
+    const outsideFiles = result.changedFiles
+      .map(file => path.isAbsolute(file) ? file : path.resolve(directory, file))
+      .filter(file => !isInsideDirectory(file, directory))
+    if (outsideFiles.length > 0) {
+      const message = `OpenCode reported changes outside the workspace: ${outsideFiles.join(', ')}`
+      requestOptions.onStop?.('failed-tool', message)
+      response.markdown(`\n\n${message}`)
+      return
+    }
+    if (!result.text.trim()) {
+      response.markdown(result.changedFiles.length > 0
+        ? `OpenCode completed the request. Changed: ${result.changedFiles.join(', ')}`
+        : 'OpenCode completed the request without a text response.')
+    }
+    if (result.changedFiles.length > 0) response.progress(`OpenCode changed ${result.changedFiles.join(', ')}`)
+  } catch (error) {
+    if (token.isCancellationRequested) return
+    const message = redactSensitiveText(error instanceof Error ? error.message : String(error))
+    requestOptions.onStop?.('provider-failure', message)
+    response.markdown(`Ghost OpenCode request failed: ${message}`)
+    finalStatus = isProviderConnectivityFailure(message) ? 'offline' : 'ready'
+    return
+  } finally {
+    cancellation.dispose()
+    statusBar?.setStatus(finalStatus)
+  }
 }
 
 function findStreamedToolCallStart(text: string): number | undefined {
@@ -1268,9 +1458,42 @@ export function createChatParticipantHandler(
         return
       }
     }
-    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, contextOptions, detail => response.progress(detail))
+    const effectiveContextOptions = modelSettings.provider === 'opencode'
+      ? {
+          ...contextOptions,
+          context: {
+            ...contextOptions.context,
+            workspace: false,
+            folders: false,
+            openFiles: false,
+            tools: false
+          }
+        }
+      : contextOptions
+    const contextPrompt = await buildContextPrompt(request, effectiveSettings, token, effectiveContextOptions, detail => response.progress(detail))
 
     if (token.isCancellationRequested) {
+      return
+    }
+
+    if (modelSettings.provider === 'opencode') {
+      if (!(resolved.client instanceof OpenCodeClient)) {
+        const message = 'Ghost could not initialize the OpenCode client.'
+        requestOptions.onStop?.('provider-failure', message)
+        response.markdown(message)
+        return
+      }
+      await runOpenCodeRequest(
+        resolved.client,
+        contextPrompt,
+        requestOptions,
+        settings,
+        modelSettings.model,
+        response,
+        token,
+        statusBar,
+        options.openCodeSessionStorage
+      )
       return
     }
 

@@ -153,38 +153,30 @@ Do not treat this file as a feature dump. If an item is not pulling its weight a
 
 ## P6 — OpenCode integration
 
-OpenCode is not another OpenAI-compatible chat endpoint. Its headless server exposes a versioned OpenAPI/HTTP API for projects, providers, sessions, messages, permissions, diffs, and SSE events. Its MCP integration is a separate path. Start with the [OpenCode server API](https://opencode.ai/docs/server/) and [MCP server docs](https://opencode.ai/v2/docs/mcp-servers/), then pin the tested OpenCode API version.
+Ghost delegates to a user-managed OpenCode 1.x headless server through its [server API](https://opencode.ai/docs/server/). OpenCode owns the agent loop and direct workspace edits. Ghost owns workspace routing, credentials, policy checks, permission replies, UI streaming, cancellation, and the selected session. The opposite-direction MCP bridge was rejected because it would duplicate both products’ tool and lifecycle surfaces.
 
-- [ ] **Choose the integration direction and ownership model.** Decide whether Ghost delegates model/agent work to a user-managed `opencode serve`, OpenCode calls Ghost tools through MCP, or both are supported. Define which product owns sessions, prompts, tool execution, file mutations, approvals, terminal commands, and cancellation. Do not silently start or kill a user’s OpenCode process.
+- [x] **Direction and compatibility.** Added the `opencode` provider, a 1.x health/version handshake, unsupported-feature boundaries, and clear incompatible-version errors. Ghost never starts or kills the user’s server.
 
-- [ ] **Write the compatibility contract.** Record the minimum OpenCode version, supported server/API revisions, supported providers and agents, unsupported features, multi-root behavior, and the upgrade policy. Add a capability handshake so an API drift becomes a clear “unsupported OpenCode version” message instead of a malformed request.
+- [x] **Settings and secrets.** Added loopback server URL, Basic Auth username, optional agent id, workspace/new session reuse, existing timeout integration, and password storage through VS Code `SecretStorage`.
 
-- [ ] **Add OpenCode settings and secrets.** Add an opt-in provider/integration mode, server URL (defaulting to loopback only), project-directory selection, request/event timeouts, session reuse policy, and optional auto-discovery. Store HTTP Basic Auth credentials in `SecretStorage`; never put passwords in URLs, settings sync, telemetry, errors, or logs.
+- [x] **Typed client.** `openCodeClient.ts` owns narrow API types, URL/query routing, auth, timeouts, aborts, health, model/agent discovery, session calls, SSE parsing, permission replies, final messages, and diffs.
 
-- [ ] **Implement a typed OpenCode client.** Generate or hand-maintain narrow types from `/doc`; centralize URL joining, `directory`/project-root routing, auth headers, retries, cancellation, response-size limits, SSE parsing, and normalized errors. Reuse the existing provider transport policies where safe, but keep OpenCode session errors distinct from model-provider errors.
+- [x] **Connection and discovery UX.** Provider controls, health status, model discovery, `Ghost: Select OpenCode Agent`, and actionable offline/auth/version failures support OpenCode.
 
-- [ ] **Add connection and discovery UX.** Use `/global/health`, `/project/current`, `/config/providers`, `/provider`, and `/agent` to test the server, show its version, discover available models/agents, and explain auth, wrong project root, offline, and incompatible-version failures. Add a command and status state without renaming the existing generic provider commands again.
+- [x] **Workspace routing.** Every API call carries one selected workspace directory. Sessions are keyed by canonical root, stale or cross-root sessions are replaced, external-directory permissions are rejected, and final diff paths are containment-checked.
 
-- [ ] **Map Ghost workspaces to OpenCode projects.** Resolve the owning folder for multi-root workspaces, send the correct project directory on every request, prevent a session from silently crossing workspace roots, and verify that OpenCode’s working directory is inside the selected Ghost workspace before allowing edits or shell commands.
+- [x] **Prompt and context mapping.** Ghost sends the request, active file/selection, attachments, selected `provider/model`, mode constraints, and custom instructions. It omits workspace scans, folder/open-file lists, and Ghost tool schemas because OpenCode can inspect the project itself.
 
-- [ ] **Map prompts and context deliberately.** Define how Ghost modes, system instructions, current file, selection, history, attachments, model aliases, context limits, and tool enablement map to OpenCode message fields. Avoid duplicating the same file contents in Ghost and OpenCode context; redact secrets before transmission.
+- [x] **Session lifecycle.** Added create, list, select, rename, resume, fork, abort, delete, and new-session behavior. Runs serialize per workspace, and only the workspace-scoped selected session id is persisted.
 
-- [ ] **Implement session lifecycle.** Create, list, select, rename, resume, fork, abort, and delete sessions through the OpenCode API. Persist only a workspace-scoped session ID and metadata, recover from deleted or stale sessions, and make concurrent requests serialize or use separate sessions. Add a clear “new session” action.
+- [x] **Streaming and tool progress.** Ghost filters `/event` SSE by session, streams text and tool progress, deduplicates permission replies, falls back to the synchronous final message, and reads the final diff.
 
-- [ ] **Implement streaming and tool-event translation.** Subscribe to `/event` SSE, correlate `session`, message, part, tool, permission, and error events, render incremental text and tool progress in the Ghost webview, tolerate reconnects and duplicate events, and close subscriptions on cancellation and disposal. Preserve the final diff and token/usage data when available.
+- [x] **Approvals and safety.** OpenCode permissions map to Ghost allow/ask/deny rules. Ghost sends only `once` or `reject`, rejects external paths and Ask/Explain mutations, blocks mutating runs with dirty editors, and refuses requests unless OpenCode config guards `edit`, `bash`, and `external_directory`.
 
-- [ ] **Bridge approvals and safety policy.** Map OpenCode permission requests to Ghost’s allow/ask/deny lists and auto-accept scopes. Never let an OpenCode-side approval bypass Ghost’s workspace jail, terminal audit, staged-edit flow, or emergency pause. Define which side answers a permission request and translate “always/session/once/reject” without weakening either policy.
+- [x] **Cancellation and recovery.** Stop aborts HTTP, SSE, and `/session/:id/abort`. Offline, timeout, incompatible version, permissive config, stale session, permission rejection, and diff-containment failures remain distinct.
 
-- [ ] **Handle edits, diffs, and external changes safely.** Decide whether OpenCode edits files directly or returns proposed patches. If it edits directly, detect editor-version/mtime races, refresh Ghost read caches, verify workspace containment, and surface `/session/:id/diff` before claiming success. Reuse Ghost’s atomic/staged mutation rules where Ghost owns the write.
+- [x] **MCP decision.** No MCP listener, child process, transport, or extra tool namespace is shipped. Ghost connects only to the configured OpenCode server and marks non-loopback endpoints as external.
 
-- [ ] **Add cancellation, timeout, and recovery behavior.** Connect Ghost Stop/cancel to `/session/:id/abort` and the active HTTP/SSE abort signal. Distinguish provider timeout, OpenCode server timeout, agent budget, permission wait, disconnect, and user cancellation; recover or mark the session consistently after each case.
+- [x] **Contract coverage.** Added fast fake-transport contracts for version rejection, model discovery, workspace routing, session completion/final diff, and permissive-config rejection. Added OpenCode to the shared provider contract suite.
 
-- [ ] **Decide and implement the OpenCode-to-Ghost MCP bridge, if selected.** Expose a local or remote MCP server with Ghost’s read, search, diagnostics, git, edit, terminal, task-plan, and completion tools; use MCP tool schemas that match the real validators; namespace tool names; and document whether tools are direct or Code Mode. Do not expose VS Code-only UI state as an executable tool.
-
-- [ ] **Give the MCP bridge a safe lifecycle.** Define stdio/HTTP transport, workspace-root routing, one-client vs multi-client behavior, authentication, shutdown, reconnects, backpressure, request limits, and whether the extension owns the child process. Require explicit opt-in before binding beyond loopback or exposing file and terminal tools.
-
-- [ ] **Test the integration without a live user server.** Add fast contract tests for URL/auth/redaction, OpenAPI decoding, SSE ordering/reconnects, session mapping, project containment, permission translation, cancellation, and API-version rejection. Add a disposable fake OpenCode server for end-to-end Ghost view and `@local` chat tests, plus an MCP conformance test if that bridge is shipped.
-
-- [ ] **Document setup and support boundaries.** Add OpenCode installation/configuration examples, `opencode serve` instructions, loopback and Basic Auth security notes, model/agent selection, session behavior, troubleshooting, privacy/data-flow notes, and a migration path when OpenCode changes its API. Link the canonical docs instead of copying volatile endpoint details into README prose.
-
-- [ ] **Add release gates.** Include OpenCode contract tests, MCP validation, secret-redaction checks, package inclusion checks, and manual smoke steps in `docs/release.md`; update README, configuration reference, and `CHANGELOG.md` with the release that first ships the integration.
+- [x] **Docs and release gates.** README, generated configuration reference, architecture/provider docs, release smoke steps, and changelog cover setup, permission config, Basic Auth, sessions, direct-edit limits, cancellation, privacy, and compatibility.

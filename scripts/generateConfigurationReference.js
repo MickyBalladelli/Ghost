@@ -138,7 +138,7 @@ function formatDescription(property) {
 const categories = ['Provider', 'Models and generation', 'Agent safety', 'Persistence and diagnostics', 'Advanced']
 
 function categoryForName(name) {
-  if (/^(provider|ollamaUrl|mlxUrl|openai)/.test(name)) return 'Provider'
+  if (/^(provider|ollamaUrl|mlxUrl|openai|openCode)/.test(name)) return 'Provider'
   if (/^(chatModel|autocompleteModel|inlineCompletionTimeoutMs|temperature|topP|topK|minP|presencePenalty|repeatPenalty|seed|stopSequences|contextWindow|grammar|jsonMode|modelProfile|modelAliases|modelProfiles|maxContextTokens|responseLength|enableInlineCompletions)$/.test(name)) return 'Models and generation'
   if (/^(mode|fileEditApproval|autoAcceptScope|tool|terminalEnvironment|requestTimeLimitMinutes)$/.test(name)) return 'Agent safety'
   if (/^(enableConversationPersistence|enableDebugLogging|logLevel)$/.test(name)) return 'Persistence and diagnostics'
