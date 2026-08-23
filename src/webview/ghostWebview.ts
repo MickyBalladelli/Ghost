@@ -2886,13 +2886,56 @@ const observeDeferredMessages = (): void => {
   }
 }
 
+let messageScrollFrame: number | undefined
+let messageScrollStartedAt = 0
+let messageScrollLastAt = 0
+
+const stopMessageScroll = (): void => {
+  if (messageScrollFrame !== undefined) {
+    window.cancelAnimationFrame(messageScrollFrame)
+    messageScrollFrame = undefined
+  }
+}
+
+const startMessageScroll = (): void => {
+  if (messageScrollFrame !== undefined) {
+    return
+  }
+  messageScrollStartedAt = performance.now()
+  messageScrollLastAt = messageScrollStartedAt
+  const step = (timestamp: number): void => {
+    const target = Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight)
+    const distance = target - messagesElement.scrollTop
+    if (distance <= 1) {
+      messagesElement.scrollTop = target
+      messageScrollFrame = undefined
+      userIsAtBottom = true
+      return
+    }
+    const elapsedMs = timestamp - messageScrollStartedAt
+    const deltaMs = Math.min(50, Math.max(0, timestamp - messageScrollLastAt))
+    const speed = Math.min(900, 70 + elapsedMs * 0.35)
+    const distanceThisFrame = Math.min(distance, Math.max(0.5, speed * deltaMs / 1000))
+    messagesElement.scrollTop += distanceThisFrame
+    messageScrollLastAt = timestamp
+    messageScrollFrame = window.requestAnimationFrame(step)
+  }
+  messageScrollFrame = window.requestAnimationFrame(step)
+}
+
 const scrollMessages = (force: boolean) => {
   requestAnimationFrame(() => {
     const followingActiveRequest = activeRequest?.conversationId === state.activeConversationId
-    if (force || followingActiveRequest || userIsAtBottom) {
+    if (!force && !followingActiveRequest && !userIsAtBottom) {
+      return
+    }
+    if (force) {
+      stopMessageScroll()
       messagesElement.scrollTo({ top: messagesElement.scrollHeight, behavior: 'auto' })
       userIsAtBottom = true
+      return
     }
+    startMessageScroll()
   })
 }
 
@@ -3366,7 +3409,7 @@ const focusNextApprovalCard = (toolCallId: string): void => {
       ? undefined
       : toolCards.slice(currentIndex + 1).find(card => card.classList.contains('tool-approval-card'))
     const focusTarget = nextCard?.querySelector<HTMLInputElement>('input') ?? nextCard?.querySelector<HTMLButtonElement>('button')
-    focusTarget?.focus()
+    focusTarget?.focus({ preventScroll: true })
   })
 }
 
