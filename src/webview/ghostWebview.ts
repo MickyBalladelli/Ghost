@@ -3433,6 +3433,14 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
       renderMessages(false)
     }
   }
+  const disableApprovalControls = (): void => {
+    const card = document.querySelector<HTMLElement>(`.tool-approval-card[data-tool-call-id="${CSS.escape(toolCallId)}"]`)
+    if (!card) return
+    card.setAttribute('aria-busy', 'true')
+    for (const button of Array.from(card.querySelectorAll<HTMLButtonElement>('[data-tool-action]'))) {
+      button.disabled = true
+    }
+  }
   if ((action === 'open-file' || action === 'open-hunk') && found.toolCall.diffPreview) {
     const path = found.toolCall.diffPreview.files?.[0] ?? found.toolCall.diffPreview.path
     post('open-file', {
@@ -3472,16 +3480,12 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
       screenReaderStatusElement.textContent = 'Choose or enter an answer for every question.'
       return
     }
-    found.toolCall.approval = 'approved'
-    found.toolCall.status = 'running'
+    disableApprovalControls()
     post('answer-question', { requestId, conversationId, toolCallId, answers })
-    refreshFoundMessage()
-    focusNextApprovalCard(toolCallId)
     return
   }
   if (action === 'approve' || action === 'approve-session' || action === 'approve-forever') {
-    found.toolCall.approval = 'approved'
-    found.toolCall.status = 'running'
+    disableApprovalControls()
     post('approve-tool', {
       requestId,
       conversationId,
@@ -3497,9 +3501,8 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     found.toolCall.status = 'rejected'
     post('reject-tool', { requestId, conversationId, toolCallId })
   }
-  const shouldFocusNextApproval = action === 'approve' || action === 'approve-session' || action === 'approve-forever' || action === 'reject'
   refreshFoundMessage()
-  if (shouldFocusNextApproval) {
+  if (action === 'reject') {
     focusNextApprovalCard(toolCallId)
   }
 }
