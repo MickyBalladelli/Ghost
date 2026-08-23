@@ -7,7 +7,7 @@ import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 export const DEFAULT_OPEN_CODE_URL = 'http://127.0.0.1:4096'
 export const MINIMUM_OPEN_CODE_VERSION = '1.0.0'
 
-export const openCodeSessionStorageKey = (directory: string): string => `ghost.opencode.session.${path.resolve(directory)}`
+export const openCodeSessionStorageKey = (directory: string, conversationId: string): string => `ghost.opencode.session.${path.resolve(directory)}.${encodeURIComponent(conversationId)}`
 
 export type OpenCodePermissionResponse = 'once' | 'reject'
 export type OpenCodePermissionDecision = OpenCodePermissionResponse | { response: OpenCodePermissionResponse; reason?: string }

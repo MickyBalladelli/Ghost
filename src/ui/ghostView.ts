@@ -110,7 +110,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly messenger?: GhostWebviewMessenger
   private negotiatedProtocolVersion: GhostProtocolVersion = GHOST_WEBVIEW_PROTOCOL_VERSION
   private static readonly globalStateKey = 'ghost.global.v2'
-  private static readonly workspaceStateKey = 'ghost.workspace.v2'
+  static readonly workspaceStateKey = 'ghost.workspace.v2'
   private static readonly firstRunSetupCompleteKey = 'ghost.global.firstRunSetupComplete'
   private static readonly providerStatusCacheTtlMs = 30_000
   private static readonly providerStatusPollIntervalMs = 2_000
@@ -474,6 +474,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       .join('\n\n')
     const requestOptions: GhostRequestOptions = {
       ...options,
+      conversationId,
       modelProfile: options.modelProfile,
       modelRole,
       images: safeAttachments.flatMap<ChatVisionImage>(attachment => {

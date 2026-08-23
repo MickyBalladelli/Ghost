@@ -2906,11 +2906,19 @@ const observeDeferredMessages = (): void => {
 }
 
 const scrollMessages = (force: boolean) => {
+  if (force) {
+    messagesElement.scrollTo({
+      top: messagesElement.scrollHeight,
+      behavior: 'auto'
+    })
+    userIsAtBottom = true
+    return
+  }
   requestAnimationFrame(() => {
-    if (force || userIsAtBottom) {
+    if (userIsAtBottom) {
       messagesElement.scrollTo({
         top: messagesElement.scrollHeight,
-        behavior: force ? 'auto' : 'smooth'
+        behavior: 'smooth'
       })
       userIsAtBottom = true
     }

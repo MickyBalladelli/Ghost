@@ -137,7 +137,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.openCodeUrl` | `http://127.0.0.1:4096` | User-managed `opencode serve` URL. Ghost does not start or stop it. |
 | `ghost.openCodeUsername` | `opencode` | Basic Auth username. Store the server password with **Ghost: Set Provider API Key**. |
 | `ghost.openCodeAgent` | empty | Optional OpenCode agent id; empty uses OpenCode's default. |
-| `ghost.openCodeSessionReuse` | `workspace` | Resume the selected workspace session or use `new` for every request. |
+| `ghost.openCodeSessionReuse` | `workspace` | Reuse one OpenCode session per Ghost conversation or use `new` for every request. |
 | `ghost.openaiApiKeyHeader` / `ghost.openaiApiKeyPrefix` | `Authorization` / `Bearer` | Select the API-key header format; the key stays in VS Code SecretStorage. |
 | `ghost.openaiOrganization` / `ghost.openaiProject` | empty | Optional organization and project values, sent with their configurable headers. |
 | `ghost.openaiProxy` / `ghost.openaiNoProxy` | empty / localhost list | Route OpenAI-compatible traffic through a proxy with host bypass rules. Proxy URLs must not contain credentials. |

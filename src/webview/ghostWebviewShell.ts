@@ -164,7 +164,7 @@ const createSettingsContent = (): HTMLDivElement => {
     [createElement('p', { className: 'settings-help', id: 'provider-help' }, ['Endpoint for the selected provider.'])],
     settingRow('OpenCode username', input('opencode-username', 'text', { value: 'opencode', placeholder: 'opencode' }), 'opencode-username', undefined, 'opencode'),
     settingRow('OpenCode agent', input('opencode-agent', 'text', { placeholder: 'Use server default' }), 'opencode-agent', undefined, 'opencode'),
-    settingRow('Session handling', select('opencode-session-reuse', [option('workspace', 'Reuse workspace session'), option('new', 'New session for every request')]), 'opencode-session-reuse', undefined, 'opencode'),
+    settingRow('Session handling', select('opencode-session-reuse', [option('workspace', 'Reuse per conversation'), option('new', 'New session for every request')]), 'opencode-session-reuse', undefined, 'opencode'),
     [button('set-opencode-password', 'Set OpenCode password…', { className: 'secondary settings-inline-action', 'data-provider-scope': 'opencode' })],
     [createElement('p', { className: 'settings-help', 'data-provider-scope': 'opencode' }, ['Password is optional and stays in VS Code SecretStorage.'])],
     settingRow('Compatibility profile', select('openai-profile', [option('generic', 'OpenAI-compatible'), option('anthropic', 'Anthropic'), option('gemini', 'Google Gemini'), option('azure-openai', 'Azure OpenAI'), option('lm-studio', 'LM Studio'), option('llama-cpp', 'llama.cpp'), option('vllm', 'vLLM'), option('litellm', 'LiteLLM'), option('custom', 'Custom HTTP')]), 'openai-profile', undefined, 'openai-compatible'),

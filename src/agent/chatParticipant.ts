@@ -522,6 +522,7 @@ export interface GhostContextSelection {
 }
 
 export interface GhostRequestOptions {
+  conversationId?: string
   provider?: GhostProvider
   model?: string
   modelProfile?: string
@@ -1248,9 +1249,10 @@ async function runOpenCodeRequest(
     return
   }
   await ensureOpenCodeGlobalConfig()
-  const key = openCodeSessionStorageKey(directory)
+  const conversationId = requestOptions.conversationId?.trim()
+  const key = conversationId ? openCodeSessionStorageKey(directory, conversationId) : undefined
   const planningMode = requestOptions.mode === 'plan'
-  const sessionId = !planningMode && settings.openCodeSessionReuse === 'workspace'
+  const sessionId = key && !planningMode && settings.openCodeSessionReuse === 'workspace'
     ? storage?.get<string>(key)
     : undefined
   const mutatingMode = requestOptions.mode === 'edit' || requestOptions.mode === 'agent'
@@ -1303,7 +1305,7 @@ async function runOpenCodeRequest(
       ),
       onQuestion: question => answerOpenCodeQuestion(question, requestOptions.answerProviderQuestion)
     })
-    if (!planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
+    if (key && !planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles
       .map(file => path.isAbsolute(file) ? file : path.resolve(directory, file))
       .filter(file => !isInsideDirectory(file, directory))

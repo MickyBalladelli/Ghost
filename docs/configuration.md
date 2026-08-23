@@ -14,7 +14,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openCodeUrl` | string | `http://127.0.0.1:4096` | User-managed OpenCode headless server URL. Ghost never starts or stops this server. |
 | `ghost.openCodeUsername` | string | `opencode` | HTTP Basic Auth username for OpenCode. Store the password with Ghost: Set Provider API Key. |
 | `ghost.openCodeAgent` | string | empty | Optional OpenCode agent id. Leave empty to use the OpenCode default agent. |
-| `ghost.openCodeSessionReuse` | string; one of `workspace`, `new` | `workspace` | How Ghost reuses OpenCode sessions. |
+| `ghost.openCodeSessionReuse` | string; one of `workspace`, `new` | `workspace` | How Ghost preserves OpenCode context between requests. |
 | `ghost.openaiUrl` | string | `http://localhost:8001/v1` | OpenAI-compatible model server URL. |
 | `ghost.openaiProfile` | string; one of `generic`, `anthropic`, `gemini`, `azure-openai`, `lm-studio`, `llama-cpp`, `vllm`, `litellm`, `custom` | `generic` | Compatibility profile used by the OpenAI-compatible provider. |
 | `ghost.openaiApiVersion` | string | `2024-10-21` | Azure OpenAI API version. |

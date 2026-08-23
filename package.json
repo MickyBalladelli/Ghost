@@ -169,11 +169,11 @@
             "new"
           ],
           "enumDescriptions": [
-            "Resume the selected OpenCode session for this workspace.",
+            "Reuse a dedicated OpenCode session for each Ghost conversation.",
             "Create a fresh OpenCode session for every Ghost request."
           ],
           "default": "workspace",
-          "description": "How Ghost reuses OpenCode sessions."
+          "description": "How Ghost preserves OpenCode context between requests."
         },
         "ghost.openaiUrl": {
           "type": "string",

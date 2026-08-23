@@ -139,20 +139,36 @@ export async function activate(context: vscode.ExtensionContext) {
       : undefined
     return active ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   }
+  const selectedConversationId = (): string | undefined => {
+    const state = context.workspaceState.get<{ activeConversationId?: unknown }>(GhostViewProvider.workspaceStateKey)
+    return typeof state?.activeConversationId === 'string' && state.activeConversationId.trim()
+      ? state.activeConversationId
+      : undefined
+  }
   const newOpenCodeSessionCommand = vscode.commands.registerCommand('ghost.newOpenCodeSession', async () => {
     const directory = selectedWorkspaceRoot()
     if (!directory) {
       await vscode.window.showErrorMessage('Open a workspace before creating an OpenCode session.')
       return
     }
+    const conversationId = selectedConversationId()
+    if (!conversationId) {
+      await vscode.window.showErrorMessage('Open a Ghost conversation before creating an OpenCode session.')
+      return
+    }
     const { openCodeSessionStorageKey } = await import('./services/openCodeClient')
-    await context.workspaceState.update(openCodeSessionStorageKey(directory), undefined)
-    await vscode.window.showInformationMessage('Ghost will create a new OpenCode session on the next request.')
+    await context.workspaceState.update(openCodeSessionStorageKey(directory, conversationId), undefined)
+    await vscode.window.showInformationMessage('Ghost will create a new OpenCode session for this conversation on the next request.')
   })
   const selectOpenCodeSessionCommand = vscode.commands.registerCommand('ghost.selectOpenCodeSession', async () => {
     const directory = selectedWorkspaceRoot()
     if (!directory) {
       await vscode.window.showErrorMessage('Open a workspace before selecting an OpenCode session.')
+      return
+    }
+    const conversationId = selectedConversationId()
+    if (!conversationId) {
+      await vscode.window.showErrorMessage('Open a Ghost conversation before selecting an OpenCode session.')
       return
     }
     const { OpenCodeClient, openCodeSessionStorageKey } = await import('./services/openCodeClient')
@@ -172,17 +188,22 @@ export async function activate(context: vscode.ExtensionContext) {
       session
     })), { placeHolder: 'Choose the OpenCode session Ghost should resume' })
     if (!selected) return
-    await context.workspaceState.update(openCodeSessionStorageKey(directory), selected.session.id)
-    await vscode.window.showInformationMessage(`Ghost selected OpenCode session: ${selected.session.title}`)
+    await context.workspaceState.update(openCodeSessionStorageKey(directory, conversationId), selected.session.id)
+    await vscode.window.showInformationMessage(`Ghost selected OpenCode session for this conversation: ${selected.session.title}`)
   })
   const deleteOpenCodeSessionCommand = vscode.commands.registerCommand('ghost.deleteOpenCodeSession', async () => {
     const directory = selectedWorkspaceRoot()
     if (!directory) return
     const { OpenCodeClient, openCodeSessionStorageKey } = await import('./services/openCodeClient')
-    const key = openCodeSessionStorageKey(directory)
+    const conversationId = selectedConversationId()
+    if (!conversationId) {
+      await vscode.window.showInformationMessage('Ghost has no active conversation.')
+      return
+    }
+    const key = openCodeSessionStorageKey(directory, conversationId)
     const sessionId = context.workspaceState.get<string>(key)
     if (!sessionId) {
-      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this workspace.')
+      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this conversation.')
       return
     }
     const confirmed = await vscode.window.showWarningMessage(
@@ -204,9 +225,14 @@ export async function activate(context: vscode.ExtensionContext) {
     const directory = selectedWorkspaceRoot()
     if (!directory) return
     const { OpenCodeClient, openCodeSessionStorageKey } = await import('./services/openCodeClient')
-    const sessionId = context.workspaceState.get<string>(openCodeSessionStorageKey(directory))
+    const conversationId = selectedConversationId()
+    if (!conversationId) {
+      await vscode.window.showInformationMessage('Ghost has no active conversation.')
+      return
+    }
+    const sessionId = context.workspaceState.get<string>(openCodeSessionStorageKey(directory, conversationId))
     if (!sessionId) {
-      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this workspace.')
+      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this conversation.')
       return
     }
     const title = await vscode.window.showInputBox({ prompt: 'Rename the current OpenCode session', validateInput: value => value.trim() ? undefined : 'Enter a title' })
@@ -223,10 +249,15 @@ export async function activate(context: vscode.ExtensionContext) {
     const directory = selectedWorkspaceRoot()
     if (!directory) return
     const { OpenCodeClient, openCodeSessionStorageKey } = await import('./services/openCodeClient')
-    const key = openCodeSessionStorageKey(directory)
+    const conversationId = selectedConversationId()
+    if (!conversationId) {
+      await vscode.window.showInformationMessage('Ghost has no active conversation.')
+      return
+    }
+    const key = openCodeSessionStorageKey(directory, conversationId)
     const sessionId = context.workspaceState.get<string>(key)
     if (!sessionId) {
-      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this workspace.')
+      await vscode.window.showInformationMessage('Ghost has no selected OpenCode session for this conversation.')
       return
     }
     const settings = ghostConfig.getSettings()
