@@ -6,6 +6,7 @@ All notable changes to this extension are documented here.
 - Preserve the message-pane position when an approval card is replaced after a tool decision.
 - Add a read-only Plan workflow with structured task plans and an Implement plan handoff to Agent.
 - Show and answer OpenCode question-tool prompts with selectable options and custom answers.
+- Treat OpenCode tool errors as failed requests and preserve their error detail.
 
 
 ## 1.2.6 - 2026-08-22

@@ -340,6 +340,22 @@ function eventToolProgress(event: OpenCodeEvent): string | undefined {
   return `OpenCode ${tool}: ${status}`
 }
 
+function eventToolError(event: OpenCodeEvent): string | undefined {
+  if (event.type !== 'message.part.updated') return undefined
+  const part = record(record(event.properties)?.part)
+  if (part?.type !== 'tool') return undefined
+  const state = record(part.state)
+  const status = textValue(state?.status) ?? textValue(part.status)
+  if (status !== 'error' && status !== 'failed') return undefined
+  const tool = textValue(part.tool) ?? textValue(part.name) ?? 'tool'
+  const detail = nestedErrorMessage(state?.error)
+    ?? nestedErrorMessage(state?.output)
+    ?? nestedErrorMessage(part.error)
+    ?? nestedErrorMessage(part.output)
+  const safeDetail = detail ? limitErrorText(redactSensitiveText(detail)) : undefined
+  return `OpenCode ${tool} failed${safeDetail ? `: ${safeDetail}` : '.'}`
+}
+
 function changedFilesFromEvent(event: OpenCodeEvent): string[] {
   const properties = record(event.properties)
   if (event.type === 'file.edited') {
@@ -699,6 +715,12 @@ export class OpenCodeClient implements ProviderClient {
         toolCount += 1
         options.onProgress?.(progress)
       }
+      const toolError = eventToolError(event)
+      if (toolError) {
+        streamError = new Error(toolError)
+        markSessionFinished?.('error')
+        streamController.abort()
+      }
       const eventFiles = changedFilesFromEvent(event)
       if (eventFiles.length > 0) sawSessionActivity = true
       for (const file of eventFiles) changedFiles.add(file)
@@ -716,7 +738,7 @@ export class OpenCodeClient implements ProviderClient {
         streamError = new Error(openCodeSessionError(event))
         markSessionFinished?.('error')
       }
-      if (status === 'idle' && sawSessionActivity) markSessionFinished?.('idle')
+      if (!streamError && status === 'idle' && sawSessionActivity) markSessionFinished?.('idle')
     }, () => markStreamConnected?.()).catch(error => {
       markStreamConnected?.()
       if (!streamController.signal.aborted) {
