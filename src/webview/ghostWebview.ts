@@ -520,8 +520,6 @@ const restorePersistedState = (persisted: GhostState): void => {
   if (typeof preferences.workspaceOnly === 'boolean') uiPreferences.workspaceOnly = preferences.workspaceOnly
   trimPromptHistories()
   applyUiPreferences()
-  render(true)
-  restoreDraft()
 }
 
 let persistenceReady = false
@@ -3043,6 +3041,12 @@ const render = (forceScroll = false) => {
   saveState()
 }
 
+const renderInterface = () => {
+  renderControls()
+  updateStatus()
+  saveState()
+}
+
 const setNotice = (kind: NoticeKind, message: string) => {
   notice = { kind, message }
   render(false)
@@ -3674,11 +3678,15 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     }) || (persisted.presets?.length ?? 0) > 0
     if (hasLocalContent && !hasStoredContent) {
       persistenceReady = true
+      render(true)
+      restoreDraft()
       post('persist-state', { state: createPersistedState() })
       return
     }
     restorePersistedState(persisted)
     persistenceReady = true
+    render(true)
+    restoreDraft()
     return
   }
   if (message.type === 'state') {
@@ -3689,7 +3697,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       activeRequest.latestDetail = 'Provider disconnected'
       stopProgressTimer()
     }
-    render(false)
+    renderInterface()
     return
   }
   if (message.type === 'controls-state') {
@@ -3718,7 +3726,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     uiPreferences.firstRunSetupComplete = message.firstRunSetupComplete
     viewStatus = connection === 'offline' ? 'offline' : 'ready'
     contextData = { ...message.context, tools: message.tools }
-    render(false)
+    renderInterface()
     if (selectedModel !== message.settings.chatModel && incomingModels.length > 0) {
       sendSettingsUpdate()
     }
@@ -4972,10 +4980,12 @@ const disposeWebviewResources = (): void => {
 window.addEventListener('pagehide', disposeWebviewResources, { once: true })
 
 const restoredWebviewState = vscode.getState<GhostState>()
-if (restoredWebviewState && (restoredWebviewState.schemaVersion === 1 || restoredWebviewState.schemaVersion === persistenceSchemaVersion) && Array.isArray(restoredWebviewState.conversations)) {
+const hasRestoredWebviewState = Boolean(restoredWebviewState && (restoredWebviewState.schemaVersion === 1 || restoredWebviewState.schemaVersion === persistenceSchemaVersion) && Array.isArray(restoredWebviewState.conversations))
+if (restoredWebviewState && hasRestoredWebviewState) {
   restorePersistedState(restoredWebviewState)
 }
 
-render(false)
+renderControls()
+updateStatus()
 restoreDraft()
 post('ready')

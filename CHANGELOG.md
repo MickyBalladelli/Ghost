@@ -12,6 +12,7 @@ All notable changes to this extension are documented here.
 - Explain when Ghost, rather than the user, automatically blocks an OpenCode permission.
 - Update approval cards in place without rebuilding the message pane.
 - Avoid optimistic approval redraws until the provider returns the real tool result.
+- Build the restored result pane once on reload so it performs one downward scroll without bouncing.
 
 
 ## 1.2.6 - 2026-08-22
