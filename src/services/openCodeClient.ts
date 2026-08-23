@@ -2,7 +2,7 @@ import * as path from 'node:path'
 
 import type { ModelPricing, ProviderClient } from './providerAdapter'
 import type { ChatRequestOptions } from './chatTypes'
-import { redactSensitiveText } from '../privacy/redact'
+import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 
 export const DEFAULT_OPEN_CODE_URL = 'http://127.0.0.1:4096'
 export const MINIMUM_OPEN_CODE_VERSION = '1.0.0'
@@ -90,6 +90,62 @@ const record = (value: unknown): Record<string, unknown> | undefined => (
 )
 
 const textValue = (value: unknown): string | undefined => typeof value === 'string' ? value : undefined
+
+const limitErrorText = (value: string): string => value.length > 2000 ? `${value.slice(0, 2000)}…` : value
+
+const nestedErrorMessage = (value: unknown, seen = new Set<object>()): string | undefined => {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (value instanceof Error && value.message) return value.message
+  if (!value || typeof value !== 'object') return undefined
+  if (seen.has(value)) return undefined
+  seen.add(value)
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = nestedErrorMessage(item, seen)
+      if (message) return message
+    }
+    return undefined
+  }
+  const object = record(value)
+  if (!object) return undefined
+  for (const key of ['data', 'error', 'detail', 'cause', 'message', 'reason', 'name', 'code', 'status']) {
+    const message = nestedErrorMessage(object[key], seen)
+    if (message) return message
+  }
+  return undefined
+}
+
+const serializedErrorDetail = (value: unknown): string | undefined => {
+  if (value === undefined) return undefined
+  try {
+    const serialized = JSON.stringify(redactSensitiveValue(value))
+    return serialized && serialized !== '{}' ? serialized : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const openCodeSessionError = (event: OpenCodeEvent): string => {
+  const properties = record(event.properties)
+  const details = [
+    properties?.error,
+    properties?.message,
+    properties?.detail,
+    properties?.reason,
+    properties?.cause,
+    properties?.data
+  ]
+  for (const detail of details) {
+    const message = nestedErrorMessage(detail)
+    if (message) return `OpenCode session error: ${limitErrorText(redactSensitiveText(message))}`
+    const serialized = serializedErrorDetail(detail)
+    if (serialized) return `OpenCode session error: ${limitErrorText(serialized)}`
+  }
+  const serializedProperties = serializedErrorDetail(properties)
+  return serializedProperties
+    ? `OpenCode session error: ${limitErrorText(serializedProperties)}`
+    : 'OpenCode session failed without an error detail. Check the OpenCode server log.'
+}
 
 const finiteValue = (value: unknown): number | undefined => typeof value === 'number' && Number.isFinite(value) ? value : undefined
 
@@ -588,9 +644,7 @@ export class OpenCodeClient implements ProviderClient {
         await handlePermission(permission)
       }
       if (event.type === 'session.error' && eventSessionId(event) === session.id) {
-        const properties = record(event.properties)
-        const detail = record(properties?.error)
-        streamError = new Error(textValue(detail?.message) ?? 'OpenCode session failed')
+        streamError = new Error(openCodeSessionError(event))
         markSessionFinished?.('error')
       }
       if (status === 'idle' && sawSessionActivity) markSessionFinished?.('idle')
@@ -647,7 +701,9 @@ export class OpenCodeClient implements ProviderClient {
           ? firstOutcome.status
           : await sessionFinished
         if (status === 'error') {
-          throw streamError ?? (firstOutcome.type === 'message-error' ? firstOutcome.error : new Error('OpenCode session failed'))
+          throw streamError ?? (firstOutcome.type === 'message-error'
+            ? firstOutcome.error
+            : new Error('OpenCode session failed without an error detail. Check the OpenCode server log.'))
         }
         messageController.abort()
         await messageRequest

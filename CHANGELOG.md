@@ -1,6 +1,10 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.7 - 2026-08-22
+- Preserve structured OpenCode session errors so Ghost does not replace the provider's real cause with a generic failure.
+
+
 ## 1.2.6 - 2026-08-22
 
 - Raise the default agent request time limit from 60 to 180 minutes.

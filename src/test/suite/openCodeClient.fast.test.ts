@@ -130,4 +130,24 @@ suite('OpenCode client', () => {
     assert.equal(result.text, 'Done')
     assert.deepEqual(replyBody, { response: 'once' })
   })
+
+  test('preserves structured OpenCode session errors', async () => {
+    const client = new OpenCodeClient('http://127.0.0.1:4096', {
+      fetchImpl: async (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname === '/global/health') return jsonResponse({ healthy: true, version: '1.18.4' })
+        if (url.pathname === '/config') return jsonResponse({ permission: { edit: 'ask', bash: 'ask', external_directory: 'deny' } })
+        if (url.pathname === '/session' && init?.method === 'POST') return jsonResponse({ id: 'ses_error', directory: '/workspace' })
+        if (url.pathname === '/event') {
+          return new Response('data: {"type":"session.error","properties":{"sessionID":"ses_error","error":{"message":"Provider failed","name":"ProviderAuthError","data":{"message":"OpenCode provider API key is invalid"}}}}\n\n')
+        }
+        return jsonResponse(true)
+      }
+    })
+
+    await assert.rejects(
+      client.run({ prompt: 'Explain app', directory: '/workspace' }),
+      /OpenCode provider API key is invalid/
+    )
+  })
 })

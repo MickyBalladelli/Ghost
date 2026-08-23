@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, and OpenCode",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
