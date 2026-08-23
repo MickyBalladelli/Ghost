@@ -30,6 +30,7 @@ export function migratePersistedState(value: unknown): GhostPersistedState {
 
   return {
     schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
+    workspaceId: typeof record.workspaceId === 'string' ? record.workspaceId : undefined,
     conversations: Array.isArray(record.conversations) ? record.conversations : [],
     activeConversationId: typeof record.activeConversationId === 'string' ? record.activeConversationId : undefined,
     promptHistory: normalizePromptHistory(record.promptHistory),

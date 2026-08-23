@@ -493,6 +493,7 @@ const restorePersistedState = (persisted: GhostState): void => {
     : conversations[0].id
   state = {
     schemaVersion: persistenceSchemaVersion,
+    workspaceId: persisted.workspaceId,
     conversations,
     activeConversationId,
     promptHistory: normalizePromptHistory(persisted.promptHistory),
@@ -789,6 +790,7 @@ const post = (type: string, details: Record<string, unknown> = {}): void => {
 
 const createPersistedState = () => compactPersistedState({
   schemaVersion: persistenceSchemaVersion,
+  workspaceId: state.workspaceId,
   conversations: redactPersistedValue(state.conversations) as Conversation[],
   activeConversationId: state.activeConversationId,
   promptHistory: (redactPersistedValue(promptHistory()) as string[]),
@@ -1893,6 +1895,7 @@ const getActiveConversation = (): Conversation => {
   const conversation = createConversation()
   state = {
     schemaVersion: persistenceSchemaVersion,
+    workspaceId: state.workspaceId,
     conversations: [...state.conversations, conversation],
     activeConversationId: conversation.id
   }
@@ -3065,6 +3068,7 @@ const startNewConversation = () => {
   const conversation = createConversation()
   state = {
     schemaVersion: persistenceSchemaVersion,
+    workspaceId: state.workspaceId,
     conversations: [conversation, ...state.conversations],
     activeConversationId: conversation.id
   }
@@ -3684,7 +3688,8 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       const candidate = conversation as Conversation
       return Array.isArray(candidate.messages) && (candidate.messages.length > 0 || Boolean(candidate.draft) || (Array.isArray(candidate.promptHistory) && candidate.promptHistory.length > 0))
     }) || (persisted.presets?.length ?? 0) > 0
-    if (hasLocalContent && !hasStoredContent) {
+    const sameWorkspace = typeof state.workspaceId === 'string' && state.workspaceId === persisted.workspaceId
+    if (sameWorkspace && hasLocalContent && !hasStoredContent) {
       persistenceReady = true
       render(true)
       restoreDraft()
@@ -3760,6 +3765,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'reset') {
     state = {
       schemaVersion: persistenceSchemaVersion,
+      workspaceId: state.workspaceId,
       conversations: [createConversation()],
       activeConversationId: '',
       showReasoning: false

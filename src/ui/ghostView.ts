@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
 import { createChatParticipantHandler, GhostProviderPermissionRequest, GhostProviderQuestionRequest, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
@@ -2004,15 +2004,27 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     return this.settings.enableConversationPersistence
   }
 
+  private workspaceIdentity(): string {
+    const folders = (vscode.workspace.workspaceFolders ?? [])
+      .map(folder => folder.uri.toString())
+      .sort()
+    const workspaceFile = vscode.workspace.workspaceFile?.toString() ?? ''
+    return createHash('sha256').update(JSON.stringify([workspaceFile, ...folders])).digest('hex')
+  }
+
   private async readPersistedState(): Promise<GhostPersistedState> {
     const global = this.globalState?.get<StoredGlobalState>(GhostViewProvider.globalStateKey)
     const workspace = this.workspaceState?.get<StoredWorkspaceState>(GhostViewProvider.workspaceStateKey)
     const globalRecord: Record<string, unknown> = isStoredRecord(global) ? global : {}
     const workspaceRecord: Record<string, unknown> = isStoredRecord(workspace) ? workspace : {}
+    const workspaceId = this.workspaceIdentity()
+    const storedWorkspaceId = typeof workspaceRecord.workspaceId === 'string' ? workspaceRecord.workspaceId : undefined
+    const useStoredWorkspace = storedWorkspaceId === undefined || storedWorkspaceId === workspaceId
     const state = migratePersistedState({
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
-      conversations: Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
-      activeConversationId: typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
+      workspaceId,
+      conversations: useStoredWorkspace && Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
+      activeConversationId: useStoredWorkspace && typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
       promptHistory: globalRecord.promptHistory,
       presets: Array.isArray(globalRecord.presets) ? globalRecord.presets : [],
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
@@ -2026,7 +2038,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private async sendPersistedState(): Promise<void> {
     const state = this.persistenceEnabled()
       ? await this.readPersistedState()
-      : { schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION, conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
+      : { schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION, workspaceId: this.workspaceIdentity(), conversations: [], promptHistory: [], presets: [], showReasoning: false, preferences: {} }
     this.stateStore.setConversationState(state)
     this.postMessage({
       source: 'ghost-extension',
@@ -2049,7 +2061,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       this.stateStore.notify('persistence')
       return
     }
-    const safeState = compactPersistedState(JSON.parse(JSON.stringify(state, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
+    const workspaceId = this.workspaceIdentity()
+    const safeState = compactPersistedState(JSON.parse(JSON.stringify({ ...state, workspaceId }, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
     const globalState: StoredGlobalState = {
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
       promptHistory: normalizePromptHistory(safeState.promptHistory),
@@ -2059,6 +2072,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     const workspaceState: StoredWorkspaceState = {
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
+      workspaceId,
       conversations: safeState.conversations ?? [],
       activeConversationId: safeState.activeConversationId
     }
@@ -2087,6 +2101,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.persistedWorkspaceSnapshot = undefined
     this.stateStore.setConversationState({
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
+      workspaceId: this.workspaceIdentity(),
       conversations: [],
       activeConversationId: '',
       promptHistory: [],

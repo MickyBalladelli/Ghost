@@ -249,6 +249,7 @@ export interface Conversation {
 
 export interface GhostState {
   schemaVersion: number
+  workspaceId?: string
   conversations: Conversation[]
   activeConversationId: string
   promptHistory?: string[]

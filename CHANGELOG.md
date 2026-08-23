@@ -15,6 +15,7 @@ All notable changes to this extension are documented here.
 - Build the restored result pane once on reload so it performs one downward scroll without bouncing.
 - Keep the result pane at the bottom when submitting a new request instead of exposing its temporary top position.
 - Scope reused OpenCode sessions to each Ghost conversation so new chats do not inherit unrelated provider context.
+- Bind cached conversation state to a project fingerprint so opening Ghost in another project starts with that project's history only.
 
 
 ## 1.2.6 - 2026-08-22

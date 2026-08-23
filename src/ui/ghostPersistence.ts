@@ -3,6 +3,7 @@ import { GHOST_POLICY } from '../ghostPolicy'
 
 export interface StoredWorkspaceState {
   schemaVersion: number
+  workspaceId?: string
   conversations?: unknown[]
   activeConversationId?: string
 }

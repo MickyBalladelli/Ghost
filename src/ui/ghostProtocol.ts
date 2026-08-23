@@ -172,6 +172,7 @@ export interface GhostSettingsUpdate {
 
 export interface GhostPersistedState {
   schemaVersion: number
+  workspaceId?: string
   conversations?: unknown[]
   activeConversationId?: string
   promptHistory?: string[]
