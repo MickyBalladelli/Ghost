@@ -3425,6 +3425,14 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     return
   }
   const conversationId = getActiveConversation().id
+  const refreshFoundMessage = (): void => {
+    const element = findMessageElement(found.message.id)
+    if (element) {
+      updateMessageElement(found.message, element)
+    } else {
+      renderMessages(false)
+    }
+  }
   if ((action === 'open-file' || action === 'open-hunk') && found.toolCall.diffPreview) {
     const path = found.toolCall.diffPreview.files?.[0] ?? found.toolCall.diffPreview.path
     post('open-file', {
@@ -3445,7 +3453,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     found.toolCall.approval = 'rejected'
     found.toolCall.status = 'rejected'
     post('cancel-tool', { requestId, conversationId, toolCallId })
-    renderMessages(false)
+    refreshFoundMessage()
     return
   }
   if (action === 'edit') {
@@ -3467,7 +3475,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     found.toolCall.approval = 'approved'
     found.toolCall.status = 'running'
     post('answer-question', { requestId, conversationId, toolCallId, answers })
-    renderMessages(false)
+    refreshFoundMessage()
     focusNextApprovalCard(toolCallId)
     return
   }
@@ -3490,7 +3498,7 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     post('reject-tool', { requestId, conversationId, toolCallId })
   }
   const shouldFocusNextApproval = action === 'approve' || action === 'approve-session' || action === 'approve-forever' || action === 'reject'
-  renderMessages(false, shouldFocusNextApproval)
+  refreshFoundMessage()
   if (shouldFocusNextApproval) {
     focusNextApprovalCard(toolCallId)
   }

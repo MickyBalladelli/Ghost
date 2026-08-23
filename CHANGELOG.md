@@ -10,6 +10,7 @@ All notable changes to this extension are documented here.
 - Keep the message pane still when approval updates arrive while the user is scrolled up.
 - Restore the message pane position after approval markup updates reset the scroll container.
 - Explain when Ghost, rather than the user, automatically blocks an OpenCode permission.
+- Update approval cards in place without rebuilding the message pane.
 
 
 ## 1.2.6 - 2026-08-22
