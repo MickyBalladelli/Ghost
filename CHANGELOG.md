@@ -1,7 +1,11 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.8 - 2026-08-23
+- Tell OpenCode to use its edit or write tools for file changes instead of bash.
+
 ## 1.2.7 - 2026-08-22
+- Tell OpenCode to use its edit or write tools for file changes instead of bash.
 - Fix conversation deletion in the VS Code webview by using an in-app confirmation dialog.
 - Preserve structured OpenCode session errors so Ghost does not replace the provider's real cause with a generic failure.
 - Preserve the message-pane position when an approval card is replaced after a tool decision.

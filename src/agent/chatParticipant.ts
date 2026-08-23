@@ -1277,7 +1277,7 @@ async function runOpenCodeRequest(
       planningMode
         ? `Plan mode is active. Inspect the workspace but do not modify files or run shell commands. Return exactly one structured plan as ${TASK_PLAN_MARKER} {"steps":[{"id":"step-1","title":"...","checked":false}],"currentStep":"step-1","completionEvidence":[]}. Do not wrap the marker in a code fence.`
         : mutatingMode
-          ? 'Complete the requested workspace task and report the actual result.'
+          ? 'Complete the requested workspace task and report the actual result. For file changes, use OpenCode edit or write tools. Never use bash, shell, terminal, or command tools to create, modify, move, copy, or delete files. Use bash only for read-only inspection or verification.'
           : 'Answer and inspect only. Do not modify files or run shell commands.'
     ].filter(Boolean).join('\n')
     const result = await client.run({
