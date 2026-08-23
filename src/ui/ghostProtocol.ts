@@ -409,7 +409,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     (value.customSystemInstructions !== undefined && !isBoundedString(value.customSystemInstructions, 8000)) ||
     (value.workspaceRoot !== undefined && !isBoundedString(value.workspaceRoot, 4096)) ||
     (value.additionalContext !== undefined && !isBoundedString(value.additionalContext, 24000)) ||
-    (value.mode !== undefined && !['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string))
+    (value.mode !== undefined && !['ask', 'edit', 'agent', 'plan', 'explain', 'inline'].includes(value.mode as string))
   ) {
     return false
   }
@@ -449,7 +449,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.presencePenalty === undefined || isFiniteNumber(value.presencePenalty)) &&
     (value.repeatPenalty === undefined || isFiniteNumber(value.repeatPenalty)) &&
     (value.responseLength === undefined || ['short', 'balanced', 'long', 'unlimited'].includes(value.responseLength as string)) &&
-    (value.mode === undefined || ['ask', 'edit', 'agent', 'explain', 'inline'].includes(value.mode as string)) &&
+    (value.mode === undefined || ['ask', 'edit', 'agent', 'plan', 'explain', 'inline'].includes(value.mode as string)) &&
     (value.fileEditApproval === undefined || ['confirm', 'auto', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.fileEditApproval as string)) &&
     (value.autoAcceptScope === undefined || ['confirm', 'one-edit', 'current-file', 'request', 'session', 'workspace', 'always'].includes(value.autoAcceptScope as string)) &&
     (value.enableInlineCompletions === undefined || typeof value.enableInlineCompletions === 'boolean') &&

@@ -57,6 +57,7 @@ suite('Webview message contract', () => {
       conversationId: 'conversation-1',
       settings: {
         provider: 'ollama',
+        mode: 'plan',
         enableConversationPersistence: false,
         enableDebugLogging: true,
         toolAllowlist: ['ghost_read_file'],

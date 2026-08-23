@@ -33,7 +33,7 @@ import { limitToolResultText } from '../tools/toolResultLimits'
 import { EditRecord, FileEditState, getEditLoopReason } from './editLoopGuard'
 import { argumentsWithCanonicalPath, canonicalizeEditPath, getCanonicalEditPath, getCanonicalEditPaths } from './editPaths'
 import { hasReachedToolCallLimit, MAX_TOOL_ROUNDS, outputTokenBudget } from './budgetPolicy'
-import { parseTaskPlanMarker } from './taskPlan'
+import { parseTaskPlanMarker, TASK_PLAN_MARKER } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
@@ -44,6 +44,14 @@ import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy
 
 const CHAT_PARTICIPANT_ID = 'ghost.agent'
 const DEFAULT_TEMPERATURE = 0.3
+const PLAN_MODE_TOOL_NAMES = new Set<LocalToolName>([
+  'ghost_read_file',
+  'ghost_search_workspace',
+  'ghost_get_diagnostics',
+  'ghost_git_context',
+  'ghost_update_task_plan',
+  'ghost_list_directory'
+])
 
 const REQUEST_BUDGET_LIMITS = GHOST_POLICY.agent.requestBudget
 
@@ -244,6 +252,9 @@ function isProviderConnectivityFailure(value: string): boolean {
 function hasPendingWorkspaceTask(value: string | undefined): boolean {
   if (!value?.trim()) {
     return false
+  }
+  if (/Remaining task plan:[\s\S]*"checked"\s*:\s*false/i.test(value)) {
+    return true
   }
   const latestGhostReply = /(?:^|\n\n)Ghost:\n([\s\S]*)$/i.exec(value)?.[1] ?? ''
   return /\b(?:would you like me to|want me to|shall i|should i|ready to apply|ready to proceed|tell me to proceed)\b/i.test(latestGhostReply)
@@ -527,7 +538,7 @@ export interface GhostRequestOptions {
   grammar?: string
   maxContextTokens?: number
   maxTokens?: number
-  mode?: 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+  mode?: 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
   context?: GhostContextSelection
   workspaceRoot?: string
   additionalContext?: string
@@ -1145,6 +1156,40 @@ async function approveOpenCodePermission(
   return selection === 'Allow once' ? 'once' : 'reject'
 }
 
+function parseEmbeddedTaskPlan(value: string): ReturnType<typeof parseTaskPlanMarker> {
+  const markerIndex = value.indexOf(TASK_PLAN_MARKER)
+  if (markerIndex < 0) return undefined
+  const jsonStart = value.indexOf('{', markerIndex + TASK_PLAN_MARKER.length)
+  if (jsonStart < 0) return undefined
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = jsonStart; index < value.length; index += 1) {
+    const character = value[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+    } else if (character === '{') {
+      depth += 1
+    } else if (character === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return parseTaskPlanMarker(`${TASK_PLAN_MARKER} ${value.slice(jsonStart, index + 1)}`)
+      }
+    }
+  }
+  return undefined
+}
+
 async function runOpenCodeRequest(
   client: OpenCodeClient,
   contextPrompt: string,
@@ -1166,7 +1211,10 @@ async function runOpenCodeRequest(
   }
   await ensureOpenCodeGlobalConfig()
   const key = openCodeSessionStorageKey(directory)
-  const sessionId = settings.openCodeSessionReuse === 'workspace' ? storage?.get<string>(key) : undefined
+  const planningMode = requestOptions.mode === 'plan'
+  const sessionId = !planningMode && settings.openCodeSessionReuse === 'workspace'
+    ? storage?.get<string>(key)
+    : undefined
   const mutatingMode = requestOptions.mode === 'edit' || requestOptions.mode === 'agent'
   const dirtyFiles = vscode.workspace.textDocuments
     .filter(document => document.isDirty && document.uri.scheme === 'file' && isInsideDirectory(document.uri.fsPath, directory))
@@ -1186,9 +1234,11 @@ async function runOpenCodeRequest(
       `You are OpenCode running behind the Ghost VS Code extension. Work only inside ${directory}.`,
       requestOptions.customSystemInstructions?.trim() ?? '',
       'Never access paths outside this workspace. Do not weaken or bypass permission rules.',
-      mutatingMode
-        ? 'Complete the requested workspace task and report the actual result.'
-        : 'Answer and inspect only. Do not modify files or run shell commands.'
+      planningMode
+        ? `Plan mode is active. Inspect the workspace but do not modify files or run shell commands. Return exactly one structured plan as ${TASK_PLAN_MARKER} {"steps":[{"id":"step-1","title":"...","checked":false}],"currentStep":"step-1","completionEvidence":[]}. Do not wrap the marker in a code fence.`
+        : mutatingMode
+          ? 'Complete the requested workspace task and report the actual result.'
+          : 'Answer and inspect only. Do not modify files or run shell commands.'
     ].filter(Boolean).join('\n')
     const result = await client.run({
       prompt: redactSensitiveText(contextPrompt),
@@ -1200,7 +1250,9 @@ async function runOpenCodeRequest(
       system: redactSensitiveText(system),
       timeoutMs: Math.max(1, Math.floor(settings.providerRequestTimeoutMinutes)) * 60 * 1000,
       signal: cancellation.signal,
-      onText: delta => response.markdown(redactSensitiveText(delta)),
+      onText: delta => {
+        if (!planningMode) response.markdown(redactSensitiveText(delta))
+      },
       onProgress: detail => response.progress(redactSensitiveText(detail)),
       onPermission: permission => approveOpenCodePermission(
         permission,
@@ -1212,7 +1264,7 @@ async function runOpenCodeRequest(
         requestOptions.mode
       )
     })
-    if (settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
+    if (!planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles
       .map(file => path.isAbsolute(file) ? file : path.resolve(directory, file))
       .filter(file => !isInsideDirectory(file, directory))
@@ -1222,7 +1274,25 @@ async function runOpenCodeRequest(
       response.markdown(`\n\n${message}`)
       return
     }
-    if (!result.text.trim()) {
+    if (planningMode && result.changedFiles.length > 0) {
+      const message = `Plan mode stopped because OpenCode reported workspace changes: ${result.changedFiles.join(', ')}`
+      requestOptions.onStop?.('failed-tool', message)
+      response.markdown(message)
+      return
+    }
+    if (planningMode && result.text.trim()) {
+      const rawTaskPlan = parseEmbeddedTaskPlan(result.text)
+      const taskPlan = rawTaskPlan
+        ? parseTaskPlanMarker(redactSensitiveText(`${TASK_PLAN_MARKER} ${JSON.stringify(rawTaskPlan)}`))
+        : undefined
+      if (taskPlan) {
+        response.progress('Running ghost_update_task_plan')
+        response.progress(`Tool result: ghost_update_task_plan: ${TASK_PLAN_MARKER} ${JSON.stringify(taskPlan)}`)
+        response.markdown('Plan ready. Review the steps, then choose Implement plan when you want Ghost to make the changes.')
+      } else {
+        response.markdown(redactSensitiveText(result.text))
+      }
+    } else if (!result.text.trim()) {
       response.markdown(result.changedFiles.length > 0
         ? `OpenCode completed the request. Changed: ${result.changedFiles.join(', ')}`
         : 'OpenCode completed the request without a text response.')
@@ -1488,7 +1558,8 @@ export function createChatParticipantHandler(
     }
     const conversationalPrompt = isLikelyConversationalPrompt(request.prompt)
     const pendingWorkspaceTask = hasPendingWorkspaceTask(requestOptions.additionalContext)
-    const keepWorkspaceTools = pendingWorkspaceTask || requestOptions.mode === 'agent'
+    const planningMode = requestOptions.mode === 'plan'
+    const keepWorkspaceTools = pendingWorkspaceTask || requestOptions.mode === 'agent' || planningMode
     const contextOptions = conversationalPrompt && !pendingWorkspaceTask
       ? {
           ...requestOptions,
@@ -1502,7 +1573,7 @@ export function createChatParticipantHandler(
           }
         }
       : requestOptions
-    const modelRole = requestOptions.modelRole ?? (requestOptions.mode === 'agent' ? 'agent' : 'chat')
+    const modelRole = requestOptions.modelRole ?? (requestOptions.mode === 'agent' || planningMode ? 'agent' : 'chat')
     const modelSettings = resolveModelSettings(settings, modelRole, requestOptions.modelProfile, {
       provider: requestOptions.provider,
       model: requestOptions.model,
@@ -1585,14 +1656,25 @@ export function createChatParticipantHandler(
       openaiProtocol: profileProtocol(settings.openaiProfile),
       ollamaReportsTools
     })
-    const workspaceChangeRequested = describesWorkspaceChange(request.prompt) || pendingWorkspaceTask
+    const workspaceChangeRequested = !planningMode && (describesWorkspaceChange(request.prompt) || pendingWorkspaceTask)
     const completionRecordEnabled = workspaceChangeRequested
+    const requestToolDefinitions = GHOST_NATIVE_TOOL_DEFINITIONS.filter(tool => (
+      planningMode
+        ? PLAN_MODE_TOOL_NAMES.has(tool.function.name as LocalToolName)
+        : completionRecordEnabled || tool.function.name !== 'ghost_record_completion'
+    ))
+    if (!toolsEnabled && planningMode) {
+      response.markdown('Plan mode needs Available tools so Ghost can inspect the workspace and record a structured plan. Enable Available tools in the Context panel, then retry.')
+      return
+    }
     if (!toolsEnabled && workspaceChangeRequested) {
       response.markdown('I cannot edit workspace files because Available tools are disabled. Enable Available tools in the Context panel, then retry.')
       return
     }
     const workflowInstruction = requestOptions.mode === 'agent'
       ? '\n\nAgent mode is active. When the user asks you to implement, fix, edit, or change code, do the work in the workspace. Inspect files with tools, use ghost_apply_edit or ghost_write_file to make changes, and use ghost_run_terminal_command only for requested or useful verification. Never use the terminal to create or edit files. Do not only describe a hypothetical solution. Start with a tool call when a workspace change is needed, then continue until the task is complete.'
+      : planningMode
+        ? '\n\nPlan mode is active. Inspect the real workspace with read-only tools before deciding the implementation steps. Do not modify files and do not run terminal commands. Call ghost_update_task_plan with a concise ordered plan whose steps are unchecked, then give a short planning conclusion. Stop after the plan is ready.'
       : requestOptions.mode === 'edit'
         ? '\n\nEdit mode is active. When the user asks for a code change, inspect the relevant files and propose the actual workspace edit with ghost_apply_edit or ghost_write_file. Do not only describe what could be changed.'
         : workspaceChangeRequested
@@ -1602,7 +1684,8 @@ export function createChatParticipantHandler(
       toolsEnabled: requestToolsEnabled,
       nativeTools: nativeToolCalling,
       completionRecordEnabled,
-      workflowInstruction
+      workflowInstruction,
+      toolDefinitions: requestToolDefinitions
     })
     const systemPrompt = requestOptions.customSystemInstructions?.trim()
       ? `${baseSystemPrompt}\n\nUser-provided system instructions:\n${requestOptions.customSystemInstructions.trim().slice(0, 8000)}`
@@ -1635,6 +1718,7 @@ export function createChatParticipantHandler(
       const staleEditRecoveryPaths = new Set<string>()
       let successfulWorkspaceChange = false
       let taskPlanRequiresExecution = false
+      let taskPlanRecorded = false
       let unfinishedPlanAfterChangeCount = 0
       let emptyProviderRetries = 0
       let splitEditRetries = 0
@@ -1684,10 +1768,8 @@ export function createChatParticipantHandler(
             },
             ...(requestToolsEnabled && nativeToolCalling
               ? {
-                  tools: completionRecordEnabled
-                    ? GHOST_NATIVE_TOOL_DEFINITIONS
-                    : GHOST_NATIVE_TOOL_DEFINITIONS.filter(tool => tool.function.name !== 'ghost_record_completion'),
-                  toolChoice: 'auto' as const
+                  tools: requestToolDefinitions,
+                  toolChoice: planningMode && !taskPlanRecorded ? 'required' as const : 'auto' as const
                 }
               : {}),
             ...(requestOptions.responseFormat
@@ -1722,7 +1804,7 @@ export function createChatParticipantHandler(
             && streamedParse.state !== 'malformed-json'
             && streamedParse.state !== 'truncated-json'
             && streamedParse.state !== 'unknown-tool'
-          if (finalNonToolAnswer && (successfulWorkspaceChange || !workspaceChangeRequested)) {
+          if (finalNonToolAnswer && (successfulWorkspaceChange || !workspaceChangeRequested) && (!planningMode || taskPlanRecorded)) {
             return
           }
         }
@@ -1781,7 +1863,12 @@ export function createChatParticipantHandler(
             return
           }
           const malformedToolCall = parsedResponse.state === 'malformed-json' || parsedResponse.state === 'truncated-json' || parsedResponse.state === 'unknown-tool'
-          const expectsWorkspaceTool = requestToolsEnabled && (malformedToolCall || taskPlanRequiresExecution || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated))))
+          const expectsWorkspaceTool = requestToolsEnabled && (
+            malformedToolCall
+            || taskPlanRequiresExecution
+            || (planningMode && !taskPlanRecorded)
+            || (!successfulWorkspaceChange && (workspaceChangeRequested || describesWorkspaceChange(generated)))
+          )
           if (expectsWorkspaceTool && missingToolRetries < GHOST_RETRY_POLICIES.missingTool.maxRetries) {
             missingToolRetries += 1
             const retryMessage = parsedResponse.state === 'unknown-tool'
@@ -1790,7 +1877,9 @@ export function createChatParticipantHandler(
                 ? 'The model returned truncated tool JSON. Asking it to emit a complete call.'
                 : parsedResponse.state === 'malformed-json'
                   ? 'The model returned malformed tool JSON. Asking it to emit valid JSON.'
-                  : 'The model described a workspace change without calling a tool. Asking it to perform the change.'
+                  : planningMode && !taskPlanRecorded
+                    ? 'The model returned text without recording the structured plan. Asking it to update the task plan.'
+                    : 'The model described a workspace change without calling a tool. Asking it to perform the change.'
             response.progress(retryMessage)
             messages.push(
               { role: 'assistant', content: generated },
@@ -1800,16 +1889,36 @@ export function createChatParticipantHandler(
                   ? `Your previous tool call was truncated. Do not repeat a large replacement. ${JSON_TOOL_PARSE_FAILURE_REMINDER}`
                   : parsedResponse.state === 'malformed-json'
                     ? `Your previous tool call was malformed JSON. ${JSON_TOOL_PARSE_FAILURE_REMINDER}`
-                    : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
+                    : planningMode && !taskPlanRecorded
+                      ? 'Record the final read-only implementation plan now with ghost_update_task_plan. Keep every implementation step unchecked. Do not modify the workspace.'
+                      : 'You described a workspace change but did not call a tool. Do not explain the plan. Inspect the target with ghost_read_file, then make the change with ghost_apply_edit or ghost_write_file. Emit exactly one valid JSON tool call now.' }
             )
             continue
           }
           if (expectsWorkspaceTool) {
-            const message = noToolRecoveryMessage(parsedResponse.state, missingToolRetries)
+            const message = planningMode && !taskPlanRecorded
+              ? 'Ghost could not produce a structured task plan. Retry with a clearer planning request or choose a model with reliable tool support.'
+              : noToolRecoveryMessage(parsedResponse.state, missingToolRetries)
             requestOptions.onStop?.('invalid-model-response', message)
           }
           response.markdown(redactSensitiveText(generated))
           return
+        }
+
+        if (planningMode && !PLAN_MODE_TOOL_NAMES.has(toolCall.name)) {
+          invalidToolRetries += 1
+          const message = `Plan mode is read-only. ${toolCall.name} is unavailable. Use read, search, directory, diagnostics, Git context, or ghost_update_task_plan.`
+          response.progress(message)
+          if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
+            requestOptions.onStop?.('invalid-model-response', message)
+            response.markdown(message)
+            return
+          }
+          messages.push(
+            { role: 'assistant', content: generated },
+            { role: 'user', content: `${message} Inspect only, then record the implementation plan without changing the workspace.` }
+          )
+          continue
         }
 
         if (hasReachedToolCallLimit(toolCallCount)) {
@@ -1966,7 +2075,8 @@ export function createChatParticipantHandler(
         const toolResult = toolOutcome.text
         const updatedTaskPlan = parseTaskPlanMarker(toolResult)
         if (updatedTaskPlan) {
-          taskPlanRequiresExecution = updatedTaskPlan.steps.some(step => !step.checked)
+          taskPlanRecorded = true
+          taskPlanRequiresExecution = !planningMode && updatedTaskPlan.steps.some(step => !step.checked)
           if (taskPlanRequiresExecution && successfulWorkspaceChange) {
             unfinishedPlanAfterChangeCount += 1
           } else if (!taskPlanRequiresExecution) {

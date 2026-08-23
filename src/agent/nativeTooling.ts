@@ -117,7 +117,7 @@ export const GHOST_NATIVE_TOOL_DEFINITIONS: ChatToolDefinition[] = [
     type: 'function',
     function: {
       name: 'ghost_update_task_plan',
-      description: 'Optional bookkeeping for a bounded task plan. Never a substitute for a file tool.',
+      description: 'Record a bounded structured task plan. In Plan mode, use this for the final read-only implementation plan. In editing workflows, it is not a substitute for a file tool.',
       parameters: {
         type: 'object',
         properties: {

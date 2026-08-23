@@ -7,7 +7,7 @@ export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
-export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+export type GhostMode = 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
 export type GhostFileEditApproval = 'confirm' | 'auto'
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 export type GhostLogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'

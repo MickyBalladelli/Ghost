@@ -318,7 +318,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const settings = this.settings
     const modelRole = attachments.some(attachment => attachment.mimeType?.toLowerCase().startsWith('image/'))
       ? 'vision'
-      : options.modelRole ?? (options.mode === 'agent' ? 'agent' : 'chat')
+      : options.modelRole ?? (options.mode === 'agent' || options.mode === 'plan' ? 'agent' : 'chat')
     const modelSettings = resolveModelSettings(settings, modelRole, options.modelProfile, {
       provider: options.provider,
       model: options.model,

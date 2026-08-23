@@ -1,4 +1,5 @@
 import { GHOST_NATIVE_TOOL_DEFINITIONS } from './nativeTooling'
+import type { ChatToolDefinition } from '../services/chatTypes'
 
 const CORE_SYSTEM_PROMPT = [
   'You are Ghost, a private local coding assistant.',
@@ -6,7 +7,7 @@ const CORE_SYSTEM_PROMPT = [
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use redirection, sed -i, or scripts that write files.',
   'Use a non-empty workspace-relative path. Read an existing file before editing it. Keep ghost_apply_edit hunks small and include oldText, oldHash, beforeContext, or afterContext.',
-  'ghost_update_task_plan and ghost_record_completion are optional bookkeeping. Never use them instead of a file tool.',
+  'ghost_update_task_plan records structured planning state. In Plan mode, use it for the final read-only plan. In editing workflows, never use it instead of a file tool. ghost_record_completion is optional completion bookkeeping.',
   'After a successful file edit, verify once if needed. If the requested change is complete, stop. Do not keep rewriting the same file.'
 ].join(' ')
 
@@ -24,6 +25,7 @@ export function buildAgentSystemPrompt(options: {
   nativeTools: boolean
   completionRecordEnabled: boolean
   workflowInstruction: string
+  toolDefinitions?: ChatToolDefinition[]
 }): string {
   if (!options.toolsEnabled) {
     return 'You are Ghost, a private local coding assistant. Do not use tools. Be concise and use fenced Markdown code blocks when useful.'
@@ -31,7 +33,8 @@ export function buildAgentSystemPrompt(options: {
 
   const parts = [CORE_SYSTEM_PROMPT]
   if (!options.nativeTools) {
-    const tools = GHOST_NATIVE_TOOL_DEFINITIONS.filter(tool => options.completionRecordEnabled || tool.function.name !== 'ghost_record_completion')
+    const tools = (options.toolDefinitions ?? GHOST_NATIVE_TOOL_DEFINITIONS)
+      .filter(tool => options.completionRecordEnabled || tool.function.name !== 'ghost_record_completion')
     parts.push(JSON_TOOL_PROTOCOL)
     parts.push(`Tool schemas: ${JSON.stringify(tools.map(tool => ({ name: tool.function.name, parameters: tool.function.parameters })))}`)
   }

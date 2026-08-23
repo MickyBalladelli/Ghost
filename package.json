@@ -550,10 +550,11 @@
             "ask",
             "edit",
             "agent",
+            "plan",
             "explain"
           ],
           "default": "agent",
-          "description": "Default chat workflow mode for the Ghost interface."
+          "description": "Default chat workflow mode. Plan inspects the workspace with read-only tools and records implementation steps."
         },
         "ghost.fileEditApproval": {
           "type": "string",

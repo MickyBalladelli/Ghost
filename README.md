@@ -28,7 +28,7 @@ Current release: `1.2.7`
 - Eleven workspace tools with allowlists, denylists, approval prompts, and visible progress.
 - Stable Coding, Balanced, and Creative model profiles with provider capability reporting.
 - Source-editor edit previews with Accept/Reject controls, selected-hunk approval, and restore actions for applied edits.
-- Ask, Edit, Agent, and Explain workflow modes, plus separate inline code completion.
+- Ask, Edit, Agent, Plan, and Explain workflow modes, plus separate inline code completion.
 - Conversation history popup, prompt history, reusable presets, import/export, retry, regenerate, and cancellation.
 - Configurable assistant name, avatar, accent color, layout, context, and response behavior.
 - Keyboard-friendly interface with visible focus, screen-reader status updates, high-contrast theme support, reduced motion, and narrow-panel layout support.
@@ -86,6 +86,7 @@ The Ghost view contains the provider and model strip, message log, composer, and
 - Use the **History** button at the top to search, select, rename, or delete previous conversations.
 - Use the **Settings** gear to change the model, workflow, context, appearance, persistence, and tool permissions.
 - Choose **Agent — implement changes** when Ghost should inspect files and modify the workspace. Ghost stages proposed file changes in the real source editor and asks for approval before saving file edits or running terminal commands.
+- Choose **Plan** when Ghost should inspect the workspace with read-only tools and produce a structured implementation plan. Use **Implement plan** on the plan card to switch to Agent and continue from those steps.
 - Use `@local` in the VS Code Chat view for the native local participant. `@local` uses the same Ghost tool allow/ask/deny lists, auto-accept scope, and session/forever approvals as the Ghost view. File edits and terminal commands confirm in a VS Code modal instead of the Ghost sidebar cards.
 - Use `@workspace` with a keyword to search workspace files and include matching code in the prompt.
 - File writes, structured edits, and terminal commands require confirmation unless already approved for the current session.
@@ -166,7 +167,7 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
 | OpenCode | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 
-OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent mode is unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need file edits. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent and Plan modes are unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need workspace tools. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
 
 ### OpenCode setup
 
@@ -193,7 +194,7 @@ OpenCode allows most tools by default. Before each delegated request, Ghost crea
 
 Ghost does not update OpenCode through `PATCH /config`, because OpenCode can save that API update as a project-local `opencode.json`. If the server was already running when Ghost created the global file, restart `opencode serve` so it loads the global permissions.
 
-Ghost answers OpenCode permission requests with one-request approvals only, applies its allow/ask/deny lists, rejects external-workspace paths, aborts the OpenCode session when Stop is pressed, and checks the final session diff. Ask and Explain mode reject edit and shell permissions. OpenCode performs its own edits, so Ghost's source-editor staged hunk preview is not used on this provider. Configure `OPENCODE_SERVER_PASSWORD` on the server and store the same password in VS Code SecretStorage when authentication is needed. Ghost refuses to send that password over non-loopback HTTP; use HTTPS for a remote server. Inline completion remains on Ollama or a FIM-capable OpenAI-compatible provider.
+Ghost answers OpenCode permission requests with one-request approvals only, applies its allow/ask/deny lists, rejects external-workspace paths, aborts the OpenCode session when Stop is pressed, and checks the final session diff. Ask, Plan, and Explain modes reject edit and shell permissions. Plan buffers OpenCode's final response and converts its structured plan marker into the normal Ghost plan card. OpenCode performs its own edits, so Ghost's source-editor staged hunk preview is not used on this provider. Configure `OPENCODE_SERVER_PASSWORD` on the server and store the same password in VS Code SecretStorage when authentication is needed. Ghost refuses to send that password over non-loopback HTTP; use HTTPS for a remote server. Inline completion remains on Ollama or a FIM-capable OpenAI-compatible provider.
 
 ### Response settings
 
@@ -209,7 +210,7 @@ For parameter names, provider differences, and tuning examples, see [OLLAMA_PARA
 | `ghost.presencePenalty` | `0.0` | Penalizes tokens already used. Positive values encourage new topics; negative values allow reuse. |
 | `ghost.repeatPenalty` | `1.05` | Ollama repeat penalty. `1` disables it; values above `1` penalize repeated text more. |
 | `ghost.responseLength` | `balanced` | Choose `short`, `balanced`, `long`, or `unlimited`. |
-| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, or `explain`. Ask answers without editing. Edit proposes file changes. Agent implements approved workspace changes; file writes still need approval. |
+| `ghost.mode` | `agent` | Choose `ask`, `edit`, `agent`, `plan`, or `explain`. Plan inspects with read-only tools and records implementation steps. Agent implements approved workspace changes; file writes still need approval. |
 
 ### Agent permissions
 

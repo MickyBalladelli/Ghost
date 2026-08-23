@@ -1,7 +1,7 @@
 export type GhostViewStatus = 'ready' | 'offline'
 export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
-export type GhostMode = 'ask' | 'edit' | 'agent' | 'explain' | 'inline'
+export type GhostMode = 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostLogLevel = 'off' | 'error' | 'warn' | 'info' | 'debug'
 export type GhostModelRole = 'chat' | 'agent' | 'vision' | 'autocomplete'

@@ -1533,6 +1533,10 @@ textarea {
   font-weight: 600;
 }
 
+.task-plan-action {
+  margin-top: 8px;
+}
+
 .progress-details {
   background: var(--vscode-textBlockQuote-background, var(--ghost-surface));
   border-left: 2px solid var(--ghost-accent);

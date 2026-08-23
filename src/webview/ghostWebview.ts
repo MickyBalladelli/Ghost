@@ -1192,7 +1192,7 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
   const features = [
     metadata.supportsStreaming ? 'streaming' : 'no streaming',
     metadata.supportsVision ? 'vision' : 'no vision',
-    metadata.supportsTools ? 'native tools' : 'native tools unavailable; Agent mode unreliable',
+    metadata.supportsTools ? 'native tools' : 'native tools unavailable; Agent and Plan modes unreliable',
     metadata.supportsJsonMode ? 'JSON mode' : 'JSON mode unavailable',
     metadata.supportsFIM ? 'FIM' : 'FIM unavailable'
   ]
@@ -1229,7 +1229,7 @@ const renderFirstRunSetup = (): void => {
   }
   const metadata = availableModelMetadata.find(item => item.id === controls.chatModel)
   setupCapabilitiesElement.textContent = metadata
-    ? `Selected model: ${controls.chatModel}. ${metadata.supportsTools ? 'Tools supported.' : 'Tools unavailable; Agent mode is unreliable here because Ghost must parse JSON from the reply. Prefer Ollama or an OpenAI-compatible server for workspace tools. Ghost can still chat.'} ${metadata.supportsVision ? 'Vision supported.' : 'Vision unavailable.'} ${metadata.supportsStreaming ? 'Streaming supported.' : 'Streaming unavailable.'}`
+    ? `Selected model: ${controls.chatModel}. ${metadata.supportsTools ? 'Tools supported.' : 'Tools unavailable; Agent and Plan modes are unreliable here because Ghost must parse JSON from the reply. Prefer Ollama or an OpenAI-compatible server for workspace tools. Ghost can still chat.'} ${metadata.supportsVision ? 'Vision supported.' : 'Vision unavailable.'} ${metadata.supportsStreaming ? 'Streaming supported.' : 'Streaming unavailable.'}`
     : 'Capability details will appear after model discovery.'
   setupTestRequestElement.disabled = Boolean(activeRequest) || connection === 'offline' || !controls.chatModel
 }
@@ -1825,7 +1825,7 @@ const buildRequestOptions = (): WebviewRequestOptions => {
     provider: controls.provider,
     model: controls.chatModel,
     modelProfile: controls.provider === 'opencode' ? '' : controls.modelProfile,
-    modelRole: controls.mode === 'agent' ? 'agent' : 'chat',
+    modelRole: controls.mode === 'agent' || controls.mode === 'plan' ? 'agent' : 'chat',
     maxContextTokens: controls.maxContextTokens,
     mode: controls.mode,
     customSystemInstructions: uiPreferences.customSystemInstructions,
@@ -2663,11 +2663,14 @@ const diffFileNames = (diffPreview: NonNullable<ToolCall['diffPreview']>): strin
   [...new Set((diffPreview.files?.length ? diffPreview.files : [diffPreview.path]).filter(Boolean))]
 )
 
-const renderTaskPlan = (plan: TaskPlan): string => {
+const renderTaskPlan = (plan: TaskPlan, messageId: string): string => {
   const steps = plan.steps.map(step => `<li${step.id === plan.currentStep ? ' class="current"' : ''}${step.evidence ? ` title="${escapeAttribute(step.evidence)}"` : ''}><span class="task-plan-step-icon ${step.checked ? 'complete' : 'pending'}" aria-hidden="true">${step.checked ? '✓' : '○'}</span> ${escapeHtml(step.title)}</li>`).join('')
   const blocked = plan.blockedReason ? `<div>Blocked: ${escapeHtml(plan.blockedReason)}</div>` : ''
   const evidence = plan.completionEvidence.length > 0 ? `<div>Evidence: ${plan.completionEvidence.map(escapeHtml).join(' · ')}</div>` : ''
-  return `<section class="task-plan"><strong>Task plan</strong><ol>${steps}</ol>${blocked}${evidence}</section>`
+  const implement = !activeRequest && plan.steps.some(step => !step.checked)
+    ? `<button type="button" class="task-plan-action" data-action="implement-plan" data-message-id="${escapeAttribute(messageId)}">Implement plan</button>`
+    : ''
+  return `<section class="task-plan"><strong>Task plan</strong><ol>${steps}</ol>${blocked}${evidence}${implement}</section>`
 }
 
 const renderMessagePartSummary = (message: ChatMessage): string => {
@@ -2745,7 +2748,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     } else if (part.kind === 'tool') {
       renderedParts.push(renderToolCallProgress(part))
     } else if (part.kind === 'task-plan') {
-      renderedParts.push(renderTaskPlan(part.plan))
+      renderedParts.push(renderTaskPlan(part.plan, message.id))
     } else if (part.kind === 'warning') {
       renderedParts.push(`<div class="message-progress warning-progress">Warning: ${escapeHtml(part.message)}</div>`)
     } else if (part.kind === 'error') {
@@ -3044,7 +3047,7 @@ const startNewConversation = () => {
 }
 
 const applySlashCommand = (prompt: string): string | undefined => {
-  const command = /^\/(clear|model|explain|fix|test|review|refactor|summarize)\b\s*(.*)$/i.exec(prompt)
+  const command = /^\/(clear|model|plan|explain|fix|test|review|refactor|summarize)\b\s*(.*)$/i.exec(prompt)
   if (!command) {
     return prompt
   }
@@ -3067,7 +3070,9 @@ const applySlashCommand = (prompt: string): string | undefined => {
     setModalVisibility(settingsModalElement, true)
     return undefined
   }
-  if (name === 'explain') {
+  if (name === 'plan') {
+    controls.mode = 'plan'
+  } else if (name === 'explain') {
     controls.mode = 'explain'
   } else if (name === 'fix') {
     controls.mode = 'edit'
@@ -3550,6 +3555,12 @@ const handleMessageAction = (action: string, messageId: string) => {
       post('approve-all-files', { requestId: message.requestId, conversationId: conversation.id })
     }
   } else if (action === 'continue') {
+    continueConversation(messageId)
+  } else if (action === 'implement-plan') {
+    controls.mode = 'agent'
+    renderControls()
+    sendSettingsUpdate()
+    saveState()
     continueConversation(messageId)
   } else if (action === 'open-diff') {
     const path = messageDiffPath(message)
