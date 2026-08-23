@@ -2606,7 +2606,9 @@ const toolActionText = (toolCall: ToolCall): string => {
   const readScope = toolCall.name === 'ghost_read_file' ? readScopeText(args, toolCall.result) : ''
   const readScopeSuffix = readScope ? ` · ${readScope}` : ''
   const action = typeof args.action === 'string' ? args.action.trim() : ''
-  const base = toolCall.name === 'opencode_permission'
+  const base = toolCall.name === 'opencode_question'
+    ? 'OpenCode is asking a question'
+    : toolCall.name === 'opencode_permission'
     ? `OpenCode wants to ${action || 'continue'}${displayedTarget ? `: ${displayedTarget}` : ''}`
     : toolCall.name === 'ghost_read_file'
     ? `I'm reading file${displayedTarget ? ` ${displayedTarget}` : ''}${readScopeSuffix}`
@@ -2696,12 +2698,22 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const diffBlock = part.toolCall.diffPreview
       ? `<details class="tool-details tool-diff-details"><summary>${part.toolCall.diffPreview.previewKind === 'text' ? 'Text preview only' : 'Diff preview'} · ${escapeHtml(files[0] ?? part.toolCall.diffPreview.path)} · ${escapeHtml(diffStats)}${part.toolCall.diffPreview.truncated ? ' · truncated' : ''}${part.toolCall.diffPreview.previewKind === 'text' ? ' · files are not staged in the editor' : ''}</summary>${diffFiles}${hunkNavigation}${part.toolCall.diffPreview.hunks?.length ? `<div class="tool-hunk-list" role="list" aria-label="Changed hunks">${part.toolCall.diffPreview.hunks.map((hunk, index) => `<div class="tool-hunk" data-tool-hunk-card data-tool-hunk-index="${index}" role="listitem" tabindex="-1"><span>Hunk ${index + 1} · Lines ${hunk.startLine}-${hunk.endLine}</span><button type="button" class="secondary" data-tool-action="open-hunk" data-tool-line="${hunk.startLine}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Open hunk ${index + 1} at line ${hunk.startLine}">Open line</button></div>`).join('')}</div>` : ''}<pre>--- before\n+++ after\n${escapeHtml(part.toolCall.diffPreview.before)}\n--- proposed replacement ---\n${escapeHtml(part.toolCall.diffPreview.after)}</pre></details>`
       : ''
+    const questionBlock = part.toolCall.question && part.toolCall.status === 'requested'
+      ? `<div class="opencode-question-list">${part.toolCall.question.questions.map((question, questionIndex) => {
+          const inputType = question.multiple ? 'checkbox' : 'radio'
+          const options = question.options.map(option => `<label class="opencode-question-option"><input type="${inputType}" name="opencode-question-${escapeAttribute(part.toolCall.id)}-${questionIndex}" data-question-option data-question-index="${questionIndex}" value="${escapeAttribute(option.label)}"><span><strong>${escapeHtml(option.label)}</strong>${option.description ? `<small>${escapeHtml(option.description)}</small>` : ''}</span></label>`).join('')
+          const custom = question.custom ? `<label class="opencode-question-custom"><span>Other answer</span><input type="text" data-question-custom data-question-index="${questionIndex}" maxlength="2000" placeholder="Type your answer"></label>` : ''
+          return `<fieldset><legend>${escapeHtml(question.header)}</legend><p>${escapeHtml(question.question)}</p>${options}${custom}</fieldset>`
+        }).join('')}</div>`
+      : ''
     const resultBlock = uiPreferences.showToolProgress && part.toolCall.result
       ? `<details class="tool-details"><summary>Result</summary><pre>${escapeHtml(part.toolCall.result)}</pre></details>`
       : ''
     const approvalControls = part.toolCall.requiresApproval && part.toolCall.status === 'requested'
       ? part.toolCall.approvalKind === 'provider-permission'
         ? `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this permission once">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this permission for the session">Approve for session</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
+        : part.toolCall.approvalKind === 'provider-question'
+          ? `<div class="tool-approval-actions" aria-label="Question options"><button type="button" data-tool-action="answer-question" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Send answer</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject question</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
         : `<div class="tool-approval-actions" aria-label="Approval options"><button type="button" data-tool-action="approve" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool call once">Approve now</button><button type="button" data-tool-action="approve-session" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Approve this tool for the session">Approve for session</button><button type="button" data-tool-action="approve-forever" data-tool-call-id="${escapeAttribute(part.toolCall.id)}" aria-label="Always approve this tool">Approve forever</button><button type="button" data-tool-action="edit" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Edit arguments…</button><button type="button" class="secondary" data-tool-action="reject" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Reject</button><button type="button" class="secondary" data-tool-action="cancel" data-tool-call-id="${escapeAttribute(part.toolCall.id)}">Cancel request</button></div>`
       : ''
     const fileAction = part.toolCall.diffPreview
@@ -2727,7 +2739,7 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const toolStatusClass = toolStatus.className
     const toolStatusIcon = toolStatus.icon
     const approvalCardClass = part.toolCall.requiresApproval && part.toolCall.status === 'requested' ? ' tool-approval-card' : ''
-    return `<div class="message-progress tool-progress ${toolStatusClass}${approvalCardClass}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
+    return `<div class="message-progress tool-progress ${toolStatusClass}${approvalCardClass}" data-tool-call-id="${escapeAttribute(part.toolCall.id)}"><span class="tool-status-icon" aria-hidden="true">${toolStatusIcon}</span><strong>${animatedAction ? animatedStatusLabel(actionText) : escapeHtml(actionText)}${compactFailure}</strong>${verboseStatus}${argumentsBlock}${questionBlock}${diffBlock}${resultBlock}${approvalControls}${resultActions}</div>`
   }
   const renderedParts: string[] = []
   let progressParts: Array<Extract<MessagePart, { kind: 'progress' | 'reasoning' }>> = []
@@ -3436,6 +3448,25 @@ const handleToolAction = (action: string, toolCallId: string, line?: number): vo
     openToolArgumentsEditor(found, requestId, conversationId)
     return
   }
+  if (action === 'answer-question' && found.toolCall.question) {
+    const card = document.querySelector<HTMLElement>(`.tool-approval-card[data-tool-call-id="${CSS.escape(toolCallId)}"]`)
+    if (!card) return
+    const answers = found.toolCall.question.questions.map((_question, questionIndex) => {
+      const selected = Array.from(card.querySelectorAll<HTMLInputElement>(`[data-question-option][data-question-index="${questionIndex}"]:checked`)).map(input => input.value.trim()).filter(Boolean)
+      const custom = card.querySelector<HTMLInputElement>(`[data-question-custom][data-question-index="${questionIndex}"]`)?.value.trim()
+      return custom ? [...selected, custom] : selected
+    })
+    if (answers.some(answer => answer.length === 0)) {
+      screenReaderStatusElement.textContent = 'Choose or enter an answer for every question.'
+      return
+    }
+    found.toolCall.approval = 'approved'
+    found.toolCall.status = 'running'
+    post('answer-question', { requestId, conversationId, toolCallId, answers })
+    renderMessages(false)
+    focusNextApprovalCard(toolCallId)
+    return
+  }
   if (action === 'approve' || action === 'approve-session' || action === 'approve-forever') {
     found.toolCall.approval = 'approved'
     found.toolCall.status = 'running'
@@ -3816,6 +3847,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       arguments: message.arguments ? JSON.stringify(message.arguments, null, 2) : undefined,
       requiresApproval: message.requiresApproval !== false,
       approvalKind: message.approvalKind,
+      question: message.question,
       diffPreview: message.diffPreview,
       approval: message.requiresApproval === false ? 'approved' as const : 'pending' as const,
       status: 'requested' as const,
@@ -3826,6 +3858,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       existingTool.arguments = message.arguments ? JSON.stringify(message.arguments, null, 2) : existingTool.arguments
       existingTool.requiresApproval = message.requiresApproval !== false
       existingTool.approvalKind = message.approvalKind ?? existingTool.approvalKind
+      existingTool.question = message.question ?? existingTool.question
       existingTool.diffPreview = message.diffPreview ?? existingTool.diffPreview
       existingTool.status = existingTool.approval === 'approved' ? 'running' : 'requested'
     } else {

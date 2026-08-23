@@ -26,6 +26,17 @@ export type GhostStopReason =
   | 'budget-limit'
   | 'provider-failure'
 
+export interface GhostProviderQuestion {
+  id: string
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description: string }>
+    multiple: boolean
+    custom: boolean
+  }>
+}
+
 export type GhostToolName =
   | 'ghost_read_file'
   | 'ghost_search_workspace'

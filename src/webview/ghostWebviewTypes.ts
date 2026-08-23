@@ -3,6 +3,7 @@ import type {
   GhostLogLevel,
   GhostMode,
   GhostProgressPhase,
+  GhostProviderQuestion,
   GhostProvider,
   GhostRequestStatus,
   GhostResponseLength,
@@ -190,7 +191,8 @@ export interface ToolCall {
   name: string
   arguments?: string
   requiresApproval?: boolean
-  approvalKind?: 'tool' | 'provider-permission'
+  approvalKind?: 'tool' | 'provider-permission' | 'provider-question'
+  question?: GhostProviderQuestion
   approval?: 'pending' | 'approved' | 'rejected'
   diffPreview?: { path: string; files?: string[]; before: string; after: string; truncated?: boolean; previewKind?: 'staged' | 'text'; hunks?: Array<{ startLine: number; endLine: number; replacement: string }> }
   status: 'requested' | 'running' | 'completed' | 'rejected' | 'failed'

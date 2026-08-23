@@ -37,7 +37,7 @@ import { parseTaskPlanMarker, TASK_PLAN_MARKER } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
-import { OpenCodeClient, OpenCodePermissionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
+import { OpenCodeClient, OpenCodePermissionRequest, OpenCodeQuestionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
 import { ensureOpenCodeGlobalConfig } from '../services/openCodeProjectConfig'
 import type { GhostStorage } from '../runtimeDependencies'
 import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy'
@@ -549,6 +549,7 @@ export interface GhostRequestOptions {
   images?: ChatVisionImage[]
   approveTool?: (call: LocalToolCall) => Promise<GhostToolApproval>
   approveProviderPermission?: (permission: GhostProviderPermissionRequest) => Promise<GhostToolApproval>
+  answerProviderQuestion?: (question: GhostProviderQuestionRequest) => Promise<string[][] | undefined>
   confirmContinue?: (toolCallCount: number) => Promise<boolean>
   confirmBudgetContinue?: (reason: string) => Promise<boolean>
   onStop?: (reason: GhostStopReason, message: string) => void
@@ -561,6 +562,18 @@ export interface GhostProviderPermissionRequest {
   detail: string
   arguments: Record<string, unknown>
   policyTool?: LocalToolName
+}
+
+export interface GhostProviderQuestionRequest {
+  provider: 'opencode'
+  id: string
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description: string }>
+    multiple: boolean
+    custom: boolean
+  }>
 }
 
 export interface GhostToolApproval {
@@ -1156,6 +1169,27 @@ async function approveOpenCodePermission(
   return selection === 'Allow once' ? 'once' : 'reject'
 }
 
+async function answerOpenCodeQuestion(
+  question: OpenCodeQuestionRequest,
+  answerProviderQuestion: GhostRequestOptions['answerProviderQuestion']
+): Promise<string[][] | undefined> {
+  if (!answerProviderQuestion) return undefined
+  return answerProviderQuestion({
+    provider: 'opencode',
+    id: question.id,
+    questions: question.questions.map(item => ({
+      question: redactSensitiveText(item.question).slice(0, 2000),
+      header: redactSensitiveText(item.header).slice(0, 200),
+      options: item.options.slice(0, 50).map(option => ({
+        label: redactSensitiveText(option.label).slice(0, 500),
+        description: redactSensitiveText(option.description).slice(0, 1000)
+      })),
+      multiple: item.multiple,
+      custom: item.custom
+    }))
+  })
+}
+
 function parseEmbeddedTaskPlan(value: string): ReturnType<typeof parseTaskPlanMarker> {
   const markerIndex = value.indexOf(TASK_PLAN_MARKER)
   if (markerIndex < 0) return undefined
@@ -1262,7 +1296,8 @@ async function runOpenCodeRequest(
         sessionApprovals,
         requestOptions.approveProviderPermission,
         requestOptions.mode
-      )
+      ),
+      onQuestion: question => answerOpenCodeQuestion(question, requestOptions.answerProviderQuestion)
     })
     if (!planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles

@@ -11,6 +11,25 @@ export const openCodeSessionStorageKey = (directory: string): string => `ghost.o
 
 export type OpenCodePermissionResponse = 'once' | 'reject'
 
+export interface OpenCodeQuestionOption {
+  label: string
+  description: string
+}
+
+export interface OpenCodeQuestion {
+  question: string
+  header: string
+  options: OpenCodeQuestionOption[]
+  multiple: boolean
+  custom: boolean
+}
+
+export interface OpenCodeQuestionRequest {
+  id: string
+  sessionID: string
+  questions: OpenCodeQuestion[]
+}
+
 export interface OpenCodeHealth {
   healthy: boolean
   version?: string
@@ -58,6 +77,7 @@ export interface OpenCodeRunOptions {
   onText?: (text: string) => void
   onProgress?: (detail: string) => void
   onPermission?: (permission: OpenCodePermissionRequest) => Promise<OpenCodePermissionResponse>
+  onQuestion?: (question: OpenCodeQuestionRequest) => Promise<string[][] | undefined>
   requireMutationApprovals?: boolean
 }
 
@@ -248,6 +268,39 @@ function permissionFromRecord(properties: Record<string, unknown>): OpenCodePerm
       ? { pattern: properties.pattern as string | string[] }
       : {})
   }
+}
+
+function questionFromEvent(event: OpenCodeEvent): OpenCodeQuestionRequest | undefined {
+  if (event.type !== 'question.asked' && event.type !== 'question.v2.asked') return undefined
+  const properties = record(event.properties)
+  if (!properties) return undefined
+  const id = textValue(properties.id) ?? textValue(properties.requestID) ?? textValue(properties.questionID)
+  const sessionID = textValue(properties.sessionID)
+  const questions = Array.isArray(properties.questions)
+    ? properties.questions.flatMap(value => {
+        const question = record(value)
+        const text = textValue(question?.question)
+        const header = textValue(question?.header)
+        if (!text || !header || !Array.isArray(question?.options)) return []
+        const options = question.options.flatMap(optionValue => {
+          const option = record(optionValue)
+          const label = textValue(option?.label)
+          const description = textValue(option?.description) ?? ''
+          return label ? [{ label, description }] : []
+        })
+        return options.length > 0 || question.custom === true
+          ? [{
+              question: text,
+              header,
+              options,
+              multiple: question.multiple === true,
+              custom: question.custom === true
+            }]
+          : []
+      })
+    : []
+  if (!id || !sessionID || questions.length === 0) return undefined
+  return { id, sessionID, questions }
 }
 
 function eventSessionId(event: OpenCodeEvent): string | undefined {
@@ -616,6 +669,17 @@ export class OpenCodeClient implements ProviderClient {
       const response = options.onPermission ? await options.onPermission(permission) : 'reject'
       await this.replyPermission(permission, response, options.directory, options.signal)
     }
+    const questionReplies = new Set<string>()
+    const handleQuestion = async (question: OpenCodeQuestionRequest): Promise<void> => {
+      if (question.sessionID !== session.id || questionReplies.has(question.id)) return
+      questionReplies.add(question.id)
+      const answers = options.onQuestion ? await options.onQuestion(question) : undefined
+      if (answers) {
+        await this.replyQuestion(question, answers, options.directory, options.signal)
+      } else {
+        await this.rejectQuestion(question, options.directory, options.signal)
+      }
+    }
     let markStreamConnected: (() => void) | undefined
     const streamConnected = new Promise<void>(resolve => { markStreamConnected = resolve })
     const sessionFinished = new Promise<'idle' | 'error'>(resolve => { markSessionFinished = resolve })
@@ -642,6 +706,11 @@ export class OpenCodeClient implements ProviderClient {
       if (permission) {
         sawSessionActivity = true
         await handlePermission(permission)
+      }
+      const question = questionFromEvent(event)
+      if (question) {
+        sawSessionActivity = true
+        await handleQuestion(question)
       }
       if (event.type === 'session.error' && eventSessionId(event) === session.id) {
         streamError = new Error(openCodeSessionError(event))
@@ -775,6 +844,32 @@ export class OpenCodeClient implements ProviderClient {
       directory,
       signal,
       body: { response }
+    })
+  }
+
+  private async replyQuestion(
+    question: OpenCodeQuestionRequest,
+    answers: string[][],
+    directory: string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await this.request(`/question/${encodeURIComponent(question.id)}/reply`, {
+      method: 'POST',
+      directory,
+      signal,
+      body: { answers }
+    })
+  }
+
+  private async rejectQuestion(
+    question: OpenCodeQuestionRequest,
+    directory: string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    await this.request(`/question/${encodeURIComponent(question.id)}/reject`, {
+      method: 'POST',
+      directory,
+      signal
     })
   }
 

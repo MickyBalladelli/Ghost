@@ -6,6 +6,7 @@ import { GHOST_POLICY } from '../ghostPolicy'
 import type {
   GhostAutoAcceptScope,
   GhostMode,
+  GhostProviderQuestion,
   GhostProvider,
   GhostResponseLength,
   GhostViewStatus
@@ -207,6 +208,7 @@ export type GhostWebviewMessage =
   | (GhostRequestEnvelope & { type: 'approve-all-files' })
   | (GhostRequestEnvelope & { type: 'continue'; resume: GhostContinuation; options?: GhostWebviewRequestOptions })
   | (GhostRequestEnvelope & { type: 'approve-tool'; toolCallId: string; decision: Exclude<GhostToolApprovalDecision, 'reject'>; selectedHunkIndexes?: number[] })
+  | (GhostRequestEnvelope & { type: 'answer-question'; toolCallId: string; answers: string[][] })
   | (GhostRequestEnvelope & { type: 'reject-tool' | 'cancel-tool'; toolCallId: string })
   | (GhostRequestEnvelope & { type: 'edit-tool'; toolCallId: string; arguments: GhostToolArguments })
   | (GhostRequestEnvelope & { type: 'restore-tool'; toolCallId: string })
@@ -228,7 +230,7 @@ export type GhostStreamEvent =
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'request-started'; sequence: number })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'thinking'; sequence: number; detail: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'text-delta' | 'code-delta'; sequence: number; delta: string })
-  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; approvalKind?: 'tool' | 'provider-permission'; diffPreview?: GhostToolDiffPreview; detail?: string })
+  | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-requested'; sequence: number; tool: string; toolCallId: string; arguments?: GhostToolArguments; requiresApproval: boolean; approvalKind?: 'tool' | 'provider-permission' | 'provider-question'; question?: GhostProviderQuestion; diffPreview?: GhostToolDiffPreview; detail?: string })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'tool-result'; sequence: number; tool: string; toolCallId: string; detail: string; resultStatus?: 'completed' | 'rejected' | 'failed' })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'task-plan'; sequence: number; plan: GhostTaskPlan })
   | (GhostExtensionEnvelope & GhostRequestEnvelopeBase & { type: 'warning'; sequence: number; message: string })
@@ -552,6 +554,9 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
   if (value.type === 'approve-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && ['once', 'file', 'request', 'session', 'workspace', 'always'].includes(value.decision as string) && (value.selectedHunkIndexes === undefined || (Array.isArray(value.selectedHunkIndexes) && value.selectedHunkIndexes.length <= 1000 && value.selectedHunkIndexes.every(index => Number.isInteger(index) && index >= 0)))
+  }
+  if (value.type === 'answer-question') {
+    return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0 && Array.isArray(value.answers) && value.answers.length > 0 && value.answers.length <= 20 && value.answers.every(answer => Array.isArray(answer) && answer.length <= 20 && answer.every(item => isBoundedString(item, 2000) && item.trim().length > 0))
   }
   if (value.type === 'reject-tool' || value.type === 'cancel-tool') {
     return isBoundedString(value.toolCallId, 256) && value.toolCallId.trim().length > 0

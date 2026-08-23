@@ -1727,6 +1727,56 @@ textarea {
   padding: 3px 6px;
 }
 
+.opencode-question-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.opencode-question-list fieldset {
+  border: 1px solid var(--vscode-panel-border);
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+}
+
+.opencode-question-list legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.opencode-question-list fieldset p {
+  margin: 0 0 3px;
+}
+
+.opencode-question-option {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: 7px;
+}
+
+.opencode-question-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.opencode-question-option small {
+  color: var(--vscode-descriptionForeground);
+}
+
+.opencode-question-custom {
+  display: grid;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.opencode-question-custom input {
+  width: min(100%, 420px);
+}
+
 .warning-progress {
   border-left-color: var(--vscode-editorWarning-foreground, #cca700);
 }

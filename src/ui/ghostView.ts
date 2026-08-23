@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 
-import { createChatParticipantHandler, GhostProviderPermissionRequest, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
+import { createChatParticipantHandler, GhostProviderPermissionRequest, GhostProviderQuestionRequest, GhostRequestOptions, GhostToolApproval } from '../agent/chatParticipant'
 import { LocalToolExecutor } from '../tools/localToolExecutor'
 import { auditTerminalCommand, formatTerminalAudit } from '../tools/terminalTools'
 import type { LocalToolCall, LocalToolName } from '../agent/toolCallParser'
@@ -86,6 +86,14 @@ interface PendingProviderPermissionApproval {
   resolve: (approval: GhostToolApproval) => void
 }
 
+interface PendingProviderQuestionApproval {
+  requestId: string
+  conversationId: string
+  toolCallId: string
+  question: GhostProviderQuestionRequest
+  resolve: (answers: string[][] | undefined) => void
+}
+
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
 
@@ -96,6 +104,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
   private readonly approvalRaceGuard = new ApprovalRaceGuard()
   private readonly nativeChatApproval = new Map<string, NativeChatApprovalState>()
   private readonly pendingProviderPermissionApprovals = new Map<string, PendingProviderPermissionApproval>()
+  private readonly pendingProviderQuestionApprovals = new Map<string, PendingProviderQuestionApproval>()
   private readonly providerApiKey?: (provider: GhostProvider) => string | undefined
   private readonly clock: GhostClock
   private readonly messenger?: GhostWebviewMessenger
@@ -476,6 +485,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       additionalContext: [options.additionalContext, continuationContext, droppedContext].filter(Boolean).join('\n\n') || undefined,
       approveTool: call => this.requestToolApproval(requestId, request, call),
       approveProviderPermission: permission => this.requestProviderPermissionApproval(requestId, request, permission),
+      answerProviderQuestion: question => this.requestProviderQuestion(requestId, request, question),
       confirmContinue: toolCallCount => this.confirmToolLimit(requestId, request, toolCallCount),
       confirmBudgetContinue: reason => this.confirmBudgetContinue(requestId, request, reason),
       onStop: (reason, message) => {
@@ -1410,6 +1420,38 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     })
   }
 
+  private requestProviderQuestion(
+    requestId: string,
+    request: GhostRequestState,
+    question: GhostProviderQuestionRequest
+  ): Promise<string[][] | undefined> {
+    if (request.cancellation.token.isCancellationRequested) return Promise.resolve(undefined)
+    const toolCallId = this.createToolCallId()
+    return new Promise(resolve => {
+      this.pendingProviderQuestionApprovals.set(toolCallId, {
+        requestId,
+        conversationId: request.conversationId,
+        toolCallId,
+        question,
+        resolve
+      })
+      this.postStreamEvent(requestId, request, {
+        type: 'tool-requested',
+        tool: 'opencode_question',
+        toolCallId,
+        approvalKind: 'provider-question',
+        question: {
+          id: question.id,
+          questions: question.questions
+        },
+        requiresApproval: true,
+        detail: 'OpenCode is waiting for your answer.',
+        phase: 'tool'
+      })
+      this.stateStore.notify('approval')
+    })
+  }
+
   private async promptNativeChatApproval(call: LocalToolCall): Promise<GhostToolApproval> {
     const approveNow = 'Approve now'
     const approveSession = 'Approve for session'
@@ -1516,6 +1558,23 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       }
       pending.resolve(approval)
     }
+    for (const [toolCallId, pending] of this.pendingProviderQuestionApprovals) {
+      if (pending.requestId !== requestId) continue
+      this.pendingProviderQuestionApprovals.delete(toolCallId)
+      this.approvalRaceGuard.end(toolCallId)
+      const request = this.requests.get(requestId)
+      if (request) {
+        this.postStreamEvent(requestId, request, {
+          type: 'tool-result',
+          tool: 'opencode_question',
+          toolCallId,
+          detail: approval.reason ?? 'Question rejected.',
+          resultStatus: 'rejected',
+          phase: 'tool'
+        })
+      }
+      pending.resolve(undefined)
+    }
   }
 
   private approveAllPendingFiles(requestId: string, conversationId: string): void {
@@ -1538,6 +1597,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     toolCallId: string,
     approval: GhostToolApproval
   ): void {
+    const providerQuestion = this.pendingProviderQuestionApprovals.get(toolCallId)
+    if (providerQuestion && providerQuestion.requestId === requestId && providerQuestion.conversationId === conversationId) {
+      if (!this.approvalRaceGuard.begin(toolCallId)) return
+      const request = this.requests.get(requestId)
+      const answers = approval.arguments?.answers
+      const answered = approval.decision !== 'reject' && Array.isArray(answers)
+      this.pendingProviderQuestionApprovals.delete(toolCallId)
+      if (request) {
+        this.postStreamEvent(requestId, request, {
+          type: 'tool-result',
+          tool: 'opencode_question',
+          toolCallId,
+          detail: answered ? 'Answer sent to OpenCode.' : approval.reason ?? 'Question rejected.',
+          resultStatus: answered ? 'completed' : 'rejected',
+          phase: 'tool'
+        })
+      }
+      providerQuestion.resolve(answered ? answers as string[][] : undefined)
+      this.approvalRaceGuard.end(toolCallId)
+      this.stateStore.notify('approval')
+      return
+    }
     const providerPermission = this.pendingProviderPermissionApprovals.get(toolCallId)
     if (providerPermission && providerPermission.requestId === requestId && providerPermission.conversationId === conversationId) {
       if (!this.approvalRaceGuard.begin(toolCallId)) {
@@ -2559,6 +2640,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     this.requestOrchestrator.clear()
     this.pendingApprovals.clear()
     this.pendingProviderPermissionApprovals.clear()
+    this.pendingProviderQuestionApprovals.clear()
     this.approvalRaceGuard.clear()
     for (const staged of this.stagedEdits.values()) {
       void this.restoreStagedEdit(staged)
@@ -2647,6 +2729,12 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         this.decideToolApproval(message.requestId, message.conversationId, message.toolCallId, {
           decision: message.decision,
           selectedHunkIndexes: message.selectedHunkIndexes
+        })
+        return
+      case 'answer-question':
+        this.decideToolApproval(message.requestId, message.conversationId, message.toolCallId, {
+          decision: 'once',
+          arguments: { answers: message.answers }
         })
         return
       case 'reject-tool':
