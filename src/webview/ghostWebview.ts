@@ -2794,6 +2794,8 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
     renderMessages(false)
     return
   }
+  const previousScrollTop = messagesElement.scrollTop
+  const wasAtBottom = messagesElement.scrollHeight - previousScrollTop - messagesElement.clientHeight < 40
   const status = element.querySelector<HTMLElement>('.message-state')
   const showThinkingPlaceholder = message.role === 'assistant' && (
     message.status === 'streaming' ||
@@ -2861,6 +2863,10 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   element.classList.toggle('error', message.status === 'error')
   syncMessageActions(element, message)
   addMessageCopyControls(element, message)
+  messagesElement.scrollTo({
+    top: wasAtBottom ? Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight) : previousScrollTop,
+    behavior: 'auto'
+  })
   ensureAnimatedStatusLabels()
 }
 
@@ -2903,8 +2909,7 @@ const observeDeferredMessages = (): void => {
 
 const scrollMessages = (force: boolean) => {
   requestAnimationFrame(() => {
-    const followingActiveRequest = activeRequest?.conversationId === state.activeConversationId
-    if (force || followingActiveRequest || userIsAtBottom) {
+    if (force || userIsAtBottom) {
       messagesElement.scrollTo({
         top: messagesElement.scrollHeight,
         behavior: force ? 'auto' : 'smooth'
@@ -2989,8 +2994,7 @@ const renderMessages = (forceScroll: boolean, preserveScroll = false) => {
     ensureAnimatedStatusLabels()
     return
   }
-  const followingActiveRequest = activeRequest?.conversationId === state.activeConversationId
-  if (!forceScroll && !userIsAtBottom && !followingActiveRequest) {
+  if (!forceScroll && !userIsAtBottom) {
     requestAnimationFrame(() => {
       messagesElement.scrollTop = previousScrollTop
     })
