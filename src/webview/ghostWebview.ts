@@ -529,6 +529,7 @@ let settingsTimer: number | undefined
 let modelRefreshTimer: number | undefined
 const transientTimers = new Set<number>()
 let historyIndex = -1
+let pendingDeleteConversationId: string | undefined
 let mentionMenu: HTMLElement | undefined
 const requests = new Map<string, ActiveRequest>()
 let progressTimer: number | undefined
@@ -674,6 +675,8 @@ const settingsModalElement = document.getElementById('settings-modal') as HTMLEl
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
+const deleteConversationModalElement = document.getElementById('delete-conversation-modal') as HTMLElement
+const deleteConversationDescriptionElement = document.getElementById('delete-conversation-description') as HTMLElement
 const promptHistoryModalElement = document.getElementById('prompt-history-modal') as HTMLElement
 const editToolModalElement = document.getElementById('edit-tool-modal') as HTMLElement
 const editToolFormElement = document.getElementById('edit-tool-form') as HTMLFormElement
@@ -1760,6 +1763,31 @@ const modalReturnFocus = new WeakMap<HTMLElement, HTMLElement>()
 
 const setModalVisibility = (modal: HTMLElement, visible: boolean): void => {
   modalStore.setVisibility(modal, visible, modalReturnFocus)
+}
+
+const closeDeleteConversationConfirmation = (): void => {
+  pendingDeleteConversationId = undefined
+  setModalVisibility(deleteConversationModalElement, false)
+  setModalVisibility(historyModalElement, true)
+  renderHistory()
+}
+
+const deleteConversation = (conversationId: string): void => {
+  const conversation = state.conversations.find(item => item.id === conversationId)
+  if (!conversation) {
+    return
+  }
+  state.conversations = state.conversations.filter(item => item.id !== conversationId)
+  if (state.conversations.length === 0) {
+    state.conversations.push(createConversation())
+  }
+  if (state.activeConversationId === conversationId) {
+    state.activeConversationId = state.conversations[0].id
+    restoreDraft()
+  }
+  notice = undefined
+  render(true)
+  renderHistory()
 }
 
 const validateEditedToolArguments = (toolCall: ToolCall, value: Record<string, unknown>): string | undefined => {
@@ -3656,19 +3684,10 @@ const handleConversationAction = (action: string, conversationId: string) => {
     const lastMessageIndex = conversation.messages.length - 1
     deriveConversation(conversation, 'Branch of ', lastMessageIndex >= 0 ? lastMessageIndex : undefined)
   } else if (action === 'delete') {
-    if (!window.confirm(`Delete “${conversation.title}”?`)) {
-      return
-    }
-    state.conversations = state.conversations.filter(item => item.id !== conversationId)
-    if (state.conversations.length === 0) {
-      state.conversations.push(createConversation())
-    }
-    if (state.activeConversationId === conversationId) {
-      state.activeConversationId = state.conversations[0].id
-      restoreDraft()
-    }
-    notice = undefined
-    render(true)
+    pendingDeleteConversationId = conversationId
+    deleteConversationDescriptionElement.textContent = `Delete “${conversation.title}”? This cannot be undone.`
+    setModalVisibility(historyModalElement, false)
+    setModalVisibility(deleteConversationModalElement, true)
   }
 }
 
@@ -4675,10 +4694,23 @@ document.getElementById('history')?.addEventListener('click', () => {
   renderHistory()
   setModalVisibility(historyModalElement, true)
 })
+document.getElementById('confirm-delete-conversation')?.addEventListener('click', () => {
+  const conversationId = pendingDeleteConversationId
+  pendingDeleteConversationId = undefined
+  setModalVisibility(deleteConversationModalElement, false)
+  if (conversationId) {
+    deleteConversation(conversationId)
+  }
+  setModalVisibility(historyModalElement, true)
+})
 document.querySelectorAll<HTMLElement>('[data-close-modal]').forEach(button => {
   button.addEventListener('click', () => {
     const modalId = button.dataset.closeModal
     if (modalId) {
+      if (modalId === 'delete-conversation-modal') {
+        closeDeleteConversationConfirmation()
+        return
+      }
       const modal = document.getElementById(modalId)
       if (modal) {
         setModalVisibility(modal, false)
@@ -4689,6 +4721,10 @@ document.querySelectorAll<HTMLElement>('[data-close-modal]').forEach(button => {
 document.querySelectorAll<HTMLElement>('.modal-backdrop').forEach(backdrop => {
   backdrop.addEventListener('click', event => {
     if (event.target === backdrop) {
+      if (backdrop.id === 'delete-conversation-modal') {
+        closeDeleteConversationConfirmation()
+        return
+      }
       setModalVisibility(backdrop, false)
     }
   })
@@ -4738,6 +4774,11 @@ document.addEventListener('keydown', event => {
   const visibleModal = Array.from(document.querySelectorAll<HTMLElement>('.modal-backdrop'))
     .find(modal => !modal.hidden)
   if (visibleModal) {
+    if (visibleModal === deleteConversationModalElement) {
+      closeDeleteConversationConfirmation()
+      event.preventDefault()
+      return
+    }
     setModalVisibility(visibleModal, false)
     event.preventDefault()
   }
