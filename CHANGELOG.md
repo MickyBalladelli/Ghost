@@ -3,7 +3,7 @@
 All notable changes to this extension are documented here.
 ## 1.2.7 - 2026-08-22
 - Preserve structured OpenCode session errors so Ghost does not replace the provider's real cause with a generic failure.
-- Ease message-pane auto-scroll during rapid tool activity, accelerating gradually instead of jumping to the bottom immediately.
+- Preserve the message-pane position when an approval card is replaced after a tool decision.
 
 
 ## 1.2.6 - 2026-08-22
