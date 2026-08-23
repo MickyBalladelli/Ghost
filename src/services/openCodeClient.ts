@@ -10,6 +10,7 @@ export const MINIMUM_OPEN_CODE_VERSION = '1.0.0'
 export const openCodeSessionStorageKey = (directory: string): string => `ghost.opencode.session.${path.resolve(directory)}`
 
 export type OpenCodePermissionResponse = 'once' | 'reject'
+export type OpenCodePermissionDecision = OpenCodePermissionResponse | { response: OpenCodePermissionResponse; reason?: string }
 
 export interface OpenCodeQuestionOption {
   label: string
@@ -76,7 +77,7 @@ export interface OpenCodeRunOptions {
   signal?: AbortSignal
   onText?: (text: string) => void
   onProgress?: (detail: string) => void
-  onPermission?: (permission: OpenCodePermissionRequest) => Promise<OpenCodePermissionResponse>
+  onPermission?: (permission: OpenCodePermissionRequest) => Promise<OpenCodePermissionDecision>
   onQuestion?: (question: OpenCodeQuestionRequest) => Promise<string[][] | undefined>
   requireMutationApprovals?: boolean
 }
@@ -340,7 +341,7 @@ function eventToolProgress(event: OpenCodeEvent): string | undefined {
   return `OpenCode ${tool}: ${status}`
 }
 
-function eventToolError(event: OpenCodeEvent): string | undefined {
+function eventToolError(event: OpenCodeEvent, permissionRejectionReason?: string): string | undefined {
   if (event.type !== 'message.part.updated') return undefined
   const part = record(record(event.properties)?.part)
   if (part?.type !== 'tool') return undefined
@@ -352,7 +353,11 @@ function eventToolError(event: OpenCodeEvent): string | undefined {
     ?? nestedErrorMessage(state?.output)
     ?? nestedErrorMessage(part.error)
     ?? nestedErrorMessage(part.output)
-  const safeDetail = detail ? limitErrorText(redactSensitiveText(detail)) : undefined
+  const safeDetail = permissionRejectionReason && /user rejected permission/i.test(detail ?? '')
+    ? permissionRejectionReason
+    : detail
+      ? limitErrorText(redactSensitiveText(detail))
+      : undefined
   return `OpenCode ${tool} failed${safeDetail ? `: ${safeDetail}` : '.'}`
 }
 
@@ -679,10 +684,13 @@ export class OpenCodeClient implements ProviderClient {
     }
     options.signal?.addEventListener('abort', onAbort, { once: true })
 
+    let permissionRejectionReason: string | undefined
     const handlePermission = async (permission: OpenCodePermissionRequest): Promise<void> => {
       if (permission.sessionID !== session.id || permissionReplies.has(permission.id)) return
       permissionReplies.add(permission.id)
-      const response = options.onPermission ? await options.onPermission(permission) : 'reject'
+      const decision = options.onPermission ? await options.onPermission(permission) : 'reject'
+      const response = typeof decision === 'string' ? decision : decision.response
+      permissionRejectionReason = response === 'reject' && typeof decision !== 'string' ? decision.reason : undefined
       await this.replyPermission(permission, response, options.directory, options.signal)
     }
     const questionReplies = new Set<string>()
@@ -715,7 +723,7 @@ export class OpenCodeClient implements ProviderClient {
         toolCount += 1
         options.onProgress?.(progress)
       }
-      const toolError = eventToolError(event)
+      const toolError = eventToolError(event, permissionRejectionReason)
       if (toolError) {
         streamError = new Error(toolError)
         markSessionFinished?.('error')

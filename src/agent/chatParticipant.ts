@@ -37,7 +37,7 @@ import { parseTaskPlanMarker, TASK_PLAN_MARKER } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
-import { OpenCodeClient, OpenCodePermissionRequest, OpenCodeQuestionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
+import { OpenCodeClient, OpenCodePermissionDecision, OpenCodePermissionRequest, OpenCodeQuestionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
 import { ensureOpenCodeGlobalConfig } from '../services/openCodeProjectConfig'
 import type { GhostStorage } from '../runtimeDependencies'
 import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy'
@@ -1116,12 +1116,13 @@ async function approveOpenCodePermission(
   sessionApprovals: Set<string>,
   approveProviderPermission: GhostRequestOptions['approveProviderPermission'],
   mode: GhostRequestOptions['mode']
-): Promise<'once' | 'reject'> {
+): Promise<OpenCodePermissionDecision> {
+  const reject = (reason: string): OpenCodePermissionDecision => ({ response: 'reject', reason })
   const toolName = openCodePermissionTool(permission)
   const denylist = settings.toolDenylist ?? []
   const allowlist = settings.toolAllowlist ?? []
   const asklist = settings.toolAsklist ?? []
-  if (denylist.includes(toolName)) return 'reject'
+  if (denylist.includes(toolName)) return reject(`Ghost blocked ${toolName}; it is in the tool denylist.`)
 
   const permissionPatterns = Array.isArray(permission.pattern) ? permission.pattern : permission.pattern ? [permission.pattern] : []
   const candidatePaths = [permissionMetadataPath(permission)]
@@ -1129,14 +1130,17 @@ async function approveOpenCodePermission(
   for (const candidatePath of candidatePaths) {
     if (!candidatePath) continue
     const resolved = path.isAbsolute(candidatePath) ? candidatePath : path.resolve(directory, candidatePath)
-    if (!isInsideDirectory(resolved, directory)) return 'reject'
+    if (!isInsideDirectory(resolved, directory)) return reject('Ghost blocked a path outside the workspace.')
   }
-  if (/external[_ -]?directory/i.test(permission.type)) return 'reject'
-  if (mode !== 'edit' && mode !== 'agent' && (isFileEditTool(toolName) || toolName === 'ghost_run_terminal_command')) return 'reject'
+  if (/external[_ -]?directory/i.test(permission.type)) return reject('Ghost blocked external-directory access outside the workspace.')
+  if (mode !== 'edit' && mode !== 'agent' && (isFileEditTool(toolName) || toolName === 'ghost_run_terminal_command')) {
+    return reject(`Ghost blocked OpenCode terminal access in ${mode ?? 'the current'} mode. Use Edit or Agent mode for workspace commands.`)
+  }
   if (toolName === 'ghost_run_terminal_command') {
     const metadataCommand = permissionMetadataCommand(permission)
     const commands = [metadataCommand, ...permissionPatterns].filter((command): command is string => Boolean(command))
-    if (commands.some(command => auditTerminalCommand(command).blocked)) return 'reject'
+    const blockedCommand = commands.map(command => auditTerminalCommand(command)).find(audit => audit.blocked)
+    if (blockedCommand) return reject(blockedCommand.blockReason ?? 'Ghost blocked this terminal file-write command. Use Ghost file tools for workspace changes.')
   }
   if (requestApprovals.has(toolName) || sessionApprovals.has(toolName)) return 'once'
 
