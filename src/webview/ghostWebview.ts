@@ -2710,24 +2710,20 @@ const toolInlineResult = (toolCall: ToolCall): string => {
 
 const toolActionText = (toolCall: ToolCall): string => {
   const compactAction = toolTimeline.compactAction(toolCall.name)
+  const args = parseToolArguments(toolCall)
+  const command = typeof args.command === 'string' ? args.command.trim() : ''
   if (!uiPreferences.showToolProgress) {
+    if (toolCall.name === 'ghost_run_terminal_command' && command) {
+      const displayedCommand = redactSensitiveText(command).length > 180
+        ? `${redactSensitiveText(command).slice(0, 177)}…`
+        : redactSensitiveText(command)
+      const action = `${compactAction}: ${displayedCommand}`
+      return toolCall.status === 'running' ? `${action}…` : action
+    }
     return toolCall.status === 'running' ? `${compactAction}…` : compactAction
   }
 
-  let args: Record<string, unknown> = {}
-  if (toolCall.arguments) {
-    try {
-      const parsed = JSON.parse(toolCall.arguments) as unknown
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        args = parsed as Record<string, unknown>
-      }
-    } catch {
-      // Keep the short tool description when arguments are malformed.
-    }
-  }
-
   const path = typeof args.path === 'string' ? args.path.trim() : ''
-  const command = typeof args.command === 'string' ? args.command.trim() : ''
   const genericTarget = typeof args.target === 'string' ? args.target.trim() : ''
   const target = path || command || genericTarget
   const displayedTarget = target.length > 180 ? `${target.slice(0, 177)}…` : target
@@ -4489,8 +4485,8 @@ const updateOpenCodeSettings = (): void => {
 for (const element of [openCodeUsernameElement, openCodeAgentElement, openCodeSessionReuseElement]) {
   element.addEventListener('change', updateOpenCodeSettings)
 }
-setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key', { provider: controls.provider }))
-setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key', { provider: controls.provider }))
+setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key', { provider: 'opencode' }))
+setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key', { provider: 'openrouter' }))
 const updateOpenAiSettings = () => {
   controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()
   controls.openaiApiKeyPrefix = openAiApiKeyPrefixElement.value.trim()

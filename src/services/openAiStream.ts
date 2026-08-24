@@ -38,6 +38,11 @@ function nestedRecord(value: unknown, key: string): Record<string, unknown> | un
 
 function contentText(value: unknown): string | undefined {
   if (typeof value === 'string') return value
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const part = value as Record<string, unknown>
+    if (typeof part.text === 'string') return part.text || undefined
+    if (typeof part.content === 'string') return part.content || undefined
+  }
   if (!Array.isArray(value)) return undefined
   const text = value.flatMap(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return []
@@ -49,6 +54,16 @@ function contentText(value: unknown): string | undefined {
 
 function reasoningText(value: unknown): string | undefined {
   if (typeof value === 'string') return value || undefined
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const part = value as Record<string, unknown>
+    return typeof part.text === 'string'
+      ? part.text || undefined
+      : typeof part.reasoning === 'string'
+        ? part.reasoning || undefined
+        : typeof part.reasoning_content === 'string'
+          ? part.reasoning_content || undefined
+          : typeof part.summary === 'string' ? part.summary || undefined : undefined
+  }
   if (!Array.isArray(value)) return undefined
   const text = value.flatMap(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return []

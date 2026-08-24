@@ -21,6 +21,7 @@ export type ChatMessageContent = string | Array<ChatTextContent | ChatImageConte
 export interface ChatMessage {
   role: ChatRole
   content: ChatMessageContent
+  reasoning?: string
 }
 
 export interface ChatToolDefinition {

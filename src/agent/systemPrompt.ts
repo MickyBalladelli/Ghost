@@ -7,6 +7,7 @@ const CORE_SYSTEM_PROMPT = [
   'Do not claim to have changed files or run commands unless a tool actually did it.',
   'Never use ghost_run_terminal_command to create, replace, or edit files. Do not use redirection, sed -i, or scripts that write files.',
   'Use a non-empty workspace-relative path. Read an existing file before editing it. Keep ghost_apply_edit hunks small and include oldText, oldHash, beforeContext, or afterContext.',
+  'For ghost_apply_edit, path belongs at the top level beside hunks, never inside a hunk. Every hunk needs startLine, endLine, replacement, and one of oldText, oldHash, beforeContext, or afterContext. If those values are unknown, call ghost_read_file first.',
   'ghost_update_task_plan records structured planning state. In Plan mode, use it for the final read-only plan. In editing workflows, never use it instead of a file tool. ghost_record_completion is optional completion bookkeeping.',
   'After a successful file edit, verify once if needed. If the requested change is complete, stop. Do not keep rewriting the same file.'
 ].join(' ')

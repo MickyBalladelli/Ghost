@@ -66,11 +66,11 @@ suite('OpenRouter client', () => {
     assert.deepEqual(normalizeOpenRouterProviderOrder(['anthropic', 'anthropic', 'bad provider', 'openai']), ['anthropic', 'openai'])
     assert.deepEqual(buildOpenRouterChatBody({
       model: 'openai/gpt-4o-mini',
-      messages: [{ role: 'user', content: 'hello' }],
+      messages: [{ role: 'user', content: 'hello' }, { role: 'assistant', content: '', reasoning: 'previous reasoning' }],
       generation: { maxTokens: 4096 }
     }, routing, 1024), {
       model: 'openai/gpt-4o-mini',
-      messages: [{ role: 'user', content: 'hello' }],
+      messages: [{ role: 'user', content: 'hello' }, { role: 'assistant', content: '', reasoning: 'previous reasoning' }],
       stream: true,
       max_tokens: 1024,
       provider: {
@@ -112,5 +112,109 @@ suite('OpenRouter client', () => {
     assert.equal(requests[0].headers.get('http-referer'), 'https://ghost.example')
     assert.equal(requests[0].headers.get('x-openrouter-title'), 'Ghost')
     assert.equal(requests[1].body?.model, 'meta/llama-3.1-8b-instruct:free')
+  })
+
+  test('passes reasoning-only responses to the agent continuation recovery', async () => {
+    let completionRequests = 0
+    const request: FetchLike = async (_url, init = {}) => {
+      if (init.body && typeof init.body === 'string') completionRequests += 1
+      if (completionRequests === 1) {
+        return new Response('data: {"choices":[{"delta":{"reasoning":"I need to inspect the workspace first."}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { reasoning: 'Still thinking.' }, finish_reason: 'length' }] }), { status: 200 })
+    }
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    const events: string[] = []
+    for await (const event of client.streamChatEvents({ model: 'stealth/ox-alpha', messages: [] })) {
+      events.push(event.type === 'reasoning' ? event.text : event.type === 'text' ? event.text : event.name ?? '')
+    }
+
+    assert.deepEqual(events, ['I need to inspect the workspace first.'])
+    assert.equal(completionRequests, 2)
+  })
+
+  test('preserves reasoning from the non-stream fallback', async () => {
+    let completionRequests = 0
+    const request: FetchLike = async (_url, init = {}) => {
+      if (init.body && typeof init.body === 'string') completionRequests += 1
+      if (completionRequests === 1) {
+        return new Response('data: {"choices":[{"delta":{}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { reasoning: 'Fallback reasoning.' } }] }), { status: 200 })
+    }
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    const events: string[] = []
+    for await (const event of client.streamChatEvents({ model: 'stealth/ox-alpha', messages: [] })) {
+      if (event.type === 'reasoning') events.push(event.text)
+    }
+
+    assert.deepEqual(events, ['Fallback reasoning.'])
+    assert.equal(completionRequests, 2)
+  })
+
+  test('falls back when a streamed tool call has no arguments', async () => {
+    let completionRequests = 0
+    const request: FetchLike = async (_url, init = {}) => {
+      if (init.body && typeof init.body === 'string') completionRequests += 1
+      if (completionRequests === 1) {
+        return new Response('data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"ghost_read_file"}}]}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ function: { name: 'ghost_read_file', arguments: '{"path":"TODO.md"}' } }] } }] }), { status: 200 })
+    }
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    const events: string[] = []
+    for await (const event of client.streamChatEvents({ model: 'stealth/ox-alpha', messages: [] })) {
+      if (event.type === 'tool-call' && event.arguments) events.push(`${event.name}:${event.arguments}`)
+    }
+
+    assert.deepEqual(events, ['ghost_read_file:{"path":"TODO.md"}'])
+    assert.equal(completionRequests, 2)
+  })
+
+  test('reserves enough completion space for Ox Alpha reasoning', async () => {
+    let requestBody: Record<string, unknown> | undefined
+    const request: FetchLike = async (_url, init = {}) => {
+      if (typeof init.body === 'string') requestBody = JSON.parse(init.body) as Record<string, unknown>
+      return new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+    }
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    for await (const _event of client.streamChatEvents({
+      model: 'stealth/ox-alpha',
+      messages: [],
+      generation: { maxTokens: 1024 }
+    })) {
+      // Consume the response.
+    }
+
+    assert.equal(requestBody?.max_tokens, 8192)
+    assert.deepEqual(requestBody?.reasoning, { effort: 'low' })
   })
 })

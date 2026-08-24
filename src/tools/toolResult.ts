@@ -29,10 +29,12 @@ const outputWarnings = (text: string): string[] => text
   .map(line => line.trim())
   .filter(line => /^(?:warning|warn(?:ing)?\s*:)/i.test(line))
 
+const EXPLICIT_BLOCKED_RESULT = /^(?:Read blocked before model content was loaded:|Audit: .*\bBlocked:|Blocked:|Tool blocked:|Ghost blocked\b)/i
+
 const inferStatus = (text: string): ToolResultStatus => {
   if (/^Tool call cancelled\b/i.test(text)) return 'cancelled'
   if (/^User denied\b/i.test(text)) return 'denied'
-  if (/\bblocked\b|not allowed/i.test(text) && !/^Tool error:/i.test(text)) return 'blocked'
+  if (EXPLICIT_BLOCKED_RESULT.test(text)) return 'blocked'
   if (/no changes needed/i.test(text)) return 'no-op'
   if (/^(?:Tool error:|File changed externally|The accepted edit changed|Edit expected)/i.test(text)) return 'failed'
   return 'success'

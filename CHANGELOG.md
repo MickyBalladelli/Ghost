@@ -1,6 +1,61 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.25 - 2026-08-24
+
+- Preserve reasoning emitted inside split `<think>` tags so OpenRouter recovery can continue instead of retrying empty context.
+- Preserve reasoning returned by OpenRouter's non-stream fallback so Ghost does not misread it as an empty response.
+- Reset empty-response retries after successful provider output.
+- Keep Ox Alpha reasoning available for recovery instead of excluding the only useful continuation context.
+- Keep mandatory OpenRouter reasoning in the response so recovery can continue.
+- Retry OpenRouter when a streamed tool call has a name but no usable arguments.
+- Give invalid tool calls exact schema recovery instructions and preserve the final rejection message.
+
+## 1.2.24 - 2026-08-24
+
+- Prevent Ox Alpha from exhausting its completion budget on reasoning before producing a final response.
+
+## 1.2.23 - 2026-08-24
+
+- Use neutral assistant messages for empty retries and relax failed OpenRouter native tool choices on recovery.
+
+## 1.2.22 - 2026-08-24
+
+- Use the OpenRouter recovery window for plain chat as well as tool requests.
+
+## 1.2.21 - 2026-08-24
+
+- Give Ox Alpha enough completion space for reasoning tokens and parse object-shaped OpenRouter content.
+
+## 1.2.20 - 2026-08-24
+
+- Allow more recovery attempts for OpenRouter tool requests when a reasoning model emits an empty turn.
+
+## 1.2.19 - 2026-08-24
+
+- Keep OpenRouter recovery prompts consistent with native tool calling instead of requesting JSON tool text.
+
+## 1.2.18 - 2026-08-24
+
+- Store OpenRouter keys under the OpenRouter provider even when the webview provider state is stale.
+- Normalize pasted OpenRouter keys before sending the Authorization header.
+
+## 1.2.17 - 2026-08-24
+
+- Preserve OpenRouter reasoning in the assistant reasoning field during continuation retries.
+
+## 1.2.16 - 2026-08-24
+
+- Let reasoning-only OpenRouter responses reach Ghost's continuation recovery instead of failing before retry.
+
+## 1.2.15 - 2026-08-24
+
+- Do not mistake words inside successful tool output for blocked tool results.
+
+## 1.2.14 - 2026-08-24
+
+- Show the terminal command in compact command-running and approval cards.
+
 ## 1.2.13 - 2026-08-24
 
 - Keep file content and metadata out of tool progress summaries while preserving the full result for the model.

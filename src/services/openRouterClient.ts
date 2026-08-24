@@ -81,6 +81,16 @@ const tokenPrice = (value: unknown): number | undefined => {
 const supported = (parameters: Set<string>, ...names: string[]): boolean => names.some(name => parameters.has(name))
 
 const isOxAlpha = (model: string): boolean => /^(?:openrouter\/)?stealth\/ox-alpha$/i.test(model.trim())
+const OX_ALPHA_MIN_COMPLETION_TOKENS = 8192
+
+function normalizeOpenRouterApiKey(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .trim()
+}
 
 const modelPricing = (value: OpenRouterModelRecord['pricing']): { pricing?: ModelPricing; pricingStatus: 'free' | 'paid' | 'unknown' } => {
   const input = tokenPrice(value?.prompt)
@@ -180,14 +190,13 @@ function mandatoryReasoningSettings(metadata: ProviderModelMetadata | undefined,
   if (metadata.reasoning.supportsMaxTokens === true) {
     const completionTokens = maxTokens === undefined ? 2048 : Math.max(1024, Math.floor(maxTokens))
     return {
-      max_tokens: Math.max(1024, Math.floor(completionTokens / 2)),
-      exclude: true
+      max_tokens: Math.max(1024, Math.floor(completionTokens / 2))
     }
   }
   const supportedEfforts = metadata.reasoning.supportedEfforts ?? []
-  if (supportedEfforts.includes('low')) return { effort: 'low', exclude: true }
-  if (metadata.reasoning.defaultEffort) return { effort: metadata.reasoning.defaultEffort, exclude: true }
-  return { enabled: true, exclude: true }
+  if (supportedEfforts.includes('low')) return { effort: 'low' }
+  if (metadata.reasoning.defaultEffort) return { effort: metadata.reasoning.defaultEffort }
+  return { enabled: true }
 }
 
 export class OpenRouterClient implements ProviderClient {
@@ -259,8 +268,13 @@ export class OpenRouterClient implements ProviderClient {
     const endpoint = joinEndpoint(this.baseUrl, 'chat/completions')
     const metadata = this.metadata.get(options.model)
     const maxTokens = options.generation?.maxTokens
-    const reasoning = mandatoryReasoningSettings(metadata, maxTokens) ?? (isOxAlpha(options.model) ? { effort: 'low', exclude: true } : undefined)
+    const reasoning = isOxAlpha(options.model)
+      ? { effort: 'low' }
+      : mandatoryReasoningSettings(metadata, maxTokens)
     const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, reasoning)
+    if (isOxAlpha(options.model) && typeof body.max_tokens === 'number') {
+      body.max_tokens = Math.max(body.max_tokens, OX_ALPHA_MIN_COMPLETION_TOKENS)
+    }
     const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
@@ -270,7 +284,11 @@ export class OpenRouterClient implements ProviderClient {
     if (!response.body) throw new Error('OpenRouter returned an empty streaming response')
     let emittedContent = false
     for await (const event of streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')) {
-      if (event.type !== 'reasoning') emittedContent = true
+      if (event.type === 'text' && event.text.trim()) {
+        emittedContent = true
+      } else if (event.type === 'tool-call' && event.name && event.arguments?.trim()) {
+        emittedContent = true
+      }
       yield event
     }
     if (emittedContent) return
@@ -278,21 +296,19 @@ export class OpenRouterClient implements ProviderClient {
     const fallbackResponse = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...body,
-        stream: false,
-        ...(reasoning ? { reasoning: { ...reasoning, exclude: true } } : {})
-      })
+        body: JSON.stringify({
+          ...body,
+          stream: false,
+          ...(body.tool_choice === 'required' ? { tool_choice: 'auto' } : {})
+        })
     }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
     if (!fallbackResponse.ok) throw await providerHttpError(fallbackResponse)
     const events = parseOpenAiCompletionPayload(await fallbackResponse.json())
-    const contentEvents = events.filter(event => event.type !== 'reasoning')
-    if (contentEvents.length === 0) throw new Error('OpenRouter returned reasoning but no final text or tool call in its completion response')
     for (const event of events) yield event
   }
 
   private requestInit(endpoint: string, init: GhostRequestInit): GhostRequestInit {
-    const apiKey = this.apiKeyProvider()?.trim()
+    const apiKey = normalizeOpenRouterApiKey(this.apiKeyProvider())
     if (!apiKey) {
       throw new Error('OpenRouter API key is not configured. Select OpenRouter and run “Ghost: Set Provider API Key”.')
     }

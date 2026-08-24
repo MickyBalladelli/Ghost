@@ -34,4 +34,9 @@ suite('Core helpers (fast)', () => {
     assert.ok(limited.length <= 16000)
     assert.match(limited, /Tool result truncated for ghost_read_file/)
   })
+
+  test('does not treat words inside successful tool output as a blocked result', () => {
+    const result = createToolResult(JSON.stringify({ matches: ['ThreadState::Blocked => "BLOCKED"'] }))
+    assert.equal(result.status, 'success')
+  })
 })

@@ -504,6 +504,19 @@ function getToolArgumentError(call: LocalToolCall): string | undefined {
   return undefined
 }
 
+function toolArgumentRecoveryMessage(call: LocalToolCall, error: string): string {
+  const schemaHint = call.name === 'ghost_apply_edit'
+    ? 'Use this shape: ghost_apply_edit({"path":"relative/file","hunks":[{"startLine":1,"endLine":1,"replacement":"new text","oldText":"exact current text"}]}). Put path beside hunks, not inside a hunk. Every hunk needs startLine, endLine, replacement, and oldText, oldHash, beforeContext, or afterContext. If current text or line numbers are unknown, call ghost_read_file first.'
+    : call.name === 'ghost_apply_transaction'
+      ? 'Use edits:[{path,content}] or edits:[{path,hunks:[{startLine,endLine,replacement,oldText}]}]. Put path on each edit, never inside a hunk.'
+      : call.name === 'ghost_read_file'
+        ? 'Use ghost_read_file({"path":"relative/file"}). Put path at the top level.'
+        : call.name === 'ghost_write_file'
+          ? 'Use ghost_write_file({"path":"relative/file","content":"complete file text"}). Do not use hunks.'
+          : 'Use the declared tool schema exactly. Do not add fields or omit required fields.'
+  return `Tool result for ${call.name}:\n${error}\n${schemaHint} Emit one corrected tool call now. Do not repeat the rejected arguments.`
+}
+
 function getPathRecoveryKey(call: LocalToolCall, result: string): string | undefined {
   return getInspectionPathRecoveryKey(call.name, result, call.arguments.path)
 }
@@ -1403,6 +1416,8 @@ async function streamModelTurn(
   let generated = ''
   let streamedText = ''
   let reasoningText = ''
+  let taggedReasoning = ''
+  let tagBuffer = ''
   let bufferedVisibleText = ''
   let modelCharacters = 0
   let visibleCharacters = 0
@@ -1414,6 +1429,18 @@ async function streamModelTurn(
   let hiddenReasoningNotified = false
   let nativeToolName = ''
   let nativeToolArguments = ''
+
+  const partialTagSuffix = (value: string, tags: string[]): string => {
+    const lowerValue = value.toLowerCase()
+    const maxLength = Math.min(value.length, Math.max(...tags.map(tag => tag.length)) - 1)
+    for (let length = maxLength; length > 0; length -= 1) {
+      const suffix = lowerValue.slice(-length)
+      if (tags.some(tag => tag.startsWith(suffix))) {
+        return value.slice(-length)
+      }
+    }
+    return ''
+  }
 
   const nativeToolResult = (event: ChatStreamEvent): LocalToolCall | undefined => {
     if (event.type !== 'tool-call') return undefined
@@ -1439,20 +1466,31 @@ async function streamModelTurn(
       emitMarkdown(chunk)
       return
     }
-    let remaining = chunk
+    let remaining = tagBuffer + chunk
+    tagBuffer = ''
     while (remaining) {
       if (hidingReasoning) {
         const closing = remaining.search(/<\/(?:think|analysis)>/i)
         if (closing < 0) {
+          const partial = partialTagSuffix(remaining, ['</think>', '</analysis>'])
+          const content = partial ? remaining.slice(0, -partial.length) : remaining
+          taggedReasoning += content
+          tagBuffer = partial
           return
         }
+        taggedReasoning += remaining.slice(0, closing)
         remaining = remaining.slice(closing).replace(/^<\/(?:think|analysis)>/i, '')
         hidingReasoning = false
         continue
       }
       const opening = remaining.search(/<(?:think|analysis)>/i)
       if (opening < 0) {
-        emitMarkdown(remaining)
+        const partial = partialTagSuffix(remaining, ['<think>', '<analysis>'])
+        const content = partial ? remaining.slice(0, -partial.length) : remaining
+        if (content) {
+          emitMarkdown(content)
+        }
+        tagBuffer = partial
         return
       }
       const visible = remaining.slice(0, opening)
@@ -1587,6 +1625,16 @@ async function streamModelTurn(
   const completedNativeToolCall = nativeToolName
     ? parseNativeLocalToolCall(nativeToolName, nativeToolArguments)
     : undefined
+  if (tagBuffer) {
+    if (hidingReasoning) {
+      taggedReasoning += tagBuffer
+    } else {
+      emitVisibleChunk(tagBuffer)
+    }
+  }
+  if (taggedReasoning) {
+    reasoningText += taggedReasoning
+  }
   if (bufferForToolCall && !bufferingToolCall && bufferedVisibleText) {
     response.markdown(bufferedVisibleText)
   }
@@ -1738,6 +1786,12 @@ export function createChatParticipantHandler(
       openaiProtocol: profileProtocol(settings.openaiProfile),
       ollamaReportsTools: providerReportsTools
     })
+    const toolRecoveryInstruction = nativeToolCalling
+      ? 'If workspace work is needed, call exactly one available Ghost tool using the native tool interface.'
+      : 'If workspace work is needed, emit exactly one complete valid JSON Ghost tool call.'
+    const emptyProviderMaxRetries = modelSettings.provider === 'openrouter'
+      ? 5
+      : GHOST_RETRY_POLICIES.emptyProvider.maxRetries
     const workspaceChangeRequested = !planningMode && (describesWorkspaceChange(request.prompt) || pendingWorkspaceTask)
     const completionRecordEnabled = workspaceChangeRequested
     const requestToolDefinitions = GHOST_NATIVE_TOOL_DEFINITIONS.filter(tool => (
@@ -1794,6 +1848,7 @@ export function createChatParticipantHandler(
       let toolCallCount = 0
       let missingToolRetries = 0
       let invalidToolRetries = 0
+      let lastInvalidToolError = ''
       const pathRecoveryRetries = new Map<string, number>()
       let emptyResponseRetries = 0
       let staleEditRetries = 0
@@ -1803,6 +1858,7 @@ export function createChatParticipantHandler(
       let taskPlanRecorded = false
       let unfinishedPlanAfterChangeCount = 0
       let emptyProviderRetries = 0
+      let openRouterToolChoiceRelaxed = false
       let splitEditRetries = 0
       const fileEditStates = new Map<string, FileEditState>()
       const completedReadCalls = new Map<string, string>()
@@ -1851,7 +1907,9 @@ export function createChatParticipantHandler(
             ...(requestToolsEnabled && nativeToolCalling
               ? {
                   tools: requestToolDefinitions,
-                  toolChoice: planningMode && !taskPlanRecorded
+                  toolChoice: openRouterToolChoiceRelaxed
+                    ? 'auto' as const
+                    : planningMode && !taskPlanRecorded
                     ? 'required' as const
                     : workspaceChangeRequested && !successfulWorkspaceChange
                       ? 'required' as const
@@ -1885,6 +1943,9 @@ export function createChatParticipantHandler(
         if (token.isCancellationRequested) {
           return
         }
+        if (generated) {
+          emptyProviderRetries = 0
+        }
         if (turn.streamed && !taskPlanRequiresExecution && !turn.toolCall) {
           const streamedParse = classifyLocalToolResponse(generated)
           const finalNonToolAnswer = !streamedParse.call
@@ -1915,27 +1976,35 @@ export function createChatParticipantHandler(
           return
         }
 
-        if (!generated && providerReasoning && emptyProviderRetries < GHOST_RETRY_POLICIES.emptyProvider.maxRetries) {
+        if (!generated && providerReasoning && emptyProviderRetries < emptyProviderMaxRetries) {
           emptyProviderRetries += 1
-          response.progress(`Provider returned reasoning without a final response. Continuing (${emptyProviderRetries}/${GHOST_RETRY_POLICIES.emptyProvider.maxRetries})...`)
+          if (modelSettings.provider === 'openrouter' && nativeToolCalling) {
+            openRouterToolChoiceRelaxed = true
+          }
+          response.progress(`Provider returned reasoning without a final response. Continuing (${emptyProviderRetries}/${emptyProviderMaxRetries})...`)
           messages.push(
-            { role: 'assistant', content: `The previous turn contained reasoning but no final response. Continue from this reasoning without repeating it:\n${providerReasoning.slice(-12000)}` },
-            { role: 'user', content: 'Continue the requested task now. Emit exactly one complete valid JSON Ghost tool call when workspace work is needed, or give the final concise answer. Do not return reasoning alone.' }
+            modelSettings.provider === 'openrouter'
+              ? { role: 'assistant', content: '', reasoning: providerReasoning.slice(-12000) }
+              : { role: 'assistant', content: `The previous turn contained reasoning but no final response. Continue from this reasoning without repeating it:\n${providerReasoning.slice(-12000)}` },
+            { role: 'user', content: `Continue the requested task now. ${toolRecoveryInstruction} Otherwise give the final concise answer. Do not return reasoning alone.` }
           )
           continue
         }
 
         if (!generated) {
-          if (emptyProviderRetries < GHOST_RETRY_POLICIES.emptyProvider.maxRetries) {
+          if (emptyProviderRetries < emptyProviderMaxRetries) {
             emptyProviderRetries += 1
-            response.progress(`Provider returned no content. Retrying (${emptyProviderRetries}/${GHOST_RETRY_POLICIES.emptyProvider.maxRetries})...`)
+            if (modelSettings.provider === 'openrouter' && nativeToolCalling) {
+              openRouterToolChoiceRelaxed = true
+            }
+            response.progress(`Provider returned no content. Retrying (${emptyProviderRetries}/${emptyProviderMaxRetries})...`)
             messages.push(
-              { role: 'assistant', content: '[empty provider response]' },
-              { role: 'user', content: 'The previous response was empty. Continue the requested task now. If a workspace file is involved, inspect it with ghost_read_file and then use the correct workspace tool. Emit exactly one complete valid JSON tool call, or give a concise answer if no tool is needed.' }
+              { role: 'assistant', content: '' },
+              { role: 'user', content: `The previous response was empty. Continue the requested task now. ${nativeToolCalling ? 'If workspace work is needed, inspect the workspace with the native Ghost tool interface and then continue with the correct native tool call.' : 'If a workspace file is involved, inspect it with ghost_read_file and then use the correct workspace tool. Emit exactly one complete valid JSON tool call.'} Otherwise give a concise answer. Do not return reasoning alone.` }
             )
             continue
           }
-          const message = `The provider returned no content after ${GHOST_RETRY_POLICIES.emptyProvider.maxRetries} retries. Check the model response or connection, then retry.`
+          const message = `The provider returned no content after ${emptyProviderMaxRetries} retries. Check the model response or connection, then retry.`
           requestOptions.onStop?.('invalid-model-response', message)
           response.progress('Provider returned an empty response')
           response.markdown(message)
@@ -2050,17 +2119,16 @@ export function createChatParticipantHandler(
             return
           }
           invalidToolRetries += 1
+          lastInvalidToolError = toolArgumentError
           response.progress(`Invalid tool call: ${toolArgumentError}`)
           if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
-            const message = 'The model kept returning invalid tool arguments after retries.'
+            const message = `The model kept returning invalid tool arguments after ${GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries} retries. Last rejection: ${lastInvalidToolError}`
             requestOptions.onStop?.('invalid-model-response', message)
             response.markdown(message)
             return
           }
-          messages.push(
-            { role: 'assistant', content: generated },
-            { role: 'user', content: `Tool result for ${toolCall.name}:\n${toolArgumentError}` }
-          )
+          if (!turn.toolCall) messages.push({ role: 'assistant', content: generated })
+          messages.push({ role: 'user', content: toolArgumentRecoveryMessage(toolCall, toolArgumentError) })
           continue
         }
 
@@ -2091,17 +2159,16 @@ export function createChatParticipantHandler(
             return
           }
           invalidToolRetries += 1
+          lastInvalidToolError = approvedToolArgumentError
           response.progress(`Invalid tool call: ${approvedToolArgumentError}`)
           if (invalidToolRetries > GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries) {
-            const message = 'The model kept returning invalid tool arguments after retries.'
+            const message = `The model kept returning invalid tool arguments after ${GHOST_RETRY_POLICIES.invalidToolArguments.maxRetries} retries. Last rejection: ${lastInvalidToolError}`
             requestOptions.onStop?.('invalid-model-response', message)
             response.markdown(message)
             return
           }
-          messages.push(
-            { role: 'assistant', content: generated },
-            { role: 'user', content: `Tool result for ${toolCall.name}:\n${approvedToolArgumentError}` }
-          )
+          if (!turn.toolCall) messages.push({ role: 'assistant', content: generated })
+          messages.push({ role: 'user', content: toolArgumentRecoveryMessage(toolCall, approvedToolArgumentError) })
           continue
         }
         const editPaths = getEditPaths(toolCall)
