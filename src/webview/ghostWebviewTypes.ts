@@ -82,6 +82,19 @@ export interface ControlSettings {
   openaiTlsCaFile: string
   openaiTlsCertFile: string
   openaiTlsKeyFile: string
+  openrouterUrl: string
+  openrouterReferer: string
+  openrouterTitle: string
+  openrouterAllowFallbacks: boolean
+  openrouterRequireParameters: boolean
+  openrouterDataCollection: 'allow' | 'deny'
+  openrouterProviderOrder: string[]
+  openrouterProxy: string
+  openrouterNoProxy: string
+  openrouterTlsRejectUnauthorized: boolean
+  openrouterTlsCaFile: string
+  openrouterTlsCertFile: string
+  openrouterTlsKeyFile: string
   openCodeUrl: string
   openCodeUsername: string
   openCodeAgent: string

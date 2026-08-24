@@ -10,6 +10,9 @@ export function shouldUseNativeToolCalling(options: {
   if (options.provider === 'openai-compatible' && options.openaiProtocol === 'openai-chat') {
     return true
   }
+  if (options.provider === 'openrouter') {
+    return options.ollamaReportsTools === true
+  }
   if (options.provider === 'ollama') {
     return options.ollamaReportsTools === true
   }

@@ -51,10 +51,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   })
   const checkProviderStatus = async () => {
-    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
+    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { OpenRouterClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
       import('./services/mlxClient'),
       import('./services/ollamaClient'),
       import('./services/profiledProviderClient'),
+      import('./services/openRouterClient'),
       import('./services/providerProfiles'),
       import('./services/openCodeClient')
     ])
@@ -66,6 +67,8 @@ export async function activate(context: vscode.ExtensionContext) {
       ? 'MLX/VLM'
       : settings.provider === 'openai-compatible'
         ? getOpenAiProfile(settings.openaiProfile).label
+        : settings.provider === 'openrouter'
+          ? 'OpenRouter'
         : 'Ollama'
     const client = settings.provider === 'opencode'
       ? new OpenCodeClient(settings.openCodeUrl, {
@@ -76,6 +79,32 @@ export async function activate(context: vscode.ExtensionContext) {
       ? new MlxClient(settings.mlxUrl, undefined, () => providerApiKey('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => providerApiKey('openai-compatible'))
+        : settings.provider === 'openrouter'
+          ? new OpenRouterClient({
+              url: settings.openrouterUrl,
+              referer: settings.openrouterReferer,
+              title: settings.openrouterTitle,
+              routing: {
+                allowFallbacks: settings.openrouterAllowFallbacks,
+                requireParameters: settings.openrouterRequireParameters,
+                dataCollection: settings.openrouterDataCollection,
+                providerOrder: settings.openrouterProviderOrder
+              },
+              transport: {
+                apiKeyHeader: 'Authorization',
+                apiKeyPrefix: 'Bearer',
+                organizationHeader: '',
+                organization: '',
+                projectHeader: '',
+                project: '',
+                proxy: settings.openrouterProxy,
+                noProxy: settings.openrouterNoProxy,
+                tlsRejectUnauthorized: settings.openrouterTlsRejectUnauthorized,
+                tlsCaFile: settings.openrouterTlsCaFile,
+                tlsCertFile: settings.openrouterTlsCertFile,
+                tlsKeyFile: settings.openrouterTlsKeyFile
+              }
+            }, () => providerApiKey('openrouter'))
         : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => providerApiKey('ollama'))
     const openCodeHealth = settings.provider === 'opencode' && client instanceof OpenCodeClient
       ? await client.health()
@@ -93,6 +122,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+          : settings.provider === 'openrouter'
+            ? settings.openrouterUrl
           : settings.ollamaUrl
       await vscode.window.showInformationMessage(`${providerLabel} is online at ${endpoint}.`)
     } else if (openCodeHealth?.error) {
@@ -104,6 +135,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+          : settings.provider === 'openrouter'
+            ? settings.openrouterUrl
           : settings.ollamaUrl
       await vscode.window.showErrorMessage(`${providerLabel} is offline at ${endpoint}.`)
     }

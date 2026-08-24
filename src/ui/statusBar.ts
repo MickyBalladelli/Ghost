@@ -8,6 +8,7 @@ const PROVIDER_LABELS: Record<GhostProvider, string> = {
   ollama: 'Ollama',
   'mlx-vlm': 'MLX/VLM',
   'openai-compatible': 'OpenAI-compatible',
+  openrouter: 'OpenRouter',
   opencode: 'OpenCode'
 }
 

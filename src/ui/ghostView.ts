@@ -10,9 +10,10 @@ import { legacyFileEditApprovalMirror } from '../settingsMigrations'
 import { MlxClient } from '../services/mlxClient'
 import { ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
-import { createProviderAdapter } from '../services/providerAdapter'
+import { createProviderAdapter, ProviderClient } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { OpenRouterClient } from '../services/openRouterClient'
 import { OpenCodeClient } from '../services/openCodeClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
 import { resolveWorkspacePath } from '../tools/workspacePath'
@@ -2149,6 +2150,32 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+        : settings.provider === 'openrouter'
+          ? new OpenRouterClient({
+              url: settings.openrouterUrl,
+              referer: settings.openrouterReferer,
+              title: settings.openrouterTitle,
+              routing: {
+                allowFallbacks: settings.openrouterAllowFallbacks,
+                requireParameters: settings.openrouterRequireParameters,
+                dataCollection: settings.openrouterDataCollection,
+                providerOrder: settings.openrouterProviderOrder
+              },
+              transport: {
+                apiKeyHeader: 'Authorization',
+                apiKeyPrefix: 'Bearer',
+                organizationHeader: '',
+                organization: '',
+                projectHeader: '',
+                project: '',
+                proxy: settings.openrouterProxy,
+                noProxy: settings.openrouterNoProxy,
+                tlsRejectUnauthorized: settings.openrouterTlsRejectUnauthorized,
+                tlsCaFile: settings.openrouterTlsCaFile,
+                tlsCertFile: settings.openrouterTlsCertFile,
+                tlsKeyFile: settings.openrouterTlsKeyFile
+              }
+            }, () => this.providerApiKey?.('openrouter'))
         : new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => this.providerApiKey?.('ollama'))
     const adapter = createProviderAdapter(settings.provider, client)
     const online = await client.checkHealth(3000)
@@ -2175,6 +2202,28 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
             ...(model.outputLimit === undefined ? {} : { outputLimit: model.outputLimit }),
             ...(model.pricing ? { pricing: model.pricing } : {}),
             pricingStatus: model.pricingStatus
+          }
+        })
+      } else if (typeof (client as ProviderClient).listModelsWithMetadata === 'function') {
+        const discoveredModels = await (client as ProviderClient).listModelsWithMetadata!()
+        normalizedModels = [...new Set(discoveredModels.map(model => model.id).filter(model => model.trim()))]
+        const metadataModels = [...new Set([...normalizedModels, settings.chatModel])]
+        modelMetadata = metadataModels.map(model => {
+          const discovered = discoveredModels.find(item => item.id === model)
+          const capabilities = adapter.capabilities(model)
+          return {
+            ...capabilities,
+            ...(discovered?.displayName ? { displayName: discovered.displayName } : {}),
+            ...(discovered?.contextWindow === undefined ? {} : { contextWindow: discovered.contextWindow }),
+            ...(discovered?.outputLimit === undefined ? {} : { outputLimit: discovered.outputLimit }),
+            ...(discovered?.supportsTools === undefined ? {} : { supportsTools: discovered.supportsTools }),
+            ...(discovered?.supportsJsonMode === undefined ? {} : { supportsJsonMode: discovered.supportsJsonMode }),
+            ...(discovered?.supportsVision === undefined ? {} : { supportsVision: discovered.supportsVision }),
+            ...(discovered?.supportsFIM === undefined ? {} : { supportsFIM: discovered.supportsFIM }),
+            ...(discovered?.supportsStreaming === undefined ? {} : { supportsStreaming: discovered.supportsStreaming }),
+            ...(discovered?.supportsSampling === undefined ? {} : { supportsSampling: { ...capabilities.supportsSampling, ...discovered.supportsSampling } }),
+            ...(discovered?.pricing ? { pricing: discovered.pricing } : {}),
+            pricingStatus: discovered?.pricingStatus ?? 'unknown'
           }
         })
       } else {
@@ -2353,6 +2402,19 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         openaiTlsCaFile: settings.openaiTlsCaFile,
         openaiTlsCertFile: settings.openaiTlsCertFile,
         openaiTlsKeyFile: settings.openaiTlsKeyFile,
+        openrouterUrl: settings.openrouterUrl,
+        openrouterReferer: settings.openrouterReferer,
+        openrouterTitle: settings.openrouterTitle,
+        openrouterAllowFallbacks: settings.openrouterAllowFallbacks,
+        openrouterRequireParameters: settings.openrouterRequireParameters,
+        openrouterDataCollection: settings.openrouterDataCollection,
+        openrouterProviderOrder: settings.openrouterProviderOrder,
+        openrouterProxy: settings.openrouterProxy,
+        openrouterNoProxy: settings.openrouterNoProxy,
+        openrouterTlsRejectUnauthorized: settings.openrouterTlsRejectUnauthorized,
+        openrouterTlsCaFile: settings.openrouterTlsCaFile,
+        openrouterTlsCertFile: settings.openrouterTlsCertFile,
+        openrouterTlsKeyFile: settings.openrouterTlsKeyFile,
         openCodeUrl: settings.openCodeUrl,
         openCodeUsername: settings.openCodeUsername,
         openCodeAgent: settings.openCodeAgent,
@@ -2364,7 +2426,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
         logLevel: effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging),
-        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.ollamaUrl) ? 'external' : 'local'
+        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.provider === 'openrouter' ? settings.openrouterUrl : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       modelMetadata,
@@ -2440,6 +2502,35 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
       await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)
+    }
+    if (typeof update.openrouterUrl === 'string' && update.openrouterUrl.trim()) {
+      await ghostConfig.update('openrouterUrl', update.openrouterUrl.trim(), target)
+    }
+    const openRouterTextSettings = ['openrouterReferer', 'openrouterTitle'] as const
+    for (const setting of openRouterTextSettings) {
+      const value = update[setting]
+      if (typeof value === 'string') await ghostConfig.update(setting, value.trim(), target)
+    }
+    if (typeof update.openrouterAllowFallbacks === 'boolean') {
+      await ghostConfig.update('openrouterAllowFallbacks', update.openrouterAllowFallbacks, target)
+    }
+    if (typeof update.openrouterRequireParameters === 'boolean') {
+      await ghostConfig.update('openrouterRequireParameters', update.openrouterRequireParameters, target)
+    }
+    if (update.openrouterDataCollection === 'allow' || update.openrouterDataCollection === 'deny') {
+      await ghostConfig.update('openrouterDataCollection', update.openrouterDataCollection, target)
+    }
+    if (Array.isArray(update.openrouterProviderOrder)) {
+      const order = [...new Set(update.openrouterProviderOrder.map(value => value.trim()).filter(value => value && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value)))]
+      await ghostConfig.update('openrouterProviderOrder', order, target)
+    }
+    const openRouterTransportTextSettings = ['openrouterProxy', 'openrouterNoProxy', 'openrouterTlsCaFile', 'openrouterTlsCertFile', 'openrouterTlsKeyFile'] as const
+    for (const setting of openRouterTransportTextSettings) {
+      const value = update[setting]
+      if (typeof value === 'string') await ghostConfig.update(setting, value.trim(), target)
+    }
+    if (typeof update.openrouterTlsRejectUnauthorized === 'boolean') {
+      await ghostConfig.update('openrouterTlsRejectUnauthorized', update.openrouterTlsRejectUnauthorized, target)
     }
     if (typeof update.openCodeUrl === 'string' && update.openCodeUrl.trim()) {
       await ghostConfig.update('openCodeUrl', update.openCodeUrl.trim(), target)

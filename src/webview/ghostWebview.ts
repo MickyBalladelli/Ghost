@@ -67,10 +67,11 @@ const defaultGenerationSettings = {
 }
 
 const providerChoices: Array<{ value: GhostProvider; label: string }> = [
-  { value: 'ollama', label: 'Ollama' },
   { value: 'mlx-vlm', label: 'MLX / VLM' },
+  { value: 'ollama', label: 'Ollama' },
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
-  { value: 'opencode', label: 'OpenCode' }
+  { value: 'opencode', label: 'OpenCode' },
+  { value: 'openrouter', label: 'OpenRouter' }
 ]
 
 const renderProviderOptions = (element: HTMLSelectElement, selectedProvider: GhostProvider): void => {
@@ -394,6 +395,19 @@ let controls: ControlSettings = {
   openaiTlsCaFile: '',
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
+  openrouterUrl: 'https://openrouter.ai/api/v1',
+  openrouterReferer: '',
+  openrouterTitle: 'Ghost Coding Assistant',
+  openrouterAllowFallbacks: true,
+  openrouterRequireParameters: false,
+  openrouterDataCollection: 'allow',
+  openrouterProviderOrder: [],
+  openrouterProxy: '',
+  openrouterNoProxy: 'localhost,127.0.0.1,::1',
+  openrouterTlsRejectUnauthorized: true,
+  openrouterTlsCaFile: '',
+  openrouterTlsCertFile: '',
+  openrouterTlsKeyFile: '',
   openCodeUrl: 'http://127.0.0.1:4096',
   openCodeUsername: 'opencode',
   openCodeAgent: '',
@@ -642,6 +656,18 @@ const openAiTlsRejectUnauthorizedElement = document.getElementById('openai-tls-r
 const openAiTlsCaFileElement = document.getElementById('openai-tls-ca-file') as HTMLInputElement
 const openAiTlsCertFileElement = document.getElementById('openai-tls-cert-file') as HTMLInputElement
 const openAiTlsKeyFileElement = document.getElementById('openai-tls-key-file') as HTMLInputElement
+const openRouterRefererElement = document.getElementById('openrouter-referer') as HTMLInputElement
+const openRouterTitleElement = document.getElementById('openrouter-title') as HTMLInputElement
+const openRouterAllowFallbacksElement = document.getElementById('openrouter-allow-fallbacks') as HTMLInputElement
+const openRouterRequireParametersElement = document.getElementById('openrouter-require-parameters') as HTMLInputElement
+const openRouterDataCollectionElement = document.getElementById('openrouter-data-collection') as HTMLSelectElement
+const openRouterProviderOrderElement = document.getElementById('openrouter-provider-order') as HTMLInputElement
+const openRouterProxyElement = document.getElementById('openrouter-proxy') as HTMLInputElement
+const openRouterNoProxyElement = document.getElementById('openrouter-no-proxy') as HTMLInputElement
+const openRouterTlsRejectUnauthorizedElement = document.getElementById('openrouter-tls-reject-unauthorized') as HTMLInputElement
+const openRouterTlsCaFileElement = document.getElementById('openrouter-tls-ca-file') as HTMLInputElement
+const openRouterTlsCertFileElement = document.getElementById('openrouter-tls-cert-file') as HTMLInputElement
+const openRouterTlsKeyFileElement = document.getElementById('openrouter-tls-key-file') as HTMLInputElement
 const testProviderElement = document.getElementById('test-provider') as HTMLButtonElement
 const refreshModelsElement = document.getElementById('refresh-models') as HTMLButtonElement
 const openToolPermissionsElement = document.getElementById('open-tool-permissions') as HTMLButtonElement
@@ -823,6 +849,19 @@ const createPersistedState = () => compactPersistedState({
     openaiTlsCaFile: controls.openaiTlsCaFile,
     openaiTlsCertFile: controls.openaiTlsCertFile,
     openaiTlsKeyFile: controls.openaiTlsKeyFile,
+    openrouterUrl: controls.openrouterUrl,
+    openrouterReferer: controls.openrouterReferer,
+    openrouterTitle: controls.openrouterTitle,
+    openrouterAllowFallbacks: controls.openrouterAllowFallbacks,
+    openrouterRequireParameters: controls.openrouterRequireParameters,
+    openrouterDataCollection: controls.openrouterDataCollection,
+    openrouterProviderOrder: controls.openrouterProviderOrder,
+    openrouterProxy: controls.openrouterProxy,
+    openrouterNoProxy: controls.openrouterNoProxy,
+    openrouterTlsRejectUnauthorized: controls.openrouterTlsRejectUnauthorized,
+    openrouterTlsCaFile: controls.openrouterTlsCaFile,
+    openrouterTlsCertFile: controls.openrouterTlsCertFile,
+    openrouterTlsKeyFile: controls.openrouterTlsKeyFile,
     openCodeUrl: controls.openCodeUrl,
     openCodeUsername: controls.openCodeUsername,
     openCodeAgent: controls.openCodeAgent,
@@ -969,6 +1008,19 @@ const sendSettingsUpdate = () => {
         openaiTlsCaFile: controls.openaiTlsCaFile,
         openaiTlsCertFile: controls.openaiTlsCertFile,
         openaiTlsKeyFile: controls.openaiTlsKeyFile,
+        openrouterUrl: controls.openrouterUrl,
+        openrouterReferer: controls.openrouterReferer,
+        openrouterTitle: controls.openrouterTitle,
+        openrouterAllowFallbacks: controls.openrouterAllowFallbacks,
+        openrouterRequireParameters: controls.openrouterRequireParameters,
+        openrouterDataCollection: controls.openrouterDataCollection,
+        openrouterProviderOrder: controls.openrouterProviderOrder,
+        openrouterProxy: controls.openrouterProxy,
+        openrouterNoProxy: controls.openrouterNoProxy,
+        openrouterTlsRejectUnauthorized: controls.openrouterTlsRejectUnauthorized,
+        openrouterTlsCaFile: controls.openrouterTlsCaFile,
+        openrouterTlsCertFile: controls.openrouterTlsCertFile,
+        openrouterTlsKeyFile: controls.openrouterTlsKeyFile,
         openCodeUrl: controls.openCodeUrl,
         openCodeUsername: controls.openCodeUsername,
         openCodeAgent: controls.openCodeAgent,
@@ -1017,6 +1069,8 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
   ? controls.mlxUrl
   : controls.provider === 'openai-compatible'
     ? controls.openaiUrl
+    : controls.provider === 'openrouter'
+      ? controls.openrouterUrl
     : controls.provider === 'opencode'
       ? controls.openCodeUrl
       : controls.ollamaUrl
@@ -1524,6 +1578,18 @@ const renderControls = () => {
   openAiTlsCaFileElement.value = controls.openaiTlsCaFile
   openAiTlsCertFileElement.value = controls.openaiTlsCertFile
   openAiTlsKeyFileElement.value = controls.openaiTlsKeyFile
+  openRouterRefererElement.value = controls.openrouterReferer
+  openRouterTitleElement.value = controls.openrouterTitle
+  openRouterAllowFallbacksElement.checked = controls.openrouterAllowFallbacks
+  openRouterRequireParametersElement.checked = controls.openrouterRequireParameters
+  openRouterDataCollectionElement.value = controls.openrouterDataCollection
+  openRouterProviderOrderElement.value = controls.openrouterProviderOrder.join(', ')
+  openRouterProxyElement.value = controls.openrouterProxy
+  openRouterNoProxyElement.value = controls.openrouterNoProxy
+  openRouterTlsRejectUnauthorizedElement.checked = controls.openrouterTlsRejectUnauthorized
+  openRouterTlsCaFileElement.value = controls.openrouterTlsCaFile
+  openRouterTlsCertFileElement.value = controls.openrouterTlsCertFile
+  openRouterTlsKeyFileElement.value = controls.openrouterTlsKeyFile
   const openAiSettingsEnabled = controls.provider === 'openai-compatible'
   for (const element of [
     openAiApiKeyHeaderElement,
@@ -1547,10 +1613,28 @@ const renderControls = () => {
   ]) {
     element.disabled = !openAiSettingsEnabled
   }
+  for (const element of [
+    openRouterRefererElement,
+    openRouterTitleElement,
+    openRouterAllowFallbacksElement,
+    openRouterRequireParametersElement,
+    openRouterDataCollectionElement,
+    openRouterProviderOrderElement,
+    openRouterProxyElement,
+    openRouterNoProxyElement,
+    openRouterTlsRejectUnauthorizedElement,
+    openRouterTlsCaFileElement,
+    openRouterTlsCertFileElement,
+    openRouterTlsKeyFileElement
+  ]) {
+    element.disabled = controls.provider !== 'openrouter'
+  }
   providerHelpElement.textContent = controls.provider === 'mlx-vlm'
     ? 'MLX VLM OpenAI-compatible endpoint.'
     : controls.provider === 'openai-compatible'
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
+      : controls.provider === 'openrouter'
+        ? 'OpenRouter remote model catalog and OpenAI-compatible chat endpoint.'
       : controls.provider === 'opencode'
         ? 'OpenCode headless server. Ghost connects to it but never starts or stops it.'
         : 'Ollama endpoint.'
@@ -4352,6 +4436,8 @@ providerEndpointElement.addEventListener('change', () => {
     controls.mlxUrl = endpoint
   } else if (controls.provider === 'openai-compatible') {
     controls.openaiUrl = endpoint
+  } else if (controls.provider === 'openrouter') {
+    controls.openrouterUrl = endpoint
   } else if (controls.provider === 'opencode') {
     controls.openCodeUrl = endpoint
   } else {
@@ -4412,6 +4498,38 @@ for (const element of [
   openAiCustomRequestTemplateElement
 ]) {
   element.addEventListener('change', updateOpenAiSettings)
+}
+const updateOpenRouterSettings = (): void => {
+  controls.openrouterReferer = openRouterRefererElement.value.trim()
+  controls.openrouterTitle = openRouterTitleElement.value.trim()
+  controls.openrouterAllowFallbacks = openRouterAllowFallbacksElement.checked
+  controls.openrouterRequireParameters = openRouterRequireParametersElement.checked
+  controls.openrouterDataCollection = openRouterDataCollectionElement.value === 'deny' ? 'deny' : 'allow'
+  controls.openrouterProviderOrder = openRouterProviderOrderElement.value.split(',').map(value => value.trim()).filter(Boolean)
+  controls.openrouterProxy = openRouterProxyElement.value.trim()
+  controls.openrouterNoProxy = openRouterNoProxyElement.value.trim()
+  controls.openrouterTlsRejectUnauthorized = openRouterTlsRejectUnauthorizedElement.checked
+  controls.openrouterTlsCaFile = openRouterTlsCaFileElement.value.trim()
+  controls.openrouterTlsCertFile = openRouterTlsCertFileElement.value.trim()
+  controls.openrouterTlsKeyFile = openRouterTlsKeyFileElement.value.trim()
+  sendSettingsUpdate()
+  saveState()
+}
+for (const element of [
+  openRouterRefererElement,
+  openRouterTitleElement,
+  openRouterAllowFallbacksElement,
+  openRouterRequireParametersElement,
+  openRouterDataCollectionElement,
+  openRouterProviderOrderElement,
+  openRouterProxyElement,
+  openRouterNoProxyElement,
+  openRouterTlsRejectUnauthorizedElement,
+  openRouterTlsCaFileElement,
+  openRouterTlsCertFileElement,
+  openRouterTlsKeyFileElement
+]) {
+  element.addEventListener('change', updateOpenRouterSettings)
 }
 testProviderElement.addEventListener('click', () => post('test-provider'))
 refreshModelsElement.addEventListener('click', () => post('refresh-models'))

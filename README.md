@@ -130,7 +130,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.provider` | `ollama` | Select `ollama`, `mlx-vlm`, `openai-compatible`, or `opencode`. |
+| `ghost.provider` | `ollama` | Select `ollama`, `mlx-vlm`, `openai-compatible`, `openrouter`, or `opencode`. |
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
@@ -142,6 +142,14 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 | `ghost.openaiOrganization` / `ghost.openaiProject` | empty | Optional organization and project values, sent with their configurable headers. |
 | `ghost.openaiProxy` / `ghost.openaiNoProxy` | empty / localhost list | Route OpenAI-compatible traffic through a proxy with host bypass rules. Proxy URLs must not contain credentials. |
 | `ghost.openaiTlsRejectUnauthorized` | `true` | Verify HTTPS certificates. CA, client certificate, and key files can be configured separately. |
+| `ghost.openrouterUrl` | `https://openrouter.ai/api/v1` | OpenRouter API base URL. |
+| `ghost.openrouterReferer` / `ghost.openrouterTitle` | empty / `Ghost Coding Assistant` | Optional OpenRouter attribution headers. |
+| `ghost.openrouterAllowFallbacks` | `true` | Let OpenRouter try another provider for the selected model when needed. |
+| `ghost.openrouterRequireParameters` | `false` | Route only to providers that support all request parameters Ghost sends. |
+| `ghost.openrouterDataCollection` | `allow` | OpenRouter provider data-collection preference: `allow` or `deny`. |
+| `ghost.openrouterProviderOrder` | `[]` | Optional ordered provider slugs, such as `anthropic, openai`. |
+| `ghost.openrouterProxy` / `ghost.openrouterNoProxy` | empty / localhost list | Route OpenRouter traffic through a proxy with host bypass rules. Proxy URLs must not contain credentials. |
+| `ghost.openrouterTlsRejectUnauthorized` | `true` | Verify OpenRouter HTTPS certificates. CA and client certificate files can be configured separately. |
 | `ghost.chatModel` | `qwen2.5-coder:7b` | Model used for chat and agent requests. |
 | `ghost.autocompleteModel` | `qwen2.5-coder:1.5b` | Fast model used for inline completion. |
 | `ghost.enableInlineCompletions` | `true` | Enable or disable inline code completion. |
@@ -165,9 +173,18 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | Ollama | Yes | Yes | Yes | Client-dependent | Temperature, Top P, Top K, Min P, presence penalty, repeat penalty |
 | MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
+| OpenRouter | Model-dependent | Model-dependent | Model-dependent | No | Model-dependent; metadata comes from the OpenRouter catalog |
 | OpenCode | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 
 OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent and Plan modes are unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need workspace tools. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+
+### OpenRouter setup
+
+Choose **OpenRouter** in the provider selector, enter an OpenRouter API key with **Ghost: Set Provider API Key**, then refresh models. Ghost keeps the key in VS Code SecretStorage. OpenRouter model ids are preserved exactly, including provider slugs, `:free` variants, and presets.
+
+OpenRouter uses its OpenAI-compatible streaming API. Ghost reads the model catalog to show context limits, output limits, vision/tool support, and input/output prices. Pricing is shown per million tokens. OpenRouter requests are remote: workspace context, prompts, attachments, and tool schemas leave the local machine. Use the routing controls to choose fallback behavior, provider order, parameter requirements, and data collection preferences.
+
+Ghost sends `HTTP-Referer` and `X-OpenRouter-Title` only when configured. See the [OpenRouter quickstart](https://openrouter.ai/docs/quickstart), [models API](https://openrouter.ai/docs/guides/overview/models), and [provider routing guide](https://openrouter.ai/docs/guides/routing/provider-selection).
 
 ### OpenCode setup
 

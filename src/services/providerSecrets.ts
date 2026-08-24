@@ -6,6 +6,7 @@ const SECRET_KEYS: Record<GhostProvider, string> = {
   ollama: 'ghost.providerKey.ollama',
   'mlx-vlm': 'ghost.providerKey.mlx-vlm',
   'openai-compatible': 'ghost.providerKey.openai-compatible',
+  openrouter: 'ghost.providerKey.openrouter',
   opencode: 'ghost.providerKey.opencode'
 }
 

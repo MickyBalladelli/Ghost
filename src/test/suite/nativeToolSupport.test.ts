@@ -18,6 +18,8 @@ suite('Native tool support', () => {
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'ollama', ollamaReportsTools: true }), true)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'ollama', ollamaReportsTools: false }), false)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openai-compatible', openaiProtocol: 'openai-chat' }), true)
+    assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openrouter', ollamaReportsTools: true }), true)
+    assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openrouter', ollamaReportsTools: false }), false)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'mlx-vlm' }), false)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: false, provider: 'ollama', ollamaReportsTools: true }), false)
   })

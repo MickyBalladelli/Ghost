@@ -1,7 +1,7 @@
 {
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
-  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, and OpenCode",
+  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, OpenRouter, and OpenCode",
   "version": "1.2.9",
   "publisher": "MickyBalladelli",
   "author": {
@@ -146,6 +146,73 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
+        },
+        "ghost.openrouterUrl": {
+          "type": "string",
+          "default": "https://openrouter.ai/api/v1",
+          "description": "OpenRouter API base URL."
+        },
+        "ghost.openrouterReferer": {
+          "type": "string",
+          "default": "",
+          "description": "Optional HTTP-Referer attribution header for OpenRouter."
+        },
+        "ghost.openrouterTitle": {
+          "type": "string",
+          "default": "Ghost Coding Assistant",
+          "description": "Optional X-OpenRouter-Title attribution header."
+        },
+        "ghost.openrouterAllowFallbacks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow OpenRouter to fall back to another provider for the selected model."
+        },
+        "ghost.openrouterRequireParameters": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only route to OpenRouter providers that support all request parameters."
+        },
+        "ghost.openrouterDataCollection": {
+          "type": "string",
+          "enum": ["allow", "deny"],
+          "default": "allow",
+          "description": "OpenRouter provider data-collection preference."
+        },
+        "ghost.openrouterProviderOrder": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Optional ordered OpenRouter provider slugs, for example [\"anthropic\", \"openai\"]."
+        },
+        "ghost.openrouterProxy": {
+          "type": "string",
+          "default": "",
+          "description": "Optional HTTP or HTTPS proxy for OpenRouter requests. Do not put credentials in this URL."
+        },
+        "ghost.openrouterNoProxy": {
+          "type": "string",
+          "default": "localhost,127.0.0.1,::1",
+          "description": "Comma- or space-separated hosts that bypass the OpenRouter proxy."
+        },
+        "ghost.openrouterTlsRejectUnauthorized": {
+          "type": "boolean",
+          "default": true,
+          "description": "Verify OpenRouter HTTPS certificates."
+        },
+        "ghost.openrouterTlsCaFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional PEM CA file for OpenRouter HTTPS."
+        },
+        "ghost.openrouterTlsCertFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenRouter HTTPS client certificate PEM file."
+        },
+        "ghost.openrouterTlsKeyFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OpenRouter HTTPS client private key PEM file."
         },
         "ghost.openCodeUrl": {
           "type": "string",
@@ -382,7 +449,8 @@
                 "enum": [
                   "ollama",
                   "mlx-vlm",
-                  "openai-compatible"
+                  "openai-compatible",
+                  "openrouter"
                 ]
               },
               "model": {
@@ -475,12 +543,14 @@
             "ollama",
             "mlx-vlm",
             "openai-compatible",
+            "openrouter",
             "opencode"
           ],
           "enumDescriptions": [
             "Use the Ollama API.",
             "Use an MLX VLM OpenAI-compatible server.",
             "Use another OpenAI-compatible server.",
+            "Use the OpenRouter hosted model catalog and routing API.",
             "Delegate requests to a user-managed OpenCode headless server."
           ],
           "default": "ollama",

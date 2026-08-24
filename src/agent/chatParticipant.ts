@@ -24,6 +24,7 @@ import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 import { isFailedToolOutcome, getInspectionPathRecoveryKey, shouldRetryInspectionPath, shouldStopAgentForToolFailure } from './toolFailurePolicy'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { OpenRouterClient } from '../services/openRouterClient'
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
 import { profileProtocol } from '../services/profiledProviderClient'
@@ -1011,6 +1012,31 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
         settings,
         () => providerApiKey?.('openai-compatible')
       ),
+      openrouterClient: new OpenRouterClient({
+        url: settings.openrouterUrl,
+        referer: settings.openrouterReferer,
+        title: settings.openrouterTitle,
+        routing: {
+          allowFallbacks: settings.openrouterAllowFallbacks,
+          requireParameters: settings.openrouterRequireParameters,
+          dataCollection: settings.openrouterDataCollection,
+          providerOrder: settings.openrouterProviderOrder
+        },
+        transport: {
+          apiKeyHeader: 'Authorization',
+          apiKeyPrefix: 'Bearer',
+          organizationHeader: '',
+          organization: '',
+          projectHeader: '',
+          project: '',
+          proxy: settings.openrouterProxy,
+          noProxy: settings.openrouterNoProxy,
+          tlsRejectUnauthorized: settings.openrouterTlsRejectUnauthorized,
+          tlsCaFile: settings.openrouterTlsCaFile,
+          tlsCertFile: settings.openrouterTlsCertFile,
+          tlsKeyFile: settings.openrouterTlsKeyFile
+        }
+      }, () => providerApiKey?.('openrouter')),
       openCodeClient: new OpenCodeClient(settings.openCodeUrl, {
         username: settings.openCodeUsername,
         password: () => providerApiKey?.('opencode')
@@ -1688,14 +1714,14 @@ export function createChatParticipantHandler(
 
     const toolsEnabled = requestOptions.context?.tools !== false
     const requestToolsEnabled = toolsEnabled && (!conversationalPrompt || keepWorkspaceTools)
-    const ollamaReportsTools = modelSettings.provider === 'ollama' && typeof resolved.client.modelSupportsTools === 'function'
+    const providerReportsTools = (modelSettings.provider === 'ollama' || modelSettings.provider === 'openrouter') && typeof resolved.client.modelSupportsTools === 'function'
       ? await resolved.client.modelSupportsTools(modelSettings.model)
       : false
     const nativeToolCalling = shouldUseNativeToolCalling({
       toolsEnabled: requestToolsEnabled,
       provider: modelSettings.provider,
       openaiProtocol: profileProtocol(settings.openaiProfile),
-      ollamaReportsTools
+      ollamaReportsTools: providerReportsTools
     })
     const workspaceChangeRequested = !planningMode && (describesWorkspaceChange(request.prompt) || pendingWorkspaceTask)
     const completionRecordEnabled = workspaceChangeRequested

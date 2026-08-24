@@ -158,6 +158,19 @@ export interface GhostSettingsUpdate {
   openaiTlsCaFile?: string
   openaiTlsCertFile?: string
   openaiTlsKeyFile?: string
+  openrouterUrl?: string
+  openrouterReferer?: string
+  openrouterTitle?: string
+  openrouterAllowFallbacks?: boolean
+  openrouterRequireParameters?: boolean
+  openrouterDataCollection?: 'allow' | 'deny'
+  openrouterProviderOrder?: string[]
+  openrouterProxy?: string
+  openrouterNoProxy?: string
+  openrouterTlsRejectUnauthorized?: boolean
+  openrouterTlsCaFile?: string
+  openrouterTlsCertFile?: string
+  openrouterTlsKeyFile?: string
   openCodeUrl?: string
   openCodeUsername?: string
   openCodeAgent?: string
@@ -301,6 +314,19 @@ export type GhostExtensionMessage =
         openaiTlsCaFile: string
         openaiTlsCertFile: string
         openaiTlsKeyFile: string
+        openrouterUrl: string
+        openrouterReferer: string
+        openrouterTitle: string
+        openrouterAllowFallbacks: boolean
+        openrouterRequireParameters: boolean
+        openrouterDataCollection: 'allow' | 'deny'
+        openrouterProviderOrder: string[]
+        openrouterProxy: string
+        openrouterNoProxy: string
+        openrouterTlsRejectUnauthorized: boolean
+        openrouterTlsCaFile: string
+        openrouterTlsCertFile: string
+        openrouterTlsKeyFile: string
         openCodeUrl: string
         openCodeUsername: string
         openCodeAgent: string
@@ -396,7 +422,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     return false
   }
   if (
-    (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible', 'opencode'].includes(value.provider as string)) ||
+    (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible', 'openrouter', 'opencode'].includes(value.provider as string)) ||
     (value.model !== undefined && !isBoundedString(value.model, 512)) ||
     (value.modelProfile !== undefined && !isBoundedString(value.modelProfile, 256)) ||
     (value.modelRole !== undefined && !['chat', 'agent', 'vision', 'autocomplete'].includes(value.modelRole as string)) ||
@@ -429,7 +455,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     return false
   }
   return (
-    (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible', 'opencode'].includes(value.provider as string)) &&
+    (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible', 'openrouter', 'opencode'].includes(value.provider as string)) &&
     (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm', 'custom'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
@@ -479,6 +505,19 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     && (value.openaiTlsCaFile === undefined || isBoundedString(value.openaiTlsCaFile, 4096))
     && (value.openaiTlsCertFile === undefined || isBoundedString(value.openaiTlsCertFile, 4096))
     && (value.openaiTlsKeyFile === undefined || isBoundedString(value.openaiTlsKeyFile, 4096))
+    && (value.openrouterUrl === undefined || isBoundedString(value.openrouterUrl, 4096))
+    && (value.openrouterReferer === undefined || isBoundedString(value.openrouterReferer, 4096))
+    && (value.openrouterTitle === undefined || isBoundedString(value.openrouterTitle, 512))
+    && (value.openrouterAllowFallbacks === undefined || typeof value.openrouterAllowFallbacks === 'boolean')
+    && (value.openrouterRequireParameters === undefined || typeof value.openrouterRequireParameters === 'boolean')
+    && (value.openrouterDataCollection === undefined || ['allow', 'deny'].includes(value.openrouterDataCollection as string))
+    && (value.openrouterProviderOrder === undefined || (Array.isArray(value.openrouterProviderOrder) && value.openrouterProviderOrder.length <= 100 && value.openrouterProviderOrder.every(item => isBoundedString(item, 128))))
+    && (value.openrouterProxy === undefined || isBoundedString(value.openrouterProxy, 4096))
+    && (value.openrouterNoProxy === undefined || isBoundedString(value.openrouterNoProxy, 4096))
+    && (value.openrouterTlsRejectUnauthorized === undefined || typeof value.openrouterTlsRejectUnauthorized === 'boolean')
+    && (value.openrouterTlsCaFile === undefined || isBoundedString(value.openrouterTlsCaFile, 4096))
+    && (value.openrouterTlsCertFile === undefined || isBoundedString(value.openrouterTlsCertFile, 4096))
+    && (value.openrouterTlsKeyFile === undefined || isBoundedString(value.openrouterTlsKeyFile, 4096))
     && (value.workspaceOnly === undefined || typeof value.workspaceOnly === 'boolean')
     && (value.toolAllowlist === undefined || (Array.isArray(value.toolAllowlist) && value.toolAllowlist.length <= 100 && value.toolAllowlist.every(item => isBoundedString(item, 256))))
     && (value.toolAsklist === undefined || (Array.isArray(value.toolAsklist) && value.toolAsklist.length <= 100 && value.toolAsklist.every(item => isBoundedString(item, 256))))

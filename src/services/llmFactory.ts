@@ -13,6 +13,7 @@ export interface LlmProviderClients {
   ollamaClient: LlmClient
   mlxClient?: LlmClient
   openaiCompatibleClient?: LlmClient
+  openrouterClient?: LlmClient
   openCodeClient?: LlmClient
 }
 
@@ -31,7 +32,7 @@ const MLX_SWITCH_ACTION = 'Switch to MLX VLM'
 const KEEP_PROVIDER_ACTION = 'Keep Current Provider'
 
 function isProvider(value: string): value is GhostProvider {
-  return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible' || value === 'opencode'
+  return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible' || value === 'openrouter' || value === 'opencode'
 }
 
 export class LlmFactory {
@@ -98,6 +99,7 @@ export class LlmFactory {
       this.clients.ollamaClient,
       ...(this.clients.mlxClient ? [this.clients.mlxClient] : []),
       ...(this.clients.openaiCompatibleClient ? [this.clients.openaiCompatibleClient] : []),
+      ...(this.clients.openrouterClient ? [this.clients.openrouterClient] : []),
       ...(this.clients.openCodeClient ? [this.clients.openCodeClient] : [])
     ])
     for (const client of clients) {
@@ -127,6 +129,11 @@ export class LlmFactory {
     if (provider === 'opencode') {
       if (!this.clients.openCodeClient) throw new Error('No OpenCode client has been configured')
       return this.clients.openCodeClient
+    }
+
+    if (provider === 'openrouter') {
+      if (!this.clients.openrouterClient) throw new Error('No OpenRouter client has been configured')
+      return this.clients.openrouterClient
     }
 
     if (!this.clients.openaiCompatibleClient) {

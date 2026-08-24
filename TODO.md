@@ -176,3 +176,22 @@ Ghost delegates to a user-managed OpenCode 1.x headless server through its [serv
 - [x] **Contract coverage.** Added fast fake-transport contracts for version rejection, model discovery, workspace routing, session completion/final diff, and permissive-config rejection. Added OpenCode to the shared provider contract suite.
 
 - [x] **Docs and release gates.** README, generated configuration reference, architecture/provider docs, release smoke steps, and changelog cover setup, permission config, Basic Auth, sessions, direct-edit limits, cancellation, privacy, and compatibility.
+
+## P7 — OpenRouter integration
+
+OpenRouter should be a first-class Ghost provider backed by its OpenAI-compatible Chat Completions API. Reuse the existing HTTP transport, streaming parser, model selector, and SecretStorage flow, but keep OpenRouter-specific settings and model metadata separate from generic OpenAI-compatible servers.
+
+- [x] **Define the provider boundary.** Added `openrouter` to the shared provider unions, capability defaults, model-profile validation, provider labels, status handling, inline-completion routing, and provider contract tests. The existing `openai-compatible` provider is unchanged.
+- [x] **Add secure configuration.** Added `ghost.openrouterUrl` with `https://openrouter.ai/api/v1` as the default, optional `HTTP-Referer` and `X-OpenRouter-Title` settings, and a dedicated SecretStorage key used by Set/Clear Provider API Key.
+- [x] **Build the OpenRouter client.** Reused the OpenAI chat request and SSE event wire format with OpenRouter authentication and attribution headers, cancellation, timeout, retry, proxy, TLS, and bounded provider-error handling. Keys and prompt contents are not logged.
+- [x] **Support model discovery.** Added `GET /models` discovery while preserving opaque ids such as `provider/model`, `:free` variants, and `@preset/...` values.
+- [x] **Map model metadata.** Mapped context length, output limits, vision, supported parameters/tool calling, streaming, and per-token pricing into Ghost’s capability and model-tooltip metadata.
+- [x] **Add provider routing controls.** Added validated fallback, provider-order, data-collection, and parameter-requirement settings and sanitized provider slugs before serialization.
+- [x] **Handle OpenRouter-specific request limits.** Omitted unsupported generic sampling fields, clamped known `max_tokens` limits, preserved Ghost tool schemas, and disabled native tools when the selected model does not advertise them.
+- [x] **Wire the provider UI.** Added OpenRouter to the provider selector, settings panel, model refresh, metadata display, endpoint handling, and remote-provider privacy guidance.
+- [x] **Update configuration and migration.** Extended configuration, generated docs, import/export preferences, model profiles, webview protocol validation, provider status, and display mappings without changing existing defaults.
+- [x] **Add focused tests.** Added OpenRouter metadata, pricing, routing, header, model-id, SSE tool-call, adapter-contract, and native-tool capability coverage.
+- [x] **Document setup and privacy.** Added README and provider-adapter guidance for keys, models, pricing, routing, attribution, tool limits, and remote prompt/workspace data.
+- [x] **Verify packaging and release gates.** Compile, configuration generation, VSIX packaging, and release-consistency checks pass for version `1.2.9`.
+
+Useful API references: [OpenRouter quickstart](https://openrouter.ai/docs/quickstart), [models API](https://openrouter.ai/docs/guides/overview/models), and [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).

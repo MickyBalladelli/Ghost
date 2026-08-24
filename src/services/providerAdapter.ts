@@ -3,7 +3,7 @@ import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 import type { FimCompletionOptions } from './fim'
 import { GhostError } from '../ghostErrors'
 
-export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
+export type ProviderId = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'openrouter' | 'opencode'
 export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions' | 'opencode-server'
 export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'rate-limit' | 'auth' | 'invalid-request' | 'http' | 'unknown'
 export type ModelPricingStatus = 'free' | 'paid' | 'unknown'
@@ -35,6 +35,21 @@ export interface ModelCapabilityRecord {
     repeatPenalty: boolean
   }
   displayName?: string
+  pricing?: ModelPricing
+  pricingStatus?: ModelPricingStatus
+}
+
+export interface ProviderModelMetadata {
+  id: string
+  displayName?: string
+  contextWindow?: number
+  outputLimit?: number
+  supportsTools?: boolean
+  supportsJsonMode?: boolean
+  supportsVision?: boolean
+  supportsFIM?: boolean
+  supportsStreaming?: boolean
+  supportsSampling?: Partial<ModelCapabilityRecord['supportsSampling']>
   pricing?: ModelPricing
   pricingStatus?: ModelPricingStatus
 }
@@ -72,6 +87,7 @@ export class ProviderError extends GhostError {
 export interface ProviderClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
   listModels?(signal?: AbortSignal): Promise<string[]>
+  listModelsWithMetadata?(signal?: AbortSignal): Promise<ProviderModelMetadata[]>
   modelSupportsTools?(model: string, signal?: AbortSignal): Promise<boolean>
   streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string>
   streamChatEvents?(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
@@ -124,6 +140,17 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     supportsJsonMode: true,
     supportsVision: false,
     supportsFIM: true,
+    supportsStreaming: true,
+    supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
+  },
+  openrouter: {
+    contextWindow: 32768,
+    outputLimit: 8192,
+    nativeApi: 'openai-chat-completions',
+    supportsTools: true,
+    supportsJsonMode: true,
+    supportsVision: false,
+    supportsFIM: false,
     supportsStreaming: true,
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
   },

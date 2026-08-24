@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.1.96`.
+Package version: `1.2.9`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -35,7 +35,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openaiTlsCertFile` | string | empty | Optional path to a client certificate PEM file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsKeyFile` | string | empty | Optional path to a client private key PEM file for OpenAI-compatible HTTPS. |
 | `ghost.providerRequestTimeoutMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes to wait for one HTTP request to the model provider. This is not the overall agent run budget. |
-| `ghost.provider` | string; one of `ollama`, `mlx-vlm`, `openai-compatible`, `opencode` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
+| `ghost.provider` | string; one of `ollama`, `mlx-vlm`, `openai-compatible`, `openrouter`, `opencode` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
 | `ghost.mlxUrl` | string | `http://localhost:8000` | MLX VLM server URL. |
 
 ## Models and generation
@@ -68,7 +68,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `ghost.requestTimeLimitMinutes` | integer; min 1; max 1440 | `180` | Maximum minutes a Ghost agent request may run, including tool rounds. This is the safety budget, not the provider HTTP timeout. |
-| `ghost.mode` | string; one of `ask`, `edit`, `agent`, `plan`, `explain` | `agent` | Default chat workflow mode. Plan inspects with read-only tools and records implementation steps. Inline completion is controlled separately by `ghost.enableInlineCompletions`. |
+| `ghost.mode` | string; one of `ask`, `edit`, `agent`, `plan`, `explain` | `agent` | Default chat workflow mode. Plan inspects the workspace with read-only tools and records implementation steps. |
 | `ghost.fileEditApproval` | string; one of `confirm`, `auto` | `confirm` | Legacy mirror of ghost.autoAcceptScope. Use autoAcceptScope. auto means request-scoped auto-accept, not always. |
 | `ghost.autoAcceptScope` | string; one of `confirm`, `one-edit`, `current-file`, `request`, `session`, `workspace`, `always` | `confirm` | Scope for automatic file-edit approval. Terminal and other dangerous tools always require explicit approval. |
 
@@ -85,6 +85,19 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `ghost.settingsSchemaVersion` | integer | `3` | Internal Ghost settings schema version. Ghost migrates older settings automatically. |
+| `ghost.openrouterUrl` | string | `https://openrouter.ai/api/v1` | OpenRouter API base URL. |
+| `ghost.openrouterReferer` | string | empty | Optional HTTP-Referer attribution header for OpenRouter. |
+| `ghost.openrouterTitle` | string | `Ghost Coding Assistant` | Optional X-OpenRouter-Title attribution header. |
+| `ghost.openrouterAllowFallbacks` | boolean | `true` | Allow OpenRouter to fall back to another provider for the selected model. |
+| `ghost.openrouterRequireParameters` | boolean | `false` | Only route to OpenRouter providers that support all request parameters. |
+| `ghost.openrouterDataCollection` | string; one of `allow`, `deny` | `allow` | OpenRouter provider data-collection preference. |
+| `ghost.openrouterProviderOrder` | array | `[]` | Optional ordered OpenRouter provider slugs, for example ["anthropic", "openai"]. |
+| `ghost.openrouterProxy` | string | empty | Optional HTTP or HTTPS proxy for OpenRouter requests. Do not put credentials in this URL. |
+| `ghost.openrouterNoProxy` | string | `localhost,127.0.0.1,::1` | Comma- or space-separated hosts that bypass the OpenRouter proxy. |
+| `ghost.openrouterTlsRejectUnauthorized` | boolean | `true` | Verify OpenRouter HTTPS certificates. |
+| `ghost.openrouterTlsCaFile` | string | empty | Optional PEM CA file for OpenRouter HTTPS. |
+| `ghost.openrouterTlsCertFile` | string | empty | Optional OpenRouter HTTPS client certificate PEM file. |
+| `ghost.openrouterTlsKeyFile` | string | empty | Optional OpenRouter HTTPS client private key PEM file. |
 | `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. Applies to the Ghost view, @local chat, and registered Language Model tools. |
 | `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. Applies to the Ghost view, @local chat, and registered Language Model tools. |
 | `ghost.toolDenylist` | array | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules, including Copilot and other clients that invoke Ghost's registered Language Model tools. |

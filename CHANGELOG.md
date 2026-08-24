@@ -3,6 +3,8 @@
 All notable changes to this extension are documented here.
 ## 1.2.9 - 2026-08-24
 
+- Add first-class OpenRouter support with secure API keys, model discovery metadata, pricing, routing preferences, and native tool capability detection.
+
 
 ## 1.2.8 - 2026-08-23
 - Tell OpenCode to use its edit or write tools for file changes instead of bash.

@@ -167,6 +167,19 @@ const createSettingsContent = (): HTMLDivElement => {
     settingRow('Session handling', select('opencode-session-reuse', [option('workspace', 'Reuse per conversation'), option('new', 'New session for every request')]), 'opencode-session-reuse', undefined, 'opencode'),
     [button('set-opencode-password', 'Set OpenCode password…', { className: 'secondary settings-inline-action', 'data-provider-scope': 'opencode' })],
     [createElement('p', { className: 'settings-help', 'data-provider-scope': 'opencode' }, ['Password is optional and stays in VS Code SecretStorage.'])],
+    settingRow('OpenRouter HTTP-Referer', input('openrouter-referer', 'url', { placeholder: 'Optional site URL' }), 'openrouter-referer', undefined, 'openrouter'),
+    settingRow('OpenRouter title', input('openrouter-title', 'text', { value: 'Ghost Coding Assistant' }), 'openrouter-title', undefined, 'openrouter'),
+    [checkboxSetting('openrouter-allow-fallbacks', 'Allow provider fallbacks', 'Let OpenRouter try another provider when the selected one fails.', true, 'openrouter')],
+    [checkboxSetting('openrouter-require-parameters', 'Require requested parameters', 'Only use routed providers that support all parameters Ghost sends.', false, 'openrouter')],
+    settingRow('Data collection', select('openrouter-data-collection', [option('allow', 'Allow'), option('deny', 'Deny')]), 'openrouter-data-collection', undefined, 'openrouter'),
+    settingRow('Provider order', input('openrouter-provider-order', 'text', { placeholder: 'anthropic, openai' }), 'openrouter-provider-order', 'Comma-separated OpenRouter provider slugs.', 'openrouter'),
+    settingRow('OpenRouter proxy', input('openrouter-proxy', 'url', { placeholder: 'http://proxy.example:8080' }), 'openrouter-proxy', undefined, 'openrouter'),
+    settingRow('OpenRouter no-proxy hosts', input('openrouter-no-proxy', 'text', { placeholder: 'localhost, 127.0.0.1, ::1' }), 'openrouter-no-proxy', undefined, 'openrouter'),
+    [checkboxSetting('openrouter-tls-reject-unauthorized', 'Verify OpenRouter HTTPS certificates', undefined, true, 'openrouter')],
+    settingRow('OpenRouter TLS CA file', input('openrouter-tls-ca-file', 'text', { placeholder: 'Optional PEM file path' }), 'openrouter-tls-ca-file', undefined, 'openrouter'),
+    settingRow('OpenRouter TLS client certificate', input('openrouter-tls-cert-file', 'text', { placeholder: 'Optional PEM file path' }), 'openrouter-tls-cert-file', undefined, 'openrouter'),
+    settingRow('OpenRouter TLS client key', input('openrouter-tls-key-file', 'text', { placeholder: 'Optional PEM file path' }), 'openrouter-tls-key-file', undefined, 'openrouter'),
+    [createElement('p', { className: 'settings-help', 'data-provider-scope': 'openrouter' }, ['OpenRouter sends prompts and workspace context to its remote model providers. Set routing and data collection to match your privacy needs.'])],
     settingRow('Compatibility profile', select('openai-profile', [option('generic', 'OpenAI-compatible'), option('anthropic', 'Anthropic'), option('gemini', 'Google Gemini'), option('azure-openai', 'Azure OpenAI'), option('lm-studio', 'LM Studio'), option('llama-cpp', 'llama.cpp'), option('vllm', 'vLLM'), option('litellm', 'LiteLLM'), option('custom', 'Custom HTTP')]), 'openai-profile', undefined, 'openai-compatible'),
     settingRow('Azure API version', input('openai-api-version', 'text', { value: '2024-10-21', placeholder: '2024-10-21' }), 'openai-api-version', undefined, 'openai-compatible'),
     settingRow('Custom models path', input('openai-custom-models-path', 'text', { value: '/v1/models' }), 'openai-custom-models-path', undefined, 'openai-compatible'),
@@ -244,7 +257,7 @@ const createSettingsModal = (): HTMLDivElement => {
 }
 
 const createAppShell = (iconUri: string): HTMLDivElement => {
-  const providerOptions = [option('ollama', 'Ollama'), option('mlx-vlm', 'MLX / VLM'), option('openai-compatible', 'OpenAI-compatible'), option('opencode', 'OpenCode')]
+  const providerOptions = [option('mlx-vlm', 'MLX / VLM'), option('ollama', 'Ollama'), option('openai-compatible', 'OpenAI-compatible'), option('opencode', 'OpenCode'), option('openrouter', 'OpenRouter')]
   const header = createElement('header', { className: 'header' }, [
     createElement('div', { className: 'brand' }, [ghostFace(iconUri, 'brand-mark ghost-face'), createElement('div', {}, [createElement('div', { className: 'title' }, ['Ghost']), createElement('div', { className: 'subtitle' }, ['AI coding assistant'])])]),
     createElement('div', { className: 'header-actions' }, [

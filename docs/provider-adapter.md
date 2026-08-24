@@ -17,12 +17,12 @@ Chat participant / inline completion
        ProviderClient
              │ provider-specific HTTP and stream parsing
              ▼
- Ollama / MLX / OpenAI-compatible server
+ Ollama / MLX / OpenAI-compatible / OpenRouter server
 ```
 
 - `src/services/llmFactory.ts` selects the configured provider, caches adapters, selects an available model, and disposes clients.
 - `src/services/providerAdapter.ts` defines the common interface, capability defaults, and error normalization.
-- `src/services/ollamaClient.ts`, `src/services/mlxClient.ts`, and `src/services/profiledProviderClient.ts` implement provider clients.
+- `src/services/ollamaClient.ts`, `src/services/mlxClient.ts`, `src/services/profiledProviderClient.ts`, and `src/services/openRouterClient.ts` implement provider clients.
 - `src/services/providerRequestBuilders.ts` creates provider-specific request bodies.
 - `src/services/providerTransport.ts` and `src/services/providerRequest.ts` own timeout, abort, retry, proxy, and HTTP diagnostics.
 
@@ -34,6 +34,7 @@ Chat participant / inline completion
 interface ProviderClient {
   checkHealth(timeoutMs?: number): Promise<boolean>
   listModels?(signal?: AbortSignal): Promise<string[]>
+  listModelsWithMetadata?(signal?: AbortSignal): Promise<ProviderModelMetadata[]>
   streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string>
   streamChatEvents?(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent>
   fetchFimCompletion?(options: FimCompletionOptions): Promise<string>
@@ -69,10 +70,13 @@ Capability values are defaults in `providerAdapter.ts`. A client without `fetchF
 | `mlx-vlm` | MLX OpenAI-compatible chat | No | No | Yes | No | temperature, top P, presence |
 | `opencode` | OpenCode headless server | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 | `openai-compatible` | OpenAI chat completions | Yes | Yes | No by default | Client-dependent | temperature, top P, presence |
+| `openrouter` | OpenRouter OpenAI chat completions | Model-dependent | Model-dependent | Model-dependent | No | metadata-dependent sampling |
 
 All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX has no native tools, so Agent mode depends on JSON-in-text parsing and is unreliable; prefer Ollama or OpenAI-compatible for workspace edits.
 
 OpenCode is a delegated-agent adapter, not an OpenAI-compatible transport. `openCodeClient.ts` talks to the headless server's provider, session, message, permission-reply, diff, and SSE endpoints. `chatParticipant.ts` bypasses Ghost's model/tool loop for this provider because OpenCode owns its agent loop. Ghost still owns workspace selection, connection credentials, permission policy, cancellation, UI streaming, and the selected workspace session id. Ghost keeps the safety defaults in the global `~/.config/opencode/opencode.json`; it does not patch OpenCode's project config API because that can create a project-local file. OpenCode's `edit`, `bash`, and `external_directory` permissions must resolve to `ask` or `deny`; permissive defaults are rejected before a prompt is sent.
+
+OpenRouter uses the OpenAI chat-completions wire format, but its client owns OpenRouter authentication, attribution headers, model catalog metadata, per-token pricing conversion, and provider-routing preferences. Native tools are enabled only when the selected model advertises `tools` or `tool_choice` in the catalog. OpenRouter model ids are opaque strings and must not be rewritten or split on `/`, `:`, or `@`.
 
 ## Provider-neutral request types
 

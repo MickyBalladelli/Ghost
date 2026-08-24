@@ -5,7 +5,7 @@ import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION, legacyFileEditAppr
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
-export type GhostProvider = 'ollama' | 'mlx-vlm' | 'openai-compatible' | 'opencode'
+export type GhostProvider = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'opencode' | 'openrouter'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
 export type GhostFileEditApproval = 'confirm' | 'auto'
@@ -66,6 +66,19 @@ export interface GhostSettings {
   openaiTlsCaFile: string
   openaiTlsCertFile: string
   openaiTlsKeyFile: string
+  openrouterUrl: string
+  openrouterReferer: string
+  openrouterTitle: string
+  openrouterAllowFallbacks: boolean
+  openrouterRequireParameters: boolean
+  openrouterDataCollection: 'allow' | 'deny'
+  openrouterProviderOrder: string[]
+  openrouterProxy: string
+  openrouterNoProxy: string
+  openrouterTlsRejectUnauthorized: boolean
+  openrouterTlsCaFile: string
+  openrouterTlsCertFile: string
+  openrouterTlsKeyFile: string
   openCodeUrl: string
   openCodeUsername: string
   openCodeAgent: string
@@ -131,6 +144,19 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openaiTlsCaFile: '',
   openaiTlsCertFile: '',
   openaiTlsKeyFile: '',
+  openrouterUrl: 'https://openrouter.ai/api/v1',
+  openrouterReferer: '',
+  openrouterTitle: 'Ghost Coding Assistant',
+  openrouterAllowFallbacks: true,
+  openrouterRequireParameters: false,
+  openrouterDataCollection: 'allow',
+  openrouterProviderOrder: [],
+  openrouterProxy: '',
+  openrouterNoProxy: 'localhost,127.0.0.1,::1',
+  openrouterTlsRejectUnauthorized: true,
+  openrouterTlsCaFile: '',
+  openrouterTlsCertFile: '',
+  openrouterTlsKeyFile: '',
   openCodeUrl: 'http://127.0.0.1:4096',
   openCodeUsername: 'opencode',
   openCodeAgent: '',
@@ -258,6 +284,19 @@ export class GhostConfig {
       openaiTlsCaFile: configuration.get('openaiTlsCaFile', DEFAULT_GHOST_SETTINGS.openaiTlsCaFile),
       openaiTlsCertFile: configuration.get('openaiTlsCertFile', DEFAULT_GHOST_SETTINGS.openaiTlsCertFile),
       openaiTlsKeyFile: configuration.get('openaiTlsKeyFile', DEFAULT_GHOST_SETTINGS.openaiTlsKeyFile),
+      openrouterUrl: configuration.get('openrouterUrl', DEFAULT_GHOST_SETTINGS.openrouterUrl),
+      openrouterReferer: configuration.get('openrouterReferer', DEFAULT_GHOST_SETTINGS.openrouterReferer),
+      openrouterTitle: configuration.get('openrouterTitle', DEFAULT_GHOST_SETTINGS.openrouterTitle),
+      openrouterAllowFallbacks: configuration.get('openrouterAllowFallbacks', DEFAULT_GHOST_SETTINGS.openrouterAllowFallbacks),
+      openrouterRequireParameters: configuration.get('openrouterRequireParameters', DEFAULT_GHOST_SETTINGS.openrouterRequireParameters),
+      openrouterDataCollection: configuration.get('openrouterDataCollection', DEFAULT_GHOST_SETTINGS.openrouterDataCollection),
+      openrouterProviderOrder: configuration.get('openrouterProviderOrder', DEFAULT_GHOST_SETTINGS.openrouterProviderOrder),
+      openrouterProxy: configuration.get('openrouterProxy', DEFAULT_GHOST_SETTINGS.openrouterProxy),
+      openrouterNoProxy: configuration.get('openrouterNoProxy', DEFAULT_GHOST_SETTINGS.openrouterNoProxy),
+      openrouterTlsRejectUnauthorized: configuration.get('openrouterTlsRejectUnauthorized', DEFAULT_GHOST_SETTINGS.openrouterTlsRejectUnauthorized),
+      openrouterTlsCaFile: configuration.get('openrouterTlsCaFile', DEFAULT_GHOST_SETTINGS.openrouterTlsCaFile),
+      openrouterTlsCertFile: configuration.get('openrouterTlsCertFile', DEFAULT_GHOST_SETTINGS.openrouterTlsCertFile),
+      openrouterTlsKeyFile: configuration.get('openrouterTlsKeyFile', DEFAULT_GHOST_SETTINGS.openrouterTlsKeyFile),
       openCodeUrl: configuration.get('openCodeUrl', DEFAULT_GHOST_SETTINGS.openCodeUrl),
       openCodeUsername: configuration.get('openCodeUsername', DEFAULT_GHOST_SETTINGS.openCodeUsername),
       openCodeAgent: configuration.get('openCodeAgent', DEFAULT_GHOST_SETTINGS.openCodeAgent),
