@@ -229,12 +229,16 @@ export class OpenRouterClient implements ProviderClient {
   }
 
   private requestInit(endpoint: string, init: GhostRequestInit): GhostRequestInit {
+    const apiKey = this.apiKeyProvider()?.trim()
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is not configured. Select OpenRouter and run “Ghost: Set Provider API Key”.')
+    }
     const referer = this.settings.referer.trim()
     const title = this.settings.title.trim()
     return {
       ...init,
       headers: {
-        ...buildOpenAiAuthenticationHeaders(this.apiKeyProvider(), {
+        ...buildOpenAiAuthenticationHeaders(apiKey, {
           apiKeyHeader: 'Authorization',
           apiKeyPrefix: 'Bearer',
           organizationHeader: '',

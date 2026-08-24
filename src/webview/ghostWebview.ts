@@ -638,6 +638,7 @@ const openCodeUsernameElement = document.getElementById('opencode-username') as 
 const openCodeAgentElement = document.getElementById('opencode-agent') as HTMLInputElement
 const openCodeSessionReuseElement = document.getElementById('opencode-session-reuse') as HTMLSelectElement
 const setOpenCodePasswordElement = document.getElementById('set-opencode-password') as HTMLButtonElement
+const setOpenRouterApiKeyElement = document.getElementById('set-openrouter-api-key') as HTMLButtonElement
 const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
 const openAiApiVersionElement = document.getElementById('openai-api-version') as HTMLInputElement
 const openAiCustomModelsPathElement = document.getElementById('openai-custom-models-path') as HTMLInputElement
@@ -4457,6 +4458,7 @@ for (const element of [openCodeUsernameElement, openCodeAgentElement, openCodeSe
   element.addEventListener('change', updateOpenCodeSettings)
 }
 setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key'))
+setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key'))
 const updateOpenAiSettings = () => {
   controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()
   controls.openaiApiKeyPrefix = openAiApiKeyPrefixElement.value.trim()

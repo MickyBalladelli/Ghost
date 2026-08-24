@@ -169,6 +169,7 @@ const createSettingsContent = (): HTMLDivElement => {
     [createElement('p', { className: 'settings-help', 'data-provider-scope': 'opencode' }, ['Password is optional and stays in VS Code SecretStorage.'])],
     settingRow('OpenRouter HTTP-Referer', input('openrouter-referer', 'url', { placeholder: 'Optional site URL' }), 'openrouter-referer', undefined, 'openrouter'),
     settingRow('OpenRouter title', input('openrouter-title', 'text', { value: 'Ghost Coding Assistant' }), 'openrouter-title', undefined, 'openrouter'),
+    [button('set-openrouter-api-key', 'Set OpenRouter API key…', { className: 'secondary settings-inline-action', 'data-provider-scope': 'openrouter' })],
     [checkboxSetting('openrouter-allow-fallbacks', 'Allow provider fallbacks', 'Let OpenRouter try another provider when the selected one fails.', true, 'openrouter')],
     [checkboxSetting('openrouter-require-parameters', 'Require requested parameters', 'Only use routed providers that support all parameters Ghost sends.', false, 'openrouter')],
     settingRow('Data collection', select('openrouter-data-collection', [option('allow', 'Allow'), option('deny', 'Deny')]), 'openrouter-data-collection', undefined, 'openrouter'),

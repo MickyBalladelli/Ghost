@@ -5,6 +5,7 @@ All notable changes to this extension are documented here.
 
 - Add first-class OpenRouter support with secure API keys, model discovery metadata, pricing, routing preferences, and native tool capability detection.
 - Keep provider selectors, schemas, validation, and documentation in alphabetical order.
+- Show a clear OpenRouter API-key setup error and add a direct key button in provider settings.
 
 
 ## 1.2.8 - 2026-08-23
