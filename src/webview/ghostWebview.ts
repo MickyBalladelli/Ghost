@@ -2694,6 +2694,20 @@ const readScopeText = (args: Record<string, unknown>, result?: string): string =
   return ''
 }
 
+const toolInlineResult = (toolCall: ToolCall): string => {
+  const result = toolCall.result?.trim()
+  if (!result) return ''
+
+  if (toolCall.name === 'ghost_read_file' && toolCall.status === 'completed') {
+    const source = result.match(/^Source:\s*([^\n]+)/i)?.[1]?.trim()
+    const args = parseToolArguments(toolCall)
+    const scope = readScopeText(args, result)
+    return [source, scope].filter(Boolean).join(' · ')
+  }
+
+  return result.replace(/\s+/g, ' ').slice(0, 240)
+}
+
 const toolActionText = (toolCall: ToolCall): string => {
   const compactAction = toolTimeline.compactAction(toolCall.name)
   if (!uiPreferences.showToolProgress) {
@@ -2795,7 +2809,8 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
     const actionText = toolActionText(part.toolCall)
     const requestActive = ['preparing', 'connecting', 'thinking', 'streaming', 'waiting-for-approval'].includes(message.requestStatus ?? '')
     const animatedAction = requestActive && (part.toolCall.status === 'running' || part.toolCall.status === 'requested')
-    const result = part.toolCall.result ? `: ${part.toolCall.result}` : ''
+    const inlineResult = toolInlineResult(part.toolCall)
+    const result = inlineResult ? `: ${inlineResult}` : ''
     const duration = toolDurationText(part.toolCall)
     const argumentsBlock = uiPreferences.showToolProgress && part.toolCall.arguments
       ? `<details class="tool-details"><summary>Arguments</summary><pre>${escapeHtml(part.toolCall.arguments)}</pre></details>`

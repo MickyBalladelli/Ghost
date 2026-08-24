@@ -52,6 +52,13 @@ export interface ProviderModelMetadata {
   supportsSampling?: Partial<ModelCapabilityRecord['supportsSampling']>
   pricing?: ModelPricing
   pricingStatus?: ModelPricingStatus
+  reasoning?: {
+    supportedEfforts?: string[]
+    defaultEffort?: string
+    defaultEnabled?: boolean
+    mandatory?: boolean
+    supportsMaxTokens?: boolean
+  }
 }
 
 export interface ProviderErrorOptions {

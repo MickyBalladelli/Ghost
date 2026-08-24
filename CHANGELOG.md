@@ -11,6 +11,8 @@ All notable changes to this extension are documented here.
 - Preserve the output-pane scroll position when a request fails.
 - Accept legacy function calls, object-valued tool arguments, refusals, and alternate text fields from routed models.
 - Retry an empty OpenRouter stream once with a complete JSON chat-completion request and expose provider error envelopes.
+- Send low reasoning effort to mandatory reasoning models such as `stealth/ox-alpha` so output tokens remain for the final answer.
+- Keep successful file-read progress labels compact while preserving full results in the expandable details.
 
 
 ## 1.2.8 - 2026-08-23

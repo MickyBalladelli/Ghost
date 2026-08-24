@@ -19,6 +19,11 @@ export interface OpenRouterRoutingSettings {
   providerOrder: string[]
 }
 
+interface OpenRouterReasoningSettings {
+  effort?: string
+  enabled?: boolean
+}
+
 export interface OpenRouterClientSettings {
   url: string
   referer: string
@@ -48,6 +53,13 @@ interface OpenRouterModelRecord {
     max_completion_tokens?: number
   }
   supported_parameters?: string[]
+  reasoning?: {
+    supported_efforts?: string[] | null
+    default_effort?: string
+    default_enabled?: boolean
+    mandatory?: boolean
+    supports_max_tokens?: boolean
+  }
 }
 
 interface OpenRouterModelsResponse {
@@ -116,7 +128,16 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelMetadata[]
         repeatPenalty: supported(parameters, 'repetition_penalty', 'repeat_penalty')
       },
       pricing: pricing.pricing,
-      pricingStatus: pricing.pricingStatus
+      pricingStatus: pricing.pricingStatus,
+      ...(model.reasoning && typeof model.reasoning === 'object' ? {
+        reasoning: {
+          ...(Array.isArray(model.reasoning.supported_efforts) ? { supportedEfforts: model.reasoning.supported_efforts.filter(item => typeof item === 'string') } : {}),
+          ...(typeof model.reasoning.default_effort === 'string' ? { defaultEffort: model.reasoning.default_effort } : {}),
+          ...(typeof model.reasoning.default_enabled === 'boolean' ? { defaultEnabled: model.reasoning.default_enabled } : {}),
+          ...(typeof model.reasoning.mandatory === 'boolean' ? { mandatory: model.reasoning.mandatory } : {}),
+          ...(typeof model.reasoning.supports_max_tokens === 'boolean' ? { supportsMaxTokens: model.reasoning.supports_max_tokens } : {})
+        }
+      } : {})
     }]
   })
 }
@@ -128,7 +149,7 @@ export function normalizeOpenRouterProviderOrder(values: readonly unknown[]): st
     .filter(value => value.length > 0 && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value)))]
 }
 
-export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: OpenRouterRoutingSettings, outputLimit?: number): Record<string, unknown> {
+export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: OpenRouterRoutingSettings, outputLimit?: number, reasoning?: OpenRouterReasoningSettings): Record<string, unknown> {
   const maxTokens = options.generation?.maxTokens
   const boundedMaxTokens = outputLimit === undefined || maxTokens === undefined
     ? maxTokens
@@ -147,7 +168,15 @@ export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: Op
     data_collection: routing.dataCollection === 'deny' ? 'deny' : 'allow',
     ...(providerOrder.length > 0 ? { order: providerOrder } : {})
   }
-  return { ...body, provider }
+  return { ...body, ...(reasoning ? { reasoning } : {}), provider }
+}
+
+function mandatoryReasoningSettings(metadata: ProviderModelMetadata | undefined): OpenRouterReasoningSettings | undefined {
+  if (metadata?.reasoning?.mandatory !== true) return undefined
+  const supportedEfforts = metadata.reasoning.supportedEfforts ?? []
+  if (supportedEfforts.includes('low')) return { effort: 'low' }
+  if (metadata.reasoning.defaultEffort) return { effort: metadata.reasoning.defaultEffort }
+  return { enabled: true }
 }
 
 export class OpenRouterClient implements ProviderClient {
@@ -217,8 +246,8 @@ export class OpenRouterClient implements ProviderClient {
 
   async *streamChatEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
     const endpoint = joinEndpoint(this.baseUrl, 'chat/completions')
-    const outputLimit = this.metadata.get(options.model)?.outputLimit
-    const body = buildOpenRouterChatBody(options, this.settings.routing, outputLimit)
+    const metadata = this.metadata.get(options.model)
+    const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, mandatoryReasoningSettings(metadata))
     const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
