@@ -1,8 +1,13 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+
+## 1.2.26 - 2026-08-24
+
+
 ## 1.2.25 - 2026-08-24
 
+- Keep the conversation pinned to the latest response when a request completes instead of jumping back to the top of the message pane.
 - Preserve reasoning emitted inside split `<think>` tags so OpenRouter recovery can continue instead of retrying empty context.
 - Preserve reasoning returned by OpenRouter's non-stream fallback so Ghost does not misread it as an empty response.
 - Reset empty-response retries after successful provider output.

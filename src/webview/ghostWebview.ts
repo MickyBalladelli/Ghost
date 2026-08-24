@@ -2930,13 +2930,13 @@ const restoreMessagePaneScroll = (scrollState: MessagePaneScrollState): void => 
   userIsAtBottom = scrollState.atBottom || maximum - top < 40
 }
 
-const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElement) => {
+const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElement, scrollOverride?: MessagePaneScrollState) => {
   const element = existingElement ?? findMessageElement(message.id)
   if (!element) {
     renderMessages(false)
     return
   }
-  const scrollState = captureMessagePaneScroll()
+  const scrollState = scrollOverride ?? captureMessagePaneScroll()
   const status = element.querySelector<HTMLElement>('.message-state')
   const showThinkingPlaceholder = message.role === 'assistant' && (
     message.status === 'streaming' ||
@@ -3128,7 +3128,7 @@ const renderMessages = (forceScroll: boolean, preserveScroll = false) => {
     for (const [offset, message] of conversation.messages.slice(firstVisibleIndex).entries()) {
       const existing = existingMessages.get(message.id)
       if (existing) {
-        updateMessageElement(message, existing)
+        updateMessageElement(message, existing, scrollState)
         fragment.append(existing)
       } else {
         const messageIndex = firstVisibleIndex + offset
@@ -3148,8 +3148,16 @@ const renderMessages = (forceScroll: boolean, preserveScroll = false) => {
       messagesElement.scrollTop = scrollState.top
       userIsAtBottom = messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 40
     })
+  } else if (!forceScroll) {
+    requestAnimationFrame(() => {
+      messagesElement.scrollTo({
+        top: messagesElement.scrollHeight,
+        behavior: 'smooth'
+      })
+      userIsAtBottom = true
+    })
   } else {
-    scrollMessages(forceScroll)
+    scrollMessages(true)
   }
   ensureAnimatedStatusLabels()
 }

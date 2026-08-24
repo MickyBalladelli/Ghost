@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, OpenRouter, and OpenCode",
-  "version": "1.2.25",
+  "version": "1.2.26",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -174,13 +174,18 @@
         },
         "ghost.openrouterDataCollection": {
           "type": "string",
-          "enum": ["allow", "deny"],
+          "enum": [
+            "allow",
+            "deny"
+          ],
           "default": "allow",
           "description": "OpenRouter provider data-collection preference."
         },
         "ghost.openrouterProviderOrder": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Optional ordered OpenRouter provider slugs, for example [\"anthropic\", \"openai\"]."
         },
