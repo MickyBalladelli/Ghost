@@ -130,7 +130,7 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.provider` | `ollama` | Select `ollama`, `mlx-vlm`, `openai-compatible`, `openrouter`, or `opencode`. |
+| `ghost.provider` | `ollama` | Select `mlx-vlm`, `ollama`, `openai-compatible`, `opencode`, or `openrouter`. |
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |

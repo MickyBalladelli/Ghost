@@ -422,7 +422,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     return false
   }
   if (
-    (value.provider !== undefined && !['ollama', 'mlx-vlm', 'openai-compatible', 'openrouter', 'opencode'].includes(value.provider as string)) ||
+    (value.provider !== undefined && !['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter'].includes(value.provider as string)) ||
     (value.model !== undefined && !isBoundedString(value.model, 512)) ||
     (value.modelProfile !== undefined && !isBoundedString(value.modelProfile, 256)) ||
     (value.modelRole !== undefined && !['chat', 'agent', 'vision', 'autocomplete'].includes(value.modelRole as string)) ||
@@ -455,7 +455,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     return false
   }
   return (
-    (value.provider === undefined || ['ollama', 'mlx-vlm', 'openai-compatible', 'openrouter', 'opencode'].includes(value.provider as string)) &&
+    (value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter'].includes(value.provider as string)) &&
     (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm', 'custom'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&

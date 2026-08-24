@@ -32,7 +32,7 @@ const MLX_SWITCH_ACTION = 'Switch to MLX VLM'
 const KEEP_PROVIDER_ACTION = 'Keep Current Provider'
 
 function isProvider(value: string): value is GhostProvider {
-  return value === 'ollama' || value === 'mlx-vlm' || value === 'openai-compatible' || value === 'openrouter' || value === 'opencode'
+  return value === 'mlx-vlm' || value === 'ollama' || value === 'openai-compatible' || value === 'opencode' || value === 'openrouter'
 }
 
 export class LlmFactory {

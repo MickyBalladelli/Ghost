@@ -447,8 +447,8 @@
               "provider": {
                 "type": "string",
                 "enum": [
-                  "ollama",
                   "mlx-vlm",
+                  "ollama",
                   "openai-compatible",
                   "openrouter"
                 ]
@@ -540,18 +540,18 @@
         "ghost.provider": {
           "type": "string",
           "enum": [
-            "ollama",
             "mlx-vlm",
+            "ollama",
             "openai-compatible",
-            "openrouter",
-            "opencode"
+            "opencode",
+            "openrouter"
           ],
           "enumDescriptions": [
-            "Use the Ollama API.",
             "Use an MLX VLM OpenAI-compatible server.",
+            "Use the Ollama API.",
             "Use another OpenAI-compatible server.",
-            "Use the OpenRouter hosted model catalog and routing API.",
-            "Delegate requests to a user-managed OpenCode headless server."
+            "Delegate requests to a user-managed OpenCode headless server.",
+            "Use the OpenRouter hosted model catalog and routing API."
           ],
           "default": "ollama",
           "description": "Ghost model provider.",

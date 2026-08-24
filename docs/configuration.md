@@ -35,7 +35,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openaiTlsCertFile` | string | empty | Optional path to a client certificate PEM file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsKeyFile` | string | empty | Optional path to a client private key PEM file for OpenAI-compatible HTTPS. |
 | `ghost.providerRequestTimeoutMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes to wait for one HTTP request to the model provider. This is not the overall agent run budget. |
-| `ghost.provider` | string; one of `ollama`, `mlx-vlm`, `openai-compatible`, `openrouter`, `opencode` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
+| `ghost.provider` | string; one of `mlx-vlm`, `ollama`, `openai-compatible`, `opencode`, `openrouter` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
 | `ghost.mlxUrl` | string | `http://localhost:8000` | MLX VLM server URL. |
 
 ## Models and generation

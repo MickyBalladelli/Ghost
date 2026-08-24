@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 ## 1.2.9 - 2026-08-24
 
 - Add first-class OpenRouter support with secure API keys, model discovery metadata, pricing, routing preferences, and native tool capability detection.
+- Keep provider selectors, schemas, validation, and documentation in alphabetical order.
 
 
 ## 1.2.8 - 2026-08-23
