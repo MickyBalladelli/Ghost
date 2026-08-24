@@ -1,6 +1,9 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.9 - 2026-08-24
+
+
 ## 1.2.8 - 2026-08-23
 - Tell OpenCode to use its edit or write tools for file changes instead of bash.
 
