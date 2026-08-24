@@ -10,6 +10,7 @@ All notable changes to this extension are documented here.
 - Keep mandatory OpenRouter reasoning in the response so recovery can continue.
 - Retry OpenRouter when a streamed tool call has a name but no usable arguments.
 - Give invalid tool calls exact schema recovery instructions and preserve the final rejection message.
+- Discover OpenCode models from `/config/providers` with legacy `/provider` fallback.
 
 ## 1.2.24 - 2026-08-24
 

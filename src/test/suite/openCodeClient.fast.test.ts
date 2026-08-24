@@ -19,6 +19,7 @@ suite('OpenCode client', () => {
     const client = new OpenCodeClient('http://127.0.0.1:4096', {
       fetchImpl: async input => {
         const url = new URL(String(input))
+        if (url.pathname === '/config/providers') return jsonResponse({}, 404)
         assert.equal(url.pathname, '/provider')
         return jsonResponse({
           connected: ['local'],
@@ -31,6 +32,25 @@ suite('OpenCode client', () => {
     })
 
     assert.deepEqual(await client.listModels(), ['local/chat', 'local/coder'])
+  })
+
+  test('discovers models from the current config providers endpoint', async () => {
+    const client = new OpenCodeClient('http://127.0.0.1:4096', {
+      fetchImpl: async input => {
+        const url = new URL(String(input))
+        assert.equal(url.pathname, '/config/providers')
+        return jsonResponse({
+          providers: [{
+            id: 'opencode',
+            models: {
+              'gpt-5.1': { id: 'gpt-5.1', name: 'GPT-5.1', limit: { context: 400000, output: 128000 } }
+            }
+          }]
+        })
+      }
+    })
+
+    assert.deepEqual(await client.listModels(), ['opencode/gpt-5.1'])
   })
 
   test('uses Basic Auth on loopback and rejects credentials over remote HTTP', async () => {

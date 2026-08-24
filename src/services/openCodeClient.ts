@@ -443,7 +443,15 @@ export class OpenCodeClient implements ProviderClient {
   }
 
   async listModelsWithMetadata(signal?: AbortSignal): Promise<OpenCodeModelMetadata[]> {
-    const payload = await this.request('/provider', { method: 'GET', signal })
+    let payload: unknown
+    try {
+      payload = await this.request('/config/providers', { method: 'GET', signal })
+    } catch (error) {
+      if (!/OpenCode returned HTTP (404|405)\b/.test(errorText(error))) {
+        throw error
+      }
+      payload = await this.request('/provider', { method: 'GET', signal })
+    }
     const body = record(payload)
     const providers = Array.isArray(body?.all) ? body.all : Array.isArray(body?.providers) ? body.providers : []
     const connected = new Set(Array.isArray(body?.connected) ? body.connected.filter(item => typeof item === 'string') as string[] : [])
