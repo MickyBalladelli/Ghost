@@ -53,7 +53,15 @@ function reasoningText(value: unknown): string | undefined {
   const text = value.flatMap(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return []
     const part = item as Record<string, unknown>
-    return typeof part.text === 'string' ? [part.text] : typeof part.reasoning === 'string' ? [part.reasoning] : []
+    return typeof part.text === 'string'
+      ? [part.text]
+      : typeof part.reasoning === 'string'
+        ? [part.reasoning]
+        : typeof part.reasoning_content === 'string'
+          ? [part.reasoning_content]
+          : typeof part.summary === 'string'
+            ? [part.summary]
+            : typeof part.content === 'string' ? [part.content] : []
   }).join('')
   return text || undefined
 }

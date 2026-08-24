@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.13 - 2026-08-24
+
+- Keep file content and metadata out of tool progress summaries while preserving the full result for the model.
+
+## 1.2.12 - 2026-08-24
+
+- Parse summarized OpenRouter reasoning details before continuing an incomplete model turn.
+
+## 1.2.11 - 2026-08-24
+
+- Require a native workspace tool for OpenRouter agent edits before accepting a final response.
+
+## 1.2.10 - 2026-08-24
+
+- Ensure the OpenRouter and file-read UI fixes install as a new extension version.
+
 ## 1.2.9 - 2026-08-24
 
 - Add first-class OpenRouter support with secure API keys, model discovery metadata, pricing, routing preferences, and native tool capability detection.

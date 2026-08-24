@@ -5,7 +5,7 @@ This guide releases the VS Code extension from the repository root. Current mani
 ```text
 publisher: MickyBalladelli
 name: ghost-ai-coding-assistant
-version: 1.2.9
+version: 1.2.13
 Marketplace ID: MickyBalladelli.ghost-ai-coding-assistant
 ```
 

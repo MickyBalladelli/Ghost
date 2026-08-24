@@ -241,7 +241,12 @@ export class ContextBudgetManager {
   }
 }
 
-function summarizeToolResult(value: string): string {
+function summarizeToolResult(value: string, toolName?: string): string {
+  if (toolName === 'ghost_read_file') {
+    const source = value.match(/^Source:\s*[^\n]+/im)?.[0]
+    const readMode = value.match(/^Read mode:\s*[^\n]+/im)?.[0]
+    return [source, readMode].filter(Boolean).join(' · ') || 'File read completed.'
+  }
   const compact = value.replace(/\s+/g, ' ').trim()
   return compact.length > 600 ? `${compact.slice(0, 600)}…` : compact
 }
@@ -1846,7 +1851,11 @@ export function createChatParticipantHandler(
             ...(requestToolsEnabled && nativeToolCalling
               ? {
                   tools: requestToolDefinitions,
-                  toolChoice: planningMode && !taskPlanRecorded ? 'required' as const : 'auto' as const
+                  toolChoice: planningMode && !taskPlanRecorded
+                    ? 'required' as const
+                    : workspaceChangeRequested && !successfulWorkspaceChange
+                      ? 'required' as const
+                      : 'auto' as const
                 }
               : {}),
             ...(requestOptions.responseFormat
@@ -2197,7 +2206,7 @@ export function createChatParticipantHandler(
           continue
         }
 
-        response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult)}`)
+        response.progress(`Tool result: ${toolCall.name}: ${summarizeToolResult(toolResult, toolCall.name)}`)
 
         const pathRecoveryKey = getPathRecoveryKey(toolCall, toolResult)
         if (pathRecoveryKey) {
@@ -2224,7 +2233,7 @@ export function createChatParticipantHandler(
 
         if (shouldStopAgentForToolFailure(toolCall.name, toolOutcome.status, toolResult)) {
           requestOptions.onStop?.('failed-tool', toolResult)
-          response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult)} Review the arguments and retry.`)
+          response.markdown(`Ghost stopped because a tool failed: ${summarizeToolResult(toolResult, toolCall.name)} Review the arguments and retry.`)
           return
         }
         invalidToolRetries = 0

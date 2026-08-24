@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.2.9`.
+Package version: `1.2.13`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
