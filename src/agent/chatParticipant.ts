@@ -1394,9 +1394,10 @@ async function streamModelTurn(
   token: vscode.CancellationToken,
   showReasoning = false,
   bufferForToolCall = false
-): Promise<{ generated: string; streamed: boolean; streamedText?: string; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
+): Promise<{ generated: string; streamed: boolean; streamedText?: string; reasoningText?: string; modelTokens: number; splitSuggested: boolean; visibleText: boolean; toolCall?: LocalToolCall }> {
   let generated = ''
   let streamedText = ''
+  let reasoningText = ''
   let bufferedVisibleText = ''
   let modelCharacters = 0
   let visibleCharacters = 0
@@ -1476,6 +1477,7 @@ async function streamModelTurn(
     }
     if (event.type === 'reasoning') {
       modelCharacters += event.text.length
+      reasoningText += event.text
       if (showReasoning) {
         response.progress(`Reasoning: ${event.text}`)
       }
@@ -1589,6 +1591,7 @@ async function streamModelTurn(
       : bufferingToolCall ? toolCallAssembler.getText() : generated.trim(),
     streamed: completedNativeToolCall ? false : decided && !bufferingToolCall,
     ...(streamedText ? { streamedText } : {}),
+    ...(reasoningText ? { reasoningText } : {}),
     modelTokens: Math.ceil(modelCharacters / 4),
     splitSuggested: false,
     visibleText: visibleCharacters > 0 || generated.trim().length > 0,
@@ -1869,6 +1872,7 @@ export function createChatParticipantHandler(
         }
 
         const generated = turn.generated || (turn.streamed ? turn.streamedText ?? '' : '')
+        const providerReasoning = turn.reasoningText?.trim()
         if (token.isCancellationRequested) {
           return
         }
@@ -1900,6 +1904,16 @@ export function createChatParticipantHandler(
           requestOptions.onStop?.('invalid-model-response', message)
           response.markdown(message)
           return
+        }
+
+        if (!generated && providerReasoning && emptyProviderRetries < GHOST_RETRY_POLICIES.emptyProvider.maxRetries) {
+          emptyProviderRetries += 1
+          response.progress(`Provider returned reasoning without a final response. Continuing (${emptyProviderRetries}/${GHOST_RETRY_POLICIES.emptyProvider.maxRetries})...`)
+          messages.push(
+            { role: 'assistant', content: `The previous turn contained reasoning but no final response. Continue from this reasoning without repeating it:\n${providerReasoning.slice(-12000)}` },
+            { role: 'user', content: 'Continue the requested task now. Emit exactly one complete valid JSON Ghost tool call when workspace work is needed, or give the final concise answer. Do not return reasoning alone.' }
+          )
+          continue
         }
 
         if (!generated) {

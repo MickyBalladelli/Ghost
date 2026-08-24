@@ -14,6 +14,8 @@ All notable changes to this extension are documented here.
 - Send low reasoning effort to mandatory reasoning models such as `stealth/ox-alpha` so output tokens remain for the final answer.
 - Keep successful file-read progress labels compact while preserving full results in the expandable details.
 - Handle OpenRouter reasoning-only response fields and exclude hidden reasoning from the returned answer.
+- Retry reasoning-only OpenRouter streams with a complete response and preserve Ox Alpha tool support when model discovery is unavailable.
+- Carry reasoning-only OpenRouter turns into the continuation prompt so Ox Alpha can finish the answer or call a workspace tool.
 
 
 ## 1.2.8 - 2026-08-23

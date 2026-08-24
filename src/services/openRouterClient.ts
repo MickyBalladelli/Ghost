@@ -80,6 +80,8 @@ const tokenPrice = (value: unknown): number | undefined => {
 
 const supported = (parameters: Set<string>, ...names: string[]): boolean => names.some(name => parameters.has(name))
 
+const isOxAlpha = (model: string): boolean => /^(?:openrouter\/)?stealth\/ox-alpha$/i.test(model.trim())
+
 const modelPricing = (value: OpenRouterModelRecord['pricing']): { pricing?: ModelPricing; pricingStatus: 'free' | 'paid' | 'unknown' } => {
   const input = tokenPrice(value?.prompt)
   const output = tokenPrice(value?.completion)
@@ -240,10 +242,10 @@ export class OpenRouterClient implements ProviderClient {
       try {
         await this.listModelsWithMetadata(signal)
       } catch {
-        return false
+        return isOxAlpha(model)
       }
     }
-    return this.metadata.get(model)?.supportsTools === true
+    return this.metadata.get(model)?.supportsTools === true || isOxAlpha(model)
   }
 
   async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
@@ -257,7 +259,7 @@ export class OpenRouterClient implements ProviderClient {
     const endpoint = joinEndpoint(this.baseUrl, 'chat/completions')
     const metadata = this.metadata.get(options.model)
     const maxTokens = options.generation?.maxTokens
-    const reasoning = mandatoryReasoningSettings(metadata, maxTokens)
+    const reasoning = mandatoryReasoningSettings(metadata, maxTokens) ?? (isOxAlpha(options.model) ? { effort: 'low', exclude: true } : undefined)
     const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, reasoning)
     const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
@@ -266,21 +268,26 @@ export class OpenRouterClient implements ProviderClient {
     }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
     if (!response.ok) throw await providerHttpError(response)
     if (!response.body) throw new Error('OpenRouter returned an empty streaming response')
-    let emitted = false
+    let emittedContent = false
     for await (const event of streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')) {
-      emitted = true
+      if (event.type !== 'reasoning') emittedContent = true
       yield event
     }
-    if (emitted) return
+    if (emittedContent) return
 
     const fallbackResponse = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-      body: JSON.stringify({ ...body, stream: false })
+      body: JSON.stringify({
+        ...body,
+        stream: false,
+        ...(reasoning ? { reasoning: { ...reasoning, exclude: true } } : {})
+      })
     }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
     if (!fallbackResponse.ok) throw await providerHttpError(fallbackResponse)
     const events = parseOpenAiCompletionPayload(await fallbackResponse.json())
-    if (events.length === 0) throw new Error('OpenRouter returned no text or tool call in its completion response')
+    const contentEvents = events.filter(event => event.type !== 'reasoning')
+    if (contentEvents.length === 0) throw new Error('OpenRouter returned reasoning but no final text or tool call in its completion response')
     for (const event of events) yield event
   }
 
