@@ -9,6 +9,8 @@ All notable changes to this extension are documented here.
 - Accept OpenRouter chat responses returned as streamed deltas, complete messages, content parts, or one JSON response.
 - Store provider keys under the provider selected in the Ghost settings panel, even before the host setting update finishes.
 - Preserve the output-pane scroll position when a request fails.
+- Accept legacy function calls, object-valued tool arguments, refusals, and alternate text fields from routed models.
+- Retry an empty OpenRouter stream once with a complete JSON chat-completion request and expose provider error envelopes.
 
 
 ## 1.2.8 - 2026-08-23

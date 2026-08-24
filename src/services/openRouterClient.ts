@@ -8,7 +8,7 @@ import { providerHttpError, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { GHOST_POLICY } from '../ghostPolicy'
 import type { ProviderClient, ProviderModelMetadata, ModelPricing } from './providerAdapter'
-import { streamOpenAiEvents } from './openAiStream'
+import { parseOpenAiCompletionPayload, streamOpenAiEvents } from './openAiStream'
 
 export const DEFAULT_OPENROUTER_URL = 'https://openrouter.ai/api/v1'
 
@@ -218,14 +218,30 @@ export class OpenRouterClient implements ProviderClient {
   async *streamChatEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
     const endpoint = joinEndpoint(this.baseUrl, 'chat/completions')
     const outputLimit = this.metadata.get(options.model)?.outputLimit
+    const body = buildOpenRouterChatBody(options, this.settings.routing, outputLimit)
     const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
-      body: JSON.stringify(buildOpenRouterChatBody(options, this.settings.routing, outputLimit))
+      body: JSON.stringify(body)
     }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
     if (!response.ok) throw await providerHttpError(response)
     if (!response.body) throw new Error('OpenRouter returned an empty streaming response')
-    yield* streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')
+    let emitted = false
+    for await (const event of streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')) {
+      emitted = true
+      yield event
+    }
+    if (emitted) return
+
+    const fallbackResponse = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ ...body, stream: false })
+    }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
+    if (!fallbackResponse.ok) throw await providerHttpError(fallbackResponse)
+    const events = parseOpenAiCompletionPayload(await fallbackResponse.json())
+    if (events.length === 0) throw new Error('OpenRouter returned no text or tool call in its completion response')
+    for (const event of events) yield event
   }
 
   private requestInit(endpoint: string, init: GhostRequestInit): GhostRequestInit {

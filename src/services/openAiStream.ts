@@ -47,6 +47,16 @@ function contentText(value: unknown): string | undefined {
   return text || undefined
 }
 
+function argumentText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return undefined
+  }
+}
+
 function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): string | undefined {
   if (mode === 'responses') {
     if (typeof payload.delta === 'string' && payload.type === 'response.output_text.delta') return payload.delta
@@ -59,9 +69,12 @@ function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): st
   const delta = nestedRecord(choice, 'delta')
   const deltaText = contentText(delta?.content)
   if (deltaText !== undefined) return deltaText
+  if (typeof delta?.text === 'string') return delta.text
+  if (typeof delta?.refusal === 'string') return delta.refusal
   const message = nestedRecord(choice, 'message')
   const messageText = contentText(message?.content)
   if (messageText !== undefined) return messageText
+  if (typeof message?.refusal === 'string') return message.refusal
   return typeof choice?.text === 'string' ? choice.text : undefined
 }
 
@@ -94,7 +107,15 @@ function functionDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode)
     if (functionValue) {
       return {
         name: typeof functionValue.name === 'string' ? functionValue.name : undefined,
-        arguments: typeof functionValue.arguments === 'string' ? functionValue.arguments : undefined,
+        arguments: argumentText(functionValue.arguments),
+        done: false
+      }
+    }
+    const legacyFunction = nestedRecord(source, 'function_call')
+    if (legacyFunction) {
+      return {
+        name: typeof legacyFunction.name === 'string' ? legacyFunction.name : undefined,
+        arguments: argumentText(legacyFunction.arguments),
         done: false
       }
     }
@@ -114,6 +135,11 @@ function eventOutput(
   if (event.data === '[DONE]') return []
   const payload = jsonObject(event.data)
   if (!payload) return []
+  const error = nestedRecord(payload, 'error')
+  if (error) {
+    const message = typeof error.message === 'string' ? error.message : 'OpenAI-compatible provider returned an error response'
+    throw new Error(message)
+  }
   const outputs: ChatStreamEvent[] = []
   const functionCall = functionDelta(payload, mode)
   if (functionCall) {
@@ -126,6 +152,12 @@ function eventOutput(
   const text = textDelta(payload, mode)
   if (text) outputs.push({ type: 'text', text })
   return outputs
+}
+
+export function parseOpenAiCompletionPayload(payload: unknown, mode: OpenAiStreamMode = 'chat-completions'): ChatStreamEvent[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+  const events = eventOutput({ name: '', data: JSON.stringify(payload) }, mode, { name: '', argumentsSeen: false })
+  return events.map(event => event.type === 'tool-call' ? { ...event, done: true } : event)
 }
 
 export async function* streamOpenAiEvents(body: AsyncIterable<Buffer | string>, mode: OpenAiStreamMode): AsyncGenerator<ChatStreamEvent> {
