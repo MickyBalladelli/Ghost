@@ -6,6 +6,9 @@ All notable changes to this extension are documented here.
 - Add first-class OpenRouter support with secure API keys, model discovery metadata, pricing, routing preferences, and native tool capability detection.
 - Keep provider selectors, schemas, validation, and documentation in alphabetical order.
 - Show a clear OpenRouter API-key setup error and add a direct key button in provider settings.
+- Accept OpenRouter chat responses returned as streamed deltas, complete messages, content parts, or one JSON response.
+- Store provider keys under the provider selected in the Ghost settings panel, even before the host setting update finishes.
+- Preserve the output-pane scroll position when a request fails.
 
 
 ## 1.2.8 - 2026-08-23

@@ -2902,14 +2902,30 @@ const stateCard = (): string => {
   return '<div class="state-card"><div class="state-icon">✦</div><h1>Start a conversation</h1><p>Ask about your code, explain an error, or let Ghost help with a task.</p></div>'
 }
 
+interface MessagePaneScrollState {
+  top: number
+  atBottom: boolean
+}
+
+const captureMessagePaneScroll = (): MessagePaneScrollState => ({
+  top: messagesElement.scrollTop,
+  atBottom: messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 40
+})
+
+const restoreMessagePaneScroll = (scrollState: MessagePaneScrollState): void => {
+  const maximum = Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight)
+  const top = scrollState.atBottom ? maximum : Math.min(scrollState.top, maximum)
+  messagesElement.scrollTo({ top, behavior: 'auto' })
+  userIsAtBottom = scrollState.atBottom || maximum - top < 40
+}
+
 const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElement) => {
   const element = existingElement ?? findMessageElement(message.id)
   if (!element) {
     renderMessages(false)
     return
   }
-  const previousScrollTop = messagesElement.scrollTop
-  const wasAtBottom = messagesElement.scrollHeight - previousScrollTop - messagesElement.clientHeight < 40
+  const scrollState = captureMessagePaneScroll()
   const status = element.querySelector<HTMLElement>('.message-state')
   const showThinkingPlaceholder = message.role === 'assistant' && (
     message.status === 'streaming' ||
@@ -2978,9 +2994,10 @@ const updateMessageElement = (message: ChatMessage, existingElement?: HTMLElemen
   syncMessageActions(element, message)
   addMessageCopyControls(element, message)
   messagesElement.scrollTo({
-    top: wasAtBottom ? Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight) : previousScrollTop,
+    top: scrollState.atBottom ? Math.max(0, messagesElement.scrollHeight - messagesElement.clientHeight) : scrollState.top,
     behavior: 'auto'
   })
+  userIsAtBottom = scrollState.atBottom || messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 40
   ensureAnimatedStatusLabels()
 }
 
@@ -3077,7 +3094,7 @@ const reconcileMessagePane = (fragment: DocumentFragment): void => {
 
 const renderMessages = (forceScroll: boolean, preserveScroll = false) => {
   const conversation = getActiveConversation()
-  const previousScrollTop = messagesElement.scrollTop
+  const scrollState = captureMessagePaneScroll()
   const existingMessages = new Map(
     Array.from(messagesElement.children)
       .filter((element): element is HTMLElement => element instanceof HTMLElement && element.matches('article.message[data-message-id]'))
@@ -3111,14 +3128,14 @@ const renderMessages = (forceScroll: boolean, preserveScroll = false) => {
   reconcileMessagePane(fragment)
   observeDeferredMessages()
   if (preserveScroll) {
-    messagesElement.scrollTo({ top: previousScrollTop, behavior: 'auto' })
-    userIsAtBottom = messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 40
+    restoreMessagePaneScroll(scrollState)
     ensureAnimatedStatusLabels()
     return
   }
-  if (!forceScroll && !userIsAtBottom) {
+  if (!forceScroll && !scrollState.atBottom) {
     requestAnimationFrame(() => {
-      messagesElement.scrollTop = previousScrollTop
+      messagesElement.scrollTop = scrollState.top
+      userIsAtBottom = messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 40
     })
   } else {
     scrollMessages(forceScroll)
@@ -3158,9 +3175,9 @@ const updateStatus = () => {
   updateComposer()
 }
 
-const render = (forceScroll = false) => {
+const render = (forceScroll = false, preserveScroll = false) => {
   renderControls()
-  renderMessages(forceScroll)
+  renderMessages(forceScroll, preserveScroll)
   updateStatus()
   saveState()
 }
@@ -4083,6 +4100,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'error') {
+    const scrollState = captureMessagePaneScroll()
     request.status = message.stopReason === 'cancelled' ? 'cancelled' : 'failed'
     assistantMessage.status = 'error'
     assistantMessage.requestStatus = request.status
@@ -4095,7 +4113,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     appendErrorPart(assistantMessage, displayedError, true)
     notice = { kind: 'error', message: displayedError }
     updateMessageElement(assistantMessage)
-    scrollMessages(false)
+    restoreMessagePaneScroll(scrollState)
     return
   }
   if (message.type === 'request-completed') {
@@ -4193,8 +4211,7 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     conversation.updatedAt = Date.now()
     requests.delete(message.requestId)
     updateMessageElement(assistantMessage)
-    render(false)
-    scrollMessages(false)
+    render(false, status !== 'completed')
   }
 }
 
@@ -4457,8 +4474,8 @@ const updateOpenCodeSettings = (): void => {
 for (const element of [openCodeUsernameElement, openCodeAgentElement, openCodeSessionReuseElement]) {
   element.addEventListener('change', updateOpenCodeSettings)
 }
-setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key'))
-setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key'))
+setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key', { provider: controls.provider }))
+setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key', { provider: controls.provider }))
 const updateOpenAiSettings = () => {
   controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()
   controls.openaiApiKeyPrefix = openAiApiKeyPrefixElement.value.trim()

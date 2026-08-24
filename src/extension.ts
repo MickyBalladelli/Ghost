@@ -147,8 +147,8 @@ export async function activate(context: vscode.ExtensionContext) {
     const { checkRequiredOllamaModels } = await import('./ui/modelDiagnostics')
     return checkRequiredOllamaModels(ghostConfig, () => providerApiKey('ollama'))
   })
-  const setProviderApiKeyCommand = vscode.commands.registerCommand('ghost.setProviderApiKey', async () => {
-    const provider = ghostConfig.getSettings().provider
+  const setProviderApiKeyCommand = vscode.commands.registerCommand('ghost.setProviderApiKey', async (providerOverride?: GhostProvider) => {
+    const provider = providerOverride ?? ghostConfig.getSettings().provider
     const value = await vscode.window.showInputBox({
       prompt: provider === 'opencode' ? 'Enter the OpenCode server password' : `Enter the ${provider} API key`,
       password: true,

@@ -207,7 +207,8 @@ interface GhostRequestEnvelope extends GhostWebviewEnvelope {
 
 export type GhostWebviewMessage =
   | (GhostWebviewEnvelope & { type: 'ready' })
-  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' | 'set-provider-api-key' | 'complete-first-run' })
+  | (GhostWebviewEnvelope & { type: 'reset' | 'clear' | 'import' | 'check-status' | 'test-provider' | 'complete-first-run' })
+  | (GhostWebviewEnvelope & { type: 'set-provider-api-key'; provider?: GhostProvider })
   | (GhostWebviewEnvelope & { type: 'export'; state?: GhostPersistedState })
   | (GhostWebviewEnvelope & { type: 'persist-state'; state: GhostPersistedState })
   | (GhostRequestEnvelope & {
@@ -552,7 +553,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
 
   if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'set-provider-api-key', 'complete-first-run', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
-    return true
+    return value.type !== 'set-provider-api-key' || value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter'].includes(value.provider as string)
   }
   if (value.type === 'export') {
     return value.state === undefined || isPersistedState(value.state)

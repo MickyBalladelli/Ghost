@@ -2806,7 +2806,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await this.testProvider()
         return
       case 'set-provider-api-key':
-        await vscode.commands.executeCommand('ghost.setProviderApiKey')
+        await vscode.commands.executeCommand('ghost.setProviderApiKey', message.provider)
         return
       case 'complete-first-run':
         await this.globalState?.update(GhostViewProvider.firstRunSetupCompleteKey, true)

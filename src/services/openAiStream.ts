@@ -36,6 +36,17 @@ function nestedRecord(value: unknown, key: string): Record<string, unknown> | un
   return nested && typeof nested === 'object' && !Array.isArray(nested) ? nested as Record<string, unknown> : undefined
 }
 
+function contentText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return undefined
+  const text = value.flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const part = item as Record<string, unknown>
+    return typeof part.text === 'string' ? [part.text] : typeof part.content === 'string' ? [part.content] : []
+  }).join('')
+  return text || undefined
+}
+
 function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): string | undefined {
   if (mode === 'responses') {
     if (typeof payload.delta === 'string' && payload.type === 'response.output_text.delta') return payload.delta
@@ -46,9 +57,11 @@ function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): st
     ? payload.choices[0] as Record<string, unknown>
     : undefined
   const delta = nestedRecord(choice, 'delta')
-  if (typeof delta?.content === 'string') return delta.content
+  const deltaText = contentText(delta?.content)
+  if (deltaText !== undefined) return deltaText
   const message = nestedRecord(choice, 'message')
-  if (typeof message?.content === 'string') return message.content
+  const messageText = contentText(message?.content)
+  if (messageText !== undefined) return messageText
   return typeof choice?.text === 'string' ? choice.text : undefined
 }
 
@@ -72,17 +85,18 @@ function functionDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode)
   const choices = Array.isArray(payload.choices) && payload.choices[0] && typeof payload.choices[0] === 'object'
     ? payload.choices[0] as Record<string, unknown>
     : undefined
-  const delta = nestedRecord(choices, 'delta')
-  const source = delta ?? choices
-  const calls = Array.isArray(source?.tool_calls) && source.tool_calls[0] && typeof source.tool_calls[0] === 'object'
-    ? source.tool_calls[0] as Record<string, unknown>
-    : undefined
-  const functionValue = nestedRecord(calls, 'function')
-  if (functionValue) {
-    return {
-      name: typeof functionValue.name === 'string' ? functionValue.name : undefined,
-      arguments: typeof functionValue.arguments === 'string' ? functionValue.arguments : undefined,
-      done: false
+  const sources = [nestedRecord(choices, 'delta'), nestedRecord(choices, 'message'), choices]
+  for (const source of sources) {
+    const calls = Array.isArray(source?.tool_calls) && source.tool_calls[0] && typeof source.tool_calls[0] === 'object'
+      ? source.tool_calls[0] as Record<string, unknown>
+      : undefined
+    const functionValue = nestedRecord(calls, 'function')
+    if (functionValue) {
+      return {
+        name: typeof functionValue.name === 'string' ? functionValue.name : undefined,
+        arguments: typeof functionValue.arguments === 'string' ? functionValue.arguments : undefined,
+        done: false
+      }
     }
   }
   return undefined
@@ -140,6 +154,9 @@ export async function* streamOpenAiEvents(body: AsyncIterable<Buffer | string>, 
   const parsed = parseEvents(`${buffer}\n\n`)
   for (const event of parsed.events) {
     yield* eventOutput(event, mode, toolState)
+  }
+  if (parsed.events.length === 0 && buffer.trim() && buffer.trim() !== '[DONE]') {
+    yield* eventOutput({ name: '', data: buffer.trim() }, mode, toolState)
   }
 }
 
