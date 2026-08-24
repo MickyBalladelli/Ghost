@@ -2698,11 +2698,11 @@ const toolInlineResult = (toolCall: ToolCall): string => {
   const result = toolCall.result?.trim()
   if (!result) return ''
 
-  if (toolCall.name === 'ghost_read_file' && toolCall.status === 'completed') {
-    const source = result.match(/^Source:\s*([^\n]+)/i)?.[1]?.trim()
-    const args = parseToolArguments(toolCall)
-    const scope = readScopeText(args, result)
-    return [source, scope].filter(Boolean).join(' · ')
+  if (toolCall.name === 'ghost_read_file') {
+    if (toolCall.status === 'failed' || toolCall.status === 'rejected') {
+      return result.replace(/\s+/g, ' ').slice(0, 240)
+    }
+    return ''
   }
 
   return result.replace(/\s+/g, ' ').slice(0, 240)

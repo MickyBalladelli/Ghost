@@ -16,6 +16,7 @@ All notable changes to this extension are documented here.
 - Handle OpenRouter reasoning-only response fields and exclude hidden reasoning from the returned answer.
 - Retry reasoning-only OpenRouter streams with a complete response and preserve Ox Alpha tool support when model discovery is unavailable.
 - Carry reasoning-only OpenRouter turns into the continuation prompt so Ox Alpha can finish the answer or call a workspace tool.
+- Never inline successful file contents or metadata in the progress label.
 
 
 ## 1.2.8 - 2026-08-23
