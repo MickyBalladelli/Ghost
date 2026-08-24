@@ -1474,6 +1474,13 @@ async function streamModelTurn(
         toolCall: nativeToolCall
       }
     }
+    if (event.type === 'reasoning') {
+      modelCharacters += event.text.length
+      if (showReasoning) {
+        response.progress(`Reasoning: ${event.text}`)
+      }
+      continue
+    }
     if (event.type !== 'text') continue
     const chunk = event.text
     modelCharacters += chunk.length

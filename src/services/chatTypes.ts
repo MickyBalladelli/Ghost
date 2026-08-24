@@ -44,6 +44,7 @@ export interface ChatResponseFormat {
 
 export type ChatStreamEvent =
   | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
   | { type: 'tool-call'; name?: string; arguments?: string; done?: boolean }
 
 export interface ChatVisionImage {

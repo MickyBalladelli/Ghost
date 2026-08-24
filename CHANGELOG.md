@@ -13,6 +13,7 @@ All notable changes to this extension are documented here.
 - Retry an empty OpenRouter stream once with a complete JSON chat-completion request and expose provider error envelopes.
 - Send low reasoning effort to mandatory reasoning models such as `stealth/ox-alpha` so output tokens remain for the final answer.
 - Keep successful file-read progress labels compact while preserving full results in the expandable details.
+- Handle OpenRouter reasoning-only response fields and exclude hidden reasoning from the returned answer.
 
 
 ## 1.2.8 - 2026-08-23

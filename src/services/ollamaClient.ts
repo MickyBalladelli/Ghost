@@ -204,6 +204,7 @@ export async function* streamOllamaJson(body: AsyncIterable<Buffer | string>): A
       yield event.text
       continue
     }
+    if (event.type !== 'tool-call') continue
     if (event.name) toolName = event.name
     if (!toolOpen && toolName) {
       yield `{"tool":${JSON.stringify(toolName)},"arguments":`
@@ -365,7 +366,7 @@ export class OllamaClient {
   async *streamChatCompletion(options: OllamaChatOptions): AsyncGenerator<string> {
     for await (const event of this.streamChatEvents(options)) {
       if (event.type === 'text') yield event.text
-      else if (event.name) yield `{"tool":${JSON.stringify(event.name)},"arguments":${event.arguments?.trim() || '{}'}}`
+      else if (event.type === 'tool-call' && event.name) yield `{"tool":${JSON.stringify(event.name)},"arguments":${event.arguments?.trim() || '{}'}}`
     }
   }
 

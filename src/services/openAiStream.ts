@@ -47,6 +47,17 @@ function contentText(value: unknown): string | undefined {
   return text || undefined
 }
 
+function reasoningText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value || undefined
+  if (!Array.isArray(value)) return undefined
+  const text = value.flatMap(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const part = item as Record<string, unknown>
+    return typeof part.text === 'string' ? [part.text] : typeof part.reasoning === 'string' ? [part.reasoning] : []
+  }).join('')
+  return text || undefined
+}
+
 function argumentText(value: unknown): string | undefined {
   if (typeof value === 'string') return value
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
@@ -76,6 +87,22 @@ function textDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): st
   if (messageText !== undefined) return messageText
   if (typeof message?.refusal === 'string') return message.refusal
   return typeof choice?.text === 'string' ? choice.text : undefined
+}
+
+function reasoningDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): string | undefined {
+  if (mode === 'responses') {
+    return typeof payload.delta === 'string' && /reasoning|analysis/i.test(String(payload.type)) ? payload.delta : undefined
+  }
+  const choice = Array.isArray(payload.choices) && payload.choices[0] && typeof payload.choices[0] === 'object'
+    ? payload.choices[0] as Record<string, unknown>
+    : undefined
+  const delta = nestedRecord(choice, 'delta')
+  const message = nestedRecord(choice, 'message')
+  for (const source of [delta, message, choice]) {
+    const text = reasoningText(source?.reasoning ?? source?.reasoning_content ?? source?.reasoning_details)
+    if (text !== undefined) return text
+  }
+  return undefined
 }
 
 function functionDelta(payload: Record<string, unknown>, mode: OpenAiStreamMode): { name?: string; arguments?: string; done: boolean } | undefined {
@@ -151,6 +178,8 @@ function eventOutput(
   }
   const text = textDelta(payload, mode)
   if (text) outputs.push({ type: 'text', text })
+  const reasoning = reasoningDelta(payload, mode)
+  if (reasoning) outputs.push({ type: 'reasoning', text: reasoning })
   return outputs
 }
 
@@ -202,6 +231,7 @@ export async function* streamOpenAiTokens(body: AsyncIterable<Buffer | string>, 
       yield event.text
       continue
     }
+    if (event.type !== 'tool-call') continue
     if (event.name) {
       toolName = event.name
     }

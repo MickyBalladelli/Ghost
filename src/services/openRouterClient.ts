@@ -21,7 +21,9 @@ export interface OpenRouterRoutingSettings {
 
 interface OpenRouterReasoningSettings {
   effort?: string
+  max_tokens?: number
   enabled?: boolean
+  exclude?: boolean
 }
 
 export interface OpenRouterClientSettings {
@@ -171,12 +173,19 @@ export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: Op
   return { ...body, ...(reasoning ? { reasoning } : {}), provider }
 }
 
-function mandatoryReasoningSettings(metadata: ProviderModelMetadata | undefined): OpenRouterReasoningSettings | undefined {
+function mandatoryReasoningSettings(metadata: ProviderModelMetadata | undefined, maxTokens?: number): OpenRouterReasoningSettings | undefined {
   if (metadata?.reasoning?.mandatory !== true) return undefined
+  if (metadata.reasoning.supportsMaxTokens === true) {
+    const completionTokens = maxTokens === undefined ? 2048 : Math.max(1024, Math.floor(maxTokens))
+    return {
+      max_tokens: Math.max(1024, Math.floor(completionTokens / 2)),
+      exclude: true
+    }
+  }
   const supportedEfforts = metadata.reasoning.supportedEfforts ?? []
-  if (supportedEfforts.includes('low')) return { effort: 'low' }
-  if (metadata.reasoning.defaultEffort) return { effort: metadata.reasoning.defaultEffort }
-  return { enabled: true }
+  if (supportedEfforts.includes('low')) return { effort: 'low', exclude: true }
+  if (metadata.reasoning.defaultEffort) return { effort: metadata.reasoning.defaultEffort, exclude: true }
+  return { enabled: true, exclude: true }
 }
 
 export class OpenRouterClient implements ProviderClient {
@@ -240,14 +249,16 @@ export class OpenRouterClient implements ProviderClient {
   async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
     for await (const event of this.streamChatEvents(options)) {
       if (event.type === 'text') yield event.text
-      else if (event.name) yield `{"tool":${JSON.stringify(event.name)},"arguments":${event.arguments?.trim() || '{}'}}`
+      else if (event.type === 'tool-call' && event.name) yield `{"tool":${JSON.stringify(event.name)},"arguments":${event.arguments?.trim() || '{}'}}`
     }
   }
 
   async *streamChatEvents(options: ChatRequestOptions): AsyncGenerator<ChatStreamEvent> {
     const endpoint = joinEndpoint(this.baseUrl, 'chat/completions')
     const metadata = this.metadata.get(options.model)
-    const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, mandatoryReasoningSettings(metadata))
+    const maxTokens = options.generation?.maxTokens
+    const reasoning = mandatoryReasoningSettings(metadata, maxTokens)
+    const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, reasoning)
     const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
