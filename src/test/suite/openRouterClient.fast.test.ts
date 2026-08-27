@@ -82,6 +82,22 @@ suite('OpenRouter client', () => {
     })
   })
 
+  test('omits unsupported OpenRouter sampling parameters', () => {
+    const body = buildOpenRouterChatBody({
+      model: 'google/gemini-2.5-flash',
+      messages: [],
+      generation: { temperature: 0.3, topP: 0.9, presencePenalty: 0.2 }
+    }, routing, undefined, undefined, {
+      temperature: false,
+      topP: true,
+      presencePenalty: false
+    })
+
+    assert.equal(Object.hasOwn(body, 'temperature'), false)
+    assert.equal(body.top_p, 0.9)
+    assert.equal(Object.hasOwn(body, 'presence_penalty'), false)
+  })
+
   test('sends OpenRouter headers, preserves model ids, and streams tool calls', async () => {
     const requests: Array<{ url: string; headers: Headers; body?: Record<string, unknown> }> = []
     const request: FetchLike = async (url, init = {}) => {
@@ -143,6 +159,47 @@ suite('OpenRouter client', () => {
     assert.equal(chunks.join(''), 'hello')
     const provider = requests[2].provider as Record<string, unknown>
     assert.deepEqual(provider.ignore, ['google-ai-studio'])
+  })
+
+  test('shows the raw upstream provider error when OpenRouter exhausts providers', async () => {
+    const request: FetchLike = async () => new Response(JSON.stringify({
+      error: {
+        code: 404,
+        message: 'All providers have been ignored.',
+        metadata: {
+          provider_name: 'Google AI Studio',
+          raw: JSON.stringify({
+            error: {
+              code: 429,
+              message: 'google/gemma-4-31b-it:free is temporarily rate-limited upstream. Please retry shortly.'
+            }
+          })
+        }
+      }
+    }), { status: 404 })
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    await assert.rejects(
+      async () => {
+        for await (const _event of client.streamChatEvents({ model: 'google/gemma-4-31b-it:free', messages: [] })) {
+          // Consume the response.
+        }
+      },
+      (error: unknown) => {
+        assert(error instanceof Error)
+        assert.match(error.message, /Google AI Studio/)
+        assert.match(error.message, /temporarily rate-limited upstream/)
+        assert.doesNotMatch(error.message, /All providers have been ignored/)
+        assert.doesNotMatch(error.message, /HTTP 404/)
+        return true
+      }
+    )
   })
 
   test('passes reasoning-only responses to the agent continuation recovery', async () => {

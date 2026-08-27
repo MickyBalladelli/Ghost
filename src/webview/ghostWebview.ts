@@ -459,6 +459,7 @@ let availableModelMetadata: ModelMetadata[] = [{
   provider: controls.provider,
   capabilities: ['chat']
 }]
+let modelRefreshPending = false
 let connection: 'online' | 'offline' | 'unknown' = 'unknown'
 let contextData: ContextData = {
   workspaceName: 'Untitled workspace',
@@ -1229,6 +1230,7 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
   if (!metadata) {
     modelCapabilitiesElement.textContent = 'Model capabilities are not available yet. Refresh models to check the provider.'
     modelCapabilitiesElement.title = ''
+    modelCapabilitiesElement.classList.remove('warning')
     return
   }
 
@@ -1246,7 +1248,7 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
     [sampling?.repeatPenalty, 'repeat penalty']
   ]
   const supportedSampling = samplingLabels.filter(([supported]) => supported === true).map(([, label]) => label)
-  const ignoredSettings = samplingLabels.filter(([supported]) => supported === false).map(([, label]) => label)
+  const unsupportedSettings = samplingLabels.filter(([supported]) => supported === false).map(([, label]) => label)
   const features = [
     metadata.supportsStreaming ? 'streaming' : 'no streaming',
     metadata.supportsVision ? 'vision' : 'no vision',
@@ -1260,10 +1262,11 @@ const renderModelCapabilities = (metadata: ModelMetadata | undefined): void => {
     `${formatLimit(metadata.outputLimit)} output`,
     ...features,
     supportedSampling.length > 0 ? `sampling: ${supportedSampling.join(', ')}` : '',
-    ignoredSettings.length > 0 ? `ignored: ${ignoredSettings.join(', ')}` : ''
+    unsupportedSettings.length > 0 ? `⚠ Unsupported settings will be skipped: ${unsupportedSettings.join(', ')}` : ''
   ].filter(Boolean).join(' · ')
   modelCapabilitiesElement.textContent = summary
   modelCapabilitiesElement.title = summary
+  modelCapabilitiesElement.classList.toggle('warning', unsupportedSettings.length > 0)
 }
 
 const renderFirstRunSetup = (): void => {
@@ -3855,9 +3858,11 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
   }
   if (message.type === 'controls-state') {
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
-    const selectedModel = incomingModels.includes(message.settings.chatModel)
+    const preserveSelection = !modelRefreshPending
+    const selectedModel = preserveSelection && incomingModels.includes(message.settings.chatModel)
       ? message.settings.chatModel
-      : incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : message.settings.chatModel)
+      : preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : message.settings.chatModel) : ''
+    modelRefreshPending = false
     controls = {
       ...message.settings,
       chatModel: selectedModel,
@@ -4570,7 +4575,14 @@ for (const element of [
   element.addEventListener('change', updateOpenRouterSettings)
 }
 testProviderElement.addEventListener('click', () => post('test-provider'))
-refreshModelsElement.addEventListener('click', () => post('refresh-models'))
+refreshModelsElement.addEventListener('click', () => {
+  modelRefreshPending = true
+  controls.chatModel = ''
+  availableModels = []
+  availableModelMetadata = []
+  renderControls()
+  post('refresh-models')
+})
 openToolPermissionsElement.addEventListener('click', () => {
   renderPermissionControls()
   setModalVisibility(toolPermissionsModalElement, true)

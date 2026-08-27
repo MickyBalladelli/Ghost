@@ -4,10 +4,14 @@ All notable changes to this extension are documented here.
 
 ## 1.2.26 - 2026-08-24
 
+- Clear the selected model when refreshing the model list.
 - Make native edit tool schemas compatible with Gemini providers by defining object types and properties in `anyOf` branches.
-- Reduce unnecessary OpenRouter model requests and show rate-limit metadata in provider errors.
+- Reduce unnecessary OpenRouter capability lookups and show rate-limit metadata in provider errors.
 - Preserve HTTP status details for streamed provider errors.
 - Skip a rate-limited OpenRouter provider during fallback recovery.
+- Show the raw upstream OpenRouter provider error when routing ends with no available provider.
+- Keep refreshed OpenRouter model IDs for chat requests and explain model-related 404 errors.
+- Warn about unsupported model settings and omit them from OpenRouter requests.
 
 ## 1.2.25 - 2026-08-24
 

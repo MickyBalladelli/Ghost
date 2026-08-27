@@ -164,7 +164,13 @@ export function normalizeOpenRouterProviderOrder(values: readonly unknown[]): st
     .filter(value => value.length > 0 && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value)))]
 }
 
-export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: OpenRouterRoutingSettings, outputLimit?: number, reasoning?: OpenRouterReasoningSettings): Record<string, unknown> {
+export function buildOpenRouterChatBody(
+  options: ChatRequestOptions,
+  routing: OpenRouterRoutingSettings,
+  outputLimit?: number,
+  reasoning?: OpenRouterReasoningSettings,
+  sampling?: ProviderModelMetadata['supportsSampling']
+): Record<string, unknown> {
   const maxTokens = options.generation?.maxTokens
   const boundedMaxTokens = outputLimit === undefined || maxTokens === undefined
     ? maxTokens
@@ -176,6 +182,9 @@ export function buildOpenRouterChatBody(options: ChatRequestOptions, routing: Op
       ...(boundedMaxTokens === undefined ? {} : { maxTokens: boundedMaxTokens })
     }
   }, options.messages, true)
+  if (sampling?.temperature === false) delete body.temperature
+  if (sampling?.topP === false) delete body.top_p
+  if (sampling?.presencePenalty === false) delete body.presence_penalty
   const providerOrder = normalizeOpenRouterProviderOrder(routing.providerOrder)
   const provider = {
     allow_fallbacks: routing.allowFallbacks,
@@ -230,9 +239,6 @@ export class OpenRouterClient implements ProviderClient {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
-    if (this.metadata.size > 0) {
-      return [...this.metadata.keys()]
-    }
     const models = await this.listModelsWithMetadata(signal)
     return models.map(model => model.id)
   }
@@ -275,14 +281,14 @@ export class OpenRouterClient implements ProviderClient {
     const reasoning = isOxAlpha(options.model)
       ? { effort: 'low' }
       : mandatoryReasoningSettings(metadata, maxTokens)
-    const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, reasoning)
+    const body = buildOpenRouterChatBody(options, this.settings.routing, metadata?.outputLimit, reasoning, metadata?.supportsSampling)
     if (isOxAlpha(options.model) && typeof body.max_tokens === 'number') {
       body.max_tokens = Math.max(body.max_tokens, OX_ALPHA_MIN_COMPLETION_TOKENS)
     }
     const response = await this.requestChatCompletion(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
-    }, body, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs)
+    }, body, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs, options.model)
     if (!response.body) throw new Error('OpenRouter returned an empty streaming response')
     let emittedContent = false
     for await (const event of streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')) {
@@ -303,7 +309,7 @@ export class OpenRouterClient implements ProviderClient {
     const fallbackResponse = await this.requestChatCompletion(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-    }, fallbackBody, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs)
+    }, fallbackBody, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs, options.model)
     const events = parseOpenAiCompletionPayload(await fallbackResponse.json())
     for (const event of events) yield event
   }
@@ -313,7 +319,8 @@ export class OpenRouterClient implements ProviderClient {
     init: GhostRequestInit,
     body: Record<string, unknown>,
     signal: AbortSignal | undefined,
-    timeoutMs: number
+    timeoutMs: number,
+    model: string
   ): Promise<Response> {
     let requestBody = body
     const ignoredProviders: string[] = []
@@ -326,6 +333,36 @@ export class OpenRouterClient implements ProviderClient {
       if (response.ok) return response
 
       const error = await providerHttpError(response)
+      if (error.status === 404) {
+        const detail = error.message.replace(/^Provider returned HTTP 404:\s*/i, '')
+        if (error.providerMessage) {
+          const provider = error.providerName ? ` "${error.providerName}"` : ''
+          throw new ProviderHttpError(
+            `OpenRouter provider${provider} failed: ${error.providerMessage}`,
+            error.status,
+            error.retryAfterMs,
+            {
+              errorType: error.errorType,
+              providerCode: error.providerCode,
+              providerName: error.providerName,
+              providerSlug: error.providerSlug,
+              providerMessage: error.providerMessage
+            },
+          )
+        }
+        throw new ProviderHttpError(
+          `OpenRouter could not use model "${model}" (HTTP 404): ${detail}`,
+          error.status,
+          error.retryAfterMs,
+          {
+            errorType: error.errorType,
+            providerCode: error.providerCode,
+            providerName: error.providerName,
+            providerSlug: error.providerSlug,
+            providerMessage: error.providerMessage
+          },
+        )
+      }
       const canSkipProvider = this.settings.routing.allowFallbacks
         && error.status === 429
         && Boolean(error.providerSlug)

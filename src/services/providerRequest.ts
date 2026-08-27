@@ -17,6 +17,7 @@ export interface ProviderHttpErrorDetails {
   providerCode?: string
   providerName?: string
   providerSlug?: string
+  providerMessage?: string
 }
 
 export class ProviderHttpError extends GhostError {
@@ -26,6 +27,7 @@ export class ProviderHttpError extends GhostError {
   readonly providerCode?: string
   readonly providerName?: string
   readonly providerSlug?: string
+  readonly providerMessage?: string
 
   constructor(message: string, status: number, retryAfterMs?: number, details: ProviderHttpErrorDetails = {}) {
     super(message, {
@@ -40,6 +42,7 @@ export class ProviderHttpError extends GhostError {
     this.providerCode = details.providerCode
     this.providerName = details.providerName
     this.providerSlug = details.providerSlug
+    this.providerMessage = details.providerMessage
   }
 }
 
@@ -126,6 +129,30 @@ function providerSlug(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   return slug && slug.length <= 128 ? slug : undefined
+}
+
+function providerRawMessage(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!text) return undefined
+    try {
+      return providerRawMessage(JSON.parse(text)) ?? text
+    } catch {
+      return text
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const nestedError = record.error
+  if (nestedError !== undefined) {
+    const nestedMessage = providerRawMessage(nestedError)
+    if (nestedMessage) return nestedMessage
+  }
+  for (const key of ['message', 'detail', 'error_description']) {
+    const message = record[key]
+    if (typeof message === 'string' && message.trim()) return message.trim()
+  }
+  return undefined
 }
 
 function waitForRetry(delayMs: number, signal: AbortSignal | undefined, clock: GhostClock): Promise<void> {
@@ -221,6 +248,8 @@ export async function providerHttpError(response: Response): Promise<ProviderHtt
   const providerCode = typeof metadata?.provider_code === 'string' ? metadata.provider_code : undefined
   const providerName = typeof metadata?.provider_name === 'string' ? metadata.provider_name : undefined
   const providerSlugValue = providerSlug(metadata?.provider_slug) ?? providerSlug(providerName)
+  const upstreamMessage = providerRawMessage(metadata?.raw)
+  if (upstreamMessage) message = upstreamMessage
   const retryDetail = retryAfterMs === undefined ? undefined : `retry after ${Math.ceil(retryAfterMs / 1000)}s`
   const details = [...metadataDetails, retryDetail].filter((value): value is string => Boolean(value))
   const suffix = message ? `: ${message}` : ''
@@ -229,6 +258,7 @@ export async function providerHttpError(response: Response): Promise<ProviderHtt
     errorType,
     providerCode,
     providerName,
-    providerSlug: providerSlugValue
+    providerSlug: providerSlugValue,
+    providerMessage: upstreamMessage
   })
 }

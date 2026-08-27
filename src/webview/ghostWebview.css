@@ -429,6 +429,10 @@ textarea {
   white-space: normal;
 }
 
+.model-capabilities.warning {
+  color: var(--vscode-editorWarning-foreground, var(--vscode-descriptionForeground));
+}
+
 .connection-indicator {
   align-items: center;
   color: var(--vscode-descriptionForeground);
