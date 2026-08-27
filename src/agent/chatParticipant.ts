@@ -1777,7 +1777,7 @@ export function createChatParticipantHandler(
 
     const toolsEnabled = requestOptions.context?.tools !== false
     const requestToolsEnabled = toolsEnabled && (!conversationalPrompt || keepWorkspaceTools)
-    const providerReportsTools = (modelSettings.provider === 'ollama' || modelSettings.provider === 'openrouter') && typeof resolved.client.modelSupportsTools === 'function'
+    const providerReportsTools = requestToolsEnabled && (modelSettings.provider === 'ollama' || modelSettings.provider === 'openrouter') && typeof resolved.client.modelSupportsTools === 'function'
       ? await resolved.client.modelSupportsTools(modelSettings.model)
       : false
     const nativeToolCalling = shouldUseNativeToolCalling({

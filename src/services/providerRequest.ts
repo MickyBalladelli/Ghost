@@ -12,15 +12,34 @@ export interface ProviderRequestOptions {
   clock?: GhostClock
 }
 
+export interface ProviderHttpErrorDetails {
+  errorType?: string
+  providerCode?: string
+  providerName?: string
+  providerSlug?: string
+}
+
 export class ProviderHttpError extends GhostError {
   readonly status: number
   readonly retryAfterMs?: number
+  readonly errorType?: string
+  readonly providerCode?: string
+  readonly providerName?: string
+  readonly providerSlug?: string
 
-  constructor(message: string, status: number, retryAfterMs?: number) {
-    super(message, { code: 'provider.http', retryable: status === 408 || status === 409 || status === 425 || status === 429 || status >= 500, details: { status, retryAfterMs } })
+  constructor(message: string, status: number, retryAfterMs?: number, details: ProviderHttpErrorDetails = {}) {
+    super(message, {
+      code: 'provider.http',
+      retryable: status === 408 || status === 409 || status === 425 || status === 429 || status >= 500,
+      details: { status, retryAfterMs, ...details }
+    })
     this.name = 'ProviderHttpError'
     this.status = status
     this.retryAfterMs = retryAfterMs
+    this.errorType = details.errorType
+    this.providerCode = details.providerCode
+    this.providerName = details.providerName
+    this.providerSlug = details.providerSlug
   }
 }
 
@@ -103,6 +122,12 @@ function retryDelay(attempt: number, retryAfterMs?: number): number {
   return Math.min(MAX_RETRY_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1))
 }
 
+function providerSlug(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return slug && slug.length <= 128 ? slug : undefined
+}
+
 function waitForRetry(delayMs: number, signal: AbortSignal | undefined, clock: GhostClock): Promise<void> {
   if (delayMs <= 0) {
     return Promise.resolve()
@@ -171,6 +196,7 @@ export async function requestWithRetry(
 
 export async function providerHttpError(response: Response): Promise<ProviderHttpError> {
   let detail = ''
+  let metadata: Record<string, unknown> | undefined
   try {
     detail = (await response.text()).slice(0, 1000)
   } catch {
@@ -178,12 +204,31 @@ export async function providerHttpError(response: Response): Promise<ProviderHtt
   }
   let message = detail
   try {
-    const payload = JSON.parse(detail) as { error?: { message?: string } | string; message?: string }
+    const payload = JSON.parse(detail) as { error?: { message?: string; metadata?: Record<string, unknown> } | string; message?: string }
     const error = typeof payload.error === 'string' ? payload.error : payload.error?.message
+    metadata = typeof payload.error === 'object' && payload.error !== null ? payload.error.metadata : undefined
     message = error || payload.message || detail
   } catch {
     // Keep the bounded response text.
   }
+  const retryAfterMs = parseRetryAfter(response.headers)
+  const metadataDetails = [
+    typeof metadata?.error_type === 'string' ? metadata.error_type : undefined,
+    typeof metadata?.provider_code === 'string' ? `provider code ${metadata.provider_code}` : undefined,
+    typeof metadata?.provider_name === 'string' ? `provider ${metadata.provider_name}` : undefined
+  ].filter((value): value is string => Boolean(value))
+  const errorType = typeof metadata?.error_type === 'string' ? metadata.error_type : undefined
+  const providerCode = typeof metadata?.provider_code === 'string' ? metadata.provider_code : undefined
+  const providerName = typeof metadata?.provider_name === 'string' ? metadata.provider_name : undefined
+  const providerSlugValue = providerSlug(metadata?.provider_slug) ?? providerSlug(providerName)
+  const retryDetail = retryAfterMs === undefined ? undefined : `retry after ${Math.ceil(retryAfterMs / 1000)}s`
+  const details = [...metadataDetails, retryDetail].filter((value): value is string => Boolean(value))
   const suffix = message ? `: ${message}` : ''
-  return new ProviderHttpError(`Provider returned HTTP ${response.status}${suffix}`, response.status, parseRetryAfter(response.headers))
+  const detailSuffix = details.length > 0 ? ` (${details.join('; ')})` : ''
+  return new ProviderHttpError(`Provider returned HTTP ${response.status}${suffix}${detailSuffix}`, response.status, retryAfterMs, {
+    errorType,
+    providerCode,
+    providerName,
+    providerSlug: providerSlugValue
+  })
 }

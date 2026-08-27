@@ -4,39 +4,43 @@ const stringProperty = { type: 'string' }
 const booleanProperty = { type: 'boolean' }
 const integerProperty = (minimum: number) => ({ type: 'integer', minimum })
 
+const editHunkProperties = {
+  startLine: integerProperty(1),
+  endLine: integerProperty(1),
+  replacement: stringProperty,
+  oldText: { type: 'string', description: 'Optional exact text currently replaced by this hunk.' },
+  oldHash: { type: 'string', pattern: '^[a-fA-F0-9]{64}$', description: 'Optional SHA-256 hash of the current text replaced by this hunk.' },
+  beforeContext: { type: 'string', description: 'Optional exact nearby text immediately before the hunk.' },
+  afterContext: { type: 'string', description: 'Optional exact nearby text immediately after the hunk.' }
+}
+
 const editHunkSchema = {
   type: 'object',
-  properties: {
-    startLine: integerProperty(1),
-    endLine: integerProperty(1),
-    replacement: stringProperty,
-    oldText: { type: 'string', description: 'Optional exact text currently replaced by this hunk.' },
-    oldHash: { type: 'string', pattern: '^[a-fA-F0-9]{64}$', description: 'Optional SHA-256 hash of the current text replaced by this hunk.' },
-    beforeContext: { type: 'string', description: 'Optional exact nearby text immediately before the hunk.' },
-    afterContext: { type: 'string', description: 'Optional exact nearby text immediately after the hunk.' }
-  },
+  properties: editHunkProperties,
   required: ['startLine', 'endLine', 'replacement'],
   anyOf: [
-    { required: ['oldText'] },
-    { required: ['oldHash'] },
-    { required: ['beforeContext'] },
-    { required: ['afterContext'] }
+    { type: 'object', properties: { oldText: editHunkProperties.oldText }, required: ['oldText'] },
+    { type: 'object', properties: { oldHash: editHunkProperties.oldHash }, required: ['oldHash'] },
+    { type: 'object', properties: { beforeContext: editHunkProperties.beforeContext }, required: ['beforeContext'] },
+    { type: 'object', properties: { afterContext: editHunkProperties.afterContext }, required: ['afterContext'] }
   ],
   additionalProperties: false
 }
 
+const transactionEditProperties = {
+  path: stringProperty,
+  content: { type: 'string', description: 'Complete replacement content. Use this or hunks, not both.' },
+  expectedContent: { type: 'string', description: 'Optional exact content expected before applying this file edit.' },
+  hunks: { type: 'array', minItems: 1, maxItems: 50, items: editHunkSchema }
+}
+
 const transactionEditSchema = {
   type: 'object',
-  properties: {
-    path: stringProperty,
-    content: { type: 'string', description: 'Complete replacement content. Use this or hunks, not both.' },
-    expectedContent: { type: 'string', description: 'Optional exact content expected before applying this file edit.' },
-    hunks: { type: 'array', minItems: 1, maxItems: 50, items: editHunkSchema }
-  },
+  properties: transactionEditProperties,
   required: ['path'],
   anyOf: [
-    { required: ['content'] },
-    { required: ['hunks'] }
+    { type: 'object', properties: { content: transactionEditProperties.content }, required: ['content'] },
+    { type: 'object', properties: { hunks: transactionEditProperties.hunks }, required: ['hunks'] }
   ],
   additionalProperties: false
 }

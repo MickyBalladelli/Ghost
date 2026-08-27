@@ -188,7 +188,16 @@ function eventOutput(
   const error = nestedRecord(payload, 'error')
   if (error) {
     const message = typeof error.message === 'string' ? error.message : 'OpenAI-compatible provider returned an error response'
-    throw new Error(message)
+    const status = typeof error.code === 'number' || typeof error.code === 'string' ? String(error.code) : ''
+    const metadata = nestedRecord(error, 'metadata')
+    const details = [
+      typeof metadata?.error_type === 'string' ? metadata.error_type : undefined,
+      typeof metadata?.provider_code === 'string' ? `provider code ${metadata.provider_code}` : undefined,
+      typeof metadata?.provider_name === 'string' ? `provider ${metadata.provider_name}` : undefined
+    ].filter((value): value is string => Boolean(value))
+    const prefix = status ? `Provider returned HTTP ${status}: ` : ''
+    const suffix = details.length > 0 ? ` (${details.join('; ')})` : ''
+    throw new Error(`${prefix}${message}${suffix}`)
   }
   const outputs: ChatStreamEvent[] = []
   const functionCall = functionDelta(payload, mode)

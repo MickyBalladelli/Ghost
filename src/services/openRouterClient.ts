@@ -4,7 +4,7 @@ import type { ChatRequestOptions, ChatStreamEvent } from './chatTypes'
 import { buildOpenAiChatBody } from './providerRequestBuilders'
 import { buildOpenAiAuthenticationHeaders, createOpenAiRequestAgent, OpenAiTransportSettings } from './openAiTransport'
 import { joinEndpoint, normalizeEndpoint } from './endpoint'
-import { providerHttpError, streamWithTimeout } from './providerRequest'
+import { ProviderHttpError, providerHttpError, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { GHOST_POLICY } from '../ghostPolicy'
 import type { ProviderClient, ProviderModelMetadata, ModelPricing } from './providerAdapter'
@@ -82,6 +82,7 @@ const supported = (parameters: Set<string>, ...names: string[]): boolean => name
 
 const isOxAlpha = (model: string): boolean => /^(?:openrouter\/)?stealth\/ox-alpha$/i.test(model.trim())
 const OX_ALPHA_MIN_COMPLETION_TOKENS = 8192
+const MAX_PROVIDER_RECOVERY_ATTEMPTS = 3
 
 function normalizeOpenRouterApiKey(value: string | undefined): string {
   return (value ?? '')
@@ -229,6 +230,9 @@ export class OpenRouterClient implements ProviderClient {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
+    if (this.metadata.size > 0) {
+      return [...this.metadata.keys()]
+    }
     const models = await this.listModelsWithMetadata(signal)
     return models.map(model => model.id)
   }
@@ -275,12 +279,10 @@ export class OpenRouterClient implements ProviderClient {
     if (isOxAlpha(options.model) && typeof body.max_tokens === 'number') {
       body.max_tokens = Math.max(body.max_tokens, OX_ALPHA_MIN_COMPLETION_TOKENS)
     }
-    const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
+    const response = await this.requestChatCompletion(endpoint, {
       method: 'POST',
       headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
-      body: JSON.stringify(body)
-    }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
-    if (!response.ok) throw await providerHttpError(response)
+    }, body, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs)
     if (!response.body) throw new Error('OpenRouter returned an empty streaming response')
     let emittedContent = false
     for await (const event of streamOpenAiEvents(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), 'chat-completions')) {
@@ -293,18 +295,61 @@ export class OpenRouterClient implements ProviderClient {
     }
     if (emittedContent) return
 
-    const fallbackResponse = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
+    const fallbackBody = {
+      ...body,
+      stream: false,
+      ...(body.tool_choice === 'required' ? { tool_choice: 'auto' } : {})
+    }
+    const fallbackResponse = await this.requestChatCompletion(endpoint, {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...body,
-          stream: false,
-          ...(body.tool_choice === 'required' ? { tool_choice: 'auto' } : {})
-        })
-    }), { signal: options.signal, timeoutMs: options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs })
-    if (!fallbackResponse.ok) throw await providerHttpError(fallbackResponse)
+    }, fallbackBody, options.signal, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs)
     const events = parseOpenAiCompletionPayload(await fallbackResponse.json())
     for (const event of events) yield event
+  }
+
+  private async requestChatCompletion(
+    endpoint: string,
+    init: GhostRequestInit,
+    body: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+    timeoutMs: number
+  ): Promise<Response> {
+    let requestBody = body
+    const ignoredProviders: string[] = []
+
+    for (let attempt = 1; attempt <= MAX_PROVIDER_RECOVERY_ATTEMPTS; attempt += 1) {
+      const response = await this.transport.requestWithDiagnostics(endpoint, this.requestInit(endpoint, {
+        ...init,
+        body: JSON.stringify(requestBody)
+      }), { signal, timeoutMs })
+      if (response.ok) return response
+
+      const error = await providerHttpError(response)
+      const canSkipProvider = this.settings.routing.allowFallbacks
+        && error.status === 429
+        && Boolean(error.providerSlug)
+        && !ignoredProviders.includes(error.providerSlug as string)
+        && attempt < MAX_PROVIDER_RECOVERY_ATTEMPTS
+      if (!canSkipProvider) throw error
+
+      ignoredProviders.push(error.providerSlug as string)
+      const provider = requestBody.provider
+      if (!provider || typeof provider !== 'object' || Array.isArray(provider)) throw error
+      const providerRecord = provider as Record<string, unknown>
+      const existingIgnored = Array.isArray(providerRecord.ignore)
+        ? providerRecord.ignore.filter((value): value is string => typeof value === 'string')
+        : []
+      requestBody = {
+        ...requestBody,
+        provider: {
+          ...providerRecord,
+          ignore: [...new Set([...existingIgnored, ...ignoredProviders])]
+        }
+      }
+    }
+
+    throw new ProviderHttpError('OpenRouter provider recovery failed', 429)
   }
 
   private requestInit(endpoint: string, init: GhostRequestInit): GhostRequestInit {

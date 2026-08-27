@@ -114,6 +114,37 @@ suite('OpenRouter client', () => {
     assert.equal(requests[1].body?.model, 'meta/llama-3.1-8b-instruct:free')
   })
 
+  test('skips a rate-limited upstream provider during recovery', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const request: FetchLike = async (_url, init = {}) => {
+      if (typeof init.body === 'string') requests.push(JSON.parse(init.body) as Record<string, unknown>)
+      if (requests.length <= 2) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 429,
+            message: 'Provider returned error',
+            metadata: { provider_name: 'Google AI Studio' }
+          }
+        }), { status: 429, headers: { 'Retry-After': '0' } })
+      }
+      return new Response('data: {"choices":[{"delta":{"content":"hello"}}]}\n\ndata: [DONE]\n\n', { status: 200 })
+    }
+    const client = new OpenRouterClient({
+      url: 'https://openrouter.ai/api/v1',
+      referer: '',
+      title: '',
+      routing,
+      transport
+    }, () => 'or-test-key', request)
+
+    const chunks: string[] = []
+    for await (const chunk of client.streamChatCompletion({ model: 'google/gemini-2.5-flash', messages: [] })) chunks.push(chunk)
+
+    assert.equal(chunks.join(''), 'hello')
+    const provider = requests[2].provider as Record<string, unknown>
+    assert.deepEqual(provider.ignore, ['google-ai-studio'])
+  })
+
   test('passes reasoning-only responses to the agent continuation recovery', async () => {
     let completionRequests = 0
     const request: FetchLike = async (_url, init = {}) => {
