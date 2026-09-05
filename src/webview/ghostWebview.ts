@@ -3112,14 +3112,16 @@ const updateComposer = () => {
   composerCountElement.textContent = `${length} chars · ~${composerStore.tokenEstimate(promptElement.value)} tokens`
   composerCountElement.title = composerCountElement.textContent
   const busy = composerStore.isBusy(activeRequest?.status)
-  sendElement.hidden = busy
-  sendElement.disabled = busy || promptElement.value.trim().length === 0
+  sendElement.hidden = false
+  sendElement.disabled = promptElement.value.trim().length === 0
+  sendElement.setAttribute('aria-label', busy ? 'Steer' : 'Send')
+  sendElement.dataset.tooltip = busy ? 'Steer the active request' : 'Send'
   const entries = promptHistory()
   searchPromptHistoryElement.disabled = busy
   previousPromptElement.disabled = busy || entries.length === 0 || historyIndex >= entries.length - 1
   nextPromptElement.disabled = busy || historyIndex < 0
   stopElement.hidden = !busy
-  promptElement.disabled = busy
+  promptElement.disabled = false
   composerElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('busy', busy)
   statusFooterElement.classList.toggle('offline', viewStatus === 'offline')
@@ -3311,7 +3313,7 @@ const applySlashCommand = (prompt: string): string | undefined => {
 
 const submitPrompt = (rawPrompt: string, options: { setupTest?: boolean } = {}) => {
   const prompt = applySlashCommand(rawPrompt.trim())?.trim().slice(0, 20000) ?? ''
-  if (!prompt || activeRequest) {
+  if (!prompt) {
     return
   }
 
@@ -4270,7 +4272,9 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
       activeRequest = undefined
       stopProgressTimer()
     }
-    conversation.activeRequestId = undefined
+    if (conversation.activeRequestId === message.requestId) {
+      conversation.activeRequestId = undefined
+    }
     conversation.updatedAt = Date.now()
     requests.delete(message.requestId)
     updateMessageElement(assistantMessage)

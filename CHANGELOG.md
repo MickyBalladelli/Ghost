@@ -1,7 +1,8 @@
 # Changelog
 
 All notable changes to this extension are documented here.
-## 1.2.37 - 2026-09-05
+## 1.2.39 - 2026-09-05
+- Add Steer: send a new prompt while a request runs; Ghost stops the active request and continues with the new instruction.
 - Fix autoaccept
 - Forward pasted image attachments to the OpenCode server as file parts so vision questions work with the OpenCode provider.
 - Retry an OpenCode request once in the same session when Ghost blocks a terminal file write, steering the model to its edit tools instead of failing.
