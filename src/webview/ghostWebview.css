@@ -77,7 +77,12 @@ button:focus-visible {
 
 .brand-mark {
   display: inline-flex;
+  flex: 0 0 auto;
   height: 48px;
+  max-height: 48px;
+  max-width: 48px;
+  min-height: 48px;
+  min-width: 48px;
   position: relative;
   width: 48px;
 }

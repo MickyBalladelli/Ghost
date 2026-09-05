@@ -1,7 +1,7 @@
 import * as path from 'node:path'
 
 import type { ModelPricing, ProviderClient } from './providerAdapter'
-import type { ChatRequestOptions } from './chatTypes'
+import type { ChatRequestOptions, ChatVisionImage } from './chatTypes'
 import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
 
 export const DEFAULT_OPEN_CODE_URL = 'http://127.0.0.1:4096'
@@ -73,6 +73,7 @@ export interface OpenCodeRunOptions {
   model?: string
   agent?: string
   system?: string
+  images?: ChatVisionImage[]
   timeoutMs?: number
   signal?: AbortSignal
   onText?: (text: string) => void
@@ -88,6 +89,31 @@ export interface OpenCodeRunResult {
   changedFiles: string[]
   toolCount: number
 }
+
+export class OpenCodePolicyRejectionError extends Error {
+  readonly sessionId: string
+  readonly reason: string
+  constructor(message: string, sessionId: string, reason: string) {
+    super(message)
+    this.name = 'OpenCodePolicyRejectionError'
+    this.sessionId = sessionId
+    this.reason = reason
+  }
+}
+
+export class OpenCodeRuleDenialError extends Error {
+  readonly sessionId: string
+  readonly detail: string
+  constructor(message: string, sessionId: string, detail: string) {
+    super(message)
+    this.name = 'OpenCodeRuleDenialError'
+    this.sessionId = sessionId
+    this.detail = detail
+  }
+}
+
+const OPENCODE_RULE_DENIAL_PATTERN = /a rule which prevents you from using this specific tool call/i
+export const OPENCODE_EXTERNAL_DIRECTORY_PATTERN = /external[_-]?directory/i
 
 interface OpenCodeClientOptions {
   username?: string
@@ -244,6 +270,29 @@ function messageText(payload: unknown): string {
     .filter(part => part.type === 'text')
     .map(part => textValue(part.text) ?? '')
     .join('')
+}
+
+function openCodeImageUrl(image: ChatVisionImage): string | undefined {
+  if (image.url) return image.url
+  if (image.path) return image.path
+  if (typeof image.data === 'string') {
+    if (image.data.startsWith('data:')) return image.data
+    return `data:${image.mimeType ?? 'image/png'};base64,${image.data}`
+  }
+  if (image.data instanceof Uint8Array) {
+    return `data:${image.mimeType ?? 'image/png'};base64,${Buffer.from(image.data).toString('base64')}`
+  }
+  return undefined
+}
+
+function openCodeMessageParts(prompt: string, images: ChatVisionImage[] = []): Array<Record<string, unknown>> {
+  const parts: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
+  for (const image of images) {
+    const url = openCodeImageUrl(image)
+    if (!url) continue
+    parts.push({ type: 'file', mime: image.mimeType ?? 'image/png', url })
+  }
+  return parts
 }
 
 function permissionFromEvent(event: OpenCodeEvent): OpenCodePermissionRequest | undefined {
@@ -733,7 +782,11 @@ export class OpenCodeClient implements ProviderClient {
       }
       const toolError = eventToolError(event, permissionRejectionReason)
       if (toolError) {
-        streamError = new Error(toolError)
+        streamError = permissionRejectionReason && toolError.includes(permissionRejectionReason)
+          ? new OpenCodePolicyRejectionError(toolError, session.id, permissionRejectionReason)
+          : OPENCODE_RULE_DENIAL_PATTERN.test(toolError)
+            ? new OpenCodeRuleDenialError(toolError, session.id, toolError)
+            : new Error(toolError)
         markSessionFinished?.('error')
         streamController.abort()
       }
@@ -777,7 +830,7 @@ export class OpenCodeClient implements ProviderClient {
       }
       if (streamError) throw streamError
       const body: Record<string, unknown> = {
-        parts: [{ type: 'text', text: options.prompt }],
+        parts: openCodeMessageParts(options.prompt, options.images),
         ...(options.system?.trim() ? { system: options.system.trim() } : {}),
         ...(options.agent?.trim() ? { agent: options.agent.trim() } : {})
       }

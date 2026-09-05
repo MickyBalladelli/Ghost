@@ -14,7 +14,7 @@ import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
 import { parseFileTransaction } from '../tools/transactionWorkflow'
-import { auditTerminalCommand } from '../tools/terminalAudit'
+import { auditTerminalCommand, TERMINAL_FILE_WRITE_BLOCK_REASON } from '../tools/terminalAudit'
 import { resolveWorkspacePath } from '../tools/workspacePath'
 import { classifyLocalToolResponse, LocalToolCall, LocalToolCallStreamAssembler, parseNativeLocalToolCall } from './toolCallParser'
 import type { LocalToolName } from './toolCallParser'
@@ -38,7 +38,8 @@ import { parseTaskPlanMarker, TASK_PLAN_MARKER } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
-import { OpenCodeClient, OpenCodePermissionDecision, OpenCodePermissionRequest, OpenCodeQuestionRequest, openCodeSessionStorageKey } from '../services/openCodeClient'
+import { OpenCodeClient, OpenCodePermissionDecision, OpenCodePermissionRequest, OpenCodePolicyRejectionError, OpenCodeQuestionRequest, OPENCODE_EXTERNAL_DIRECTORY_PATTERN, OpenCodeRuleDenialError, openCodeSessionStorageKey } from '../services/openCodeClient'
+import type { OpenCodeRunResult } from '../services/openCodeClient'
 import { ensureOpenCodeGlobalConfig } from '../services/openCodeProjectConfig'
 import type { GhostStorage } from '../runtimeDependencies'
 import { isFileEditTool, requiresToolApproval } from '../ui/toolPermissionPolicy'
@@ -1268,6 +1269,24 @@ function parseEmbeddedTaskPlan(value: string): ReturnType<typeof parseTaskPlanMa
   return undefined
 }
 
+function openCodeFileWriteRetry(error: unknown): { sessionId: string; prompt: string } | undefined {
+  if (!(error instanceof OpenCodePolicyRejectionError)) return undefined
+  if (error.reason !== TERMINAL_FILE_WRITE_BLOCK_REASON || !error.sessionId) return undefined
+  return {
+    sessionId: error.sessionId,
+    prompt: `Ghost policy blocked your previous terminal command: ${error.reason} Do not use bash, shell, or terminal commands to create, modify, move, copy, or delete files. Redo that file change with your edit or write tools instead, then continue the task.`
+  }
+}
+
+function openCodeRuleDenialRetry(error: unknown, directory: string): { sessionId: string; prompt: string } | undefined {
+  if (!(error instanceof OpenCodeRuleDenialError)) return undefined
+  if (!error.sessionId || !OPENCODE_EXTERNAL_DIRECTORY_PATTERN.test(error.detail)) return undefined
+  return {
+    sessionId: error.sessionId,
+    prompt: `Your previous tool call was denied by an OpenCode permission rule because it reached outside the workspace directory (${directory}). Redo the task using only files inside ${directory}. Never access paths outside this workspace. If the task genuinely requires files outside the workspace, stop and explain exactly which outside paths you need and why.`
+  }
+}
+
 async function runOpenCodeRequest(
   client: OpenCodeClient,
   contextPrompt: string,
@@ -1319,14 +1338,15 @@ async function runOpenCodeRequest(
           ? 'Complete the requested workspace task and report the actual result. For file changes, use OpenCode edit or write tools. Never use bash, shell, terminal, or command tools to create, modify, move, copy, or delete files. Use bash only for read-only inspection or verification.'
           : 'Answer and inspect only. Do not modify files or run shell commands.'
     ].filter(Boolean).join('\n')
-    const result = await client.run({
-      prompt: redactSensitiveText(contextPrompt),
+    const runOpenCodeSession = (prompt: string, runSessionId: string | undefined): Promise<OpenCodeRunResult> => client.run({
+      prompt,
       directory,
-      sessionId,
+      sessionId: runSessionId,
       title: `Ghost · ${vscode.workspace.name ?? path.basename(directory)}`,
       model,
       agent: settings.openCodeAgent,
       system: redactSensitiveText(system),
+      images: requestOptions.images,
       timeoutMs: Math.max(1, Math.floor(settings.providerRequestTimeoutMinutes)) * 60 * 1000,
       signal: cancellation.signal,
       onText: delta => {
@@ -1344,6 +1364,19 @@ async function runOpenCodeRequest(
       ),
       onQuestion: question => answerOpenCodeQuestion(question, requestOptions.answerProviderQuestion)
     })
+    let result: OpenCodeRunResult
+    try {
+      result = await runOpenCodeSession(redactSensitiveText(contextPrompt), sessionId)
+    } catch (error) {
+      const fileWriteRetry = openCodeFileWriteRetry(error)
+      const ruleDenialRetry = fileWriteRetry ? undefined : openCodeRuleDenialRetry(error, directory)
+      const retry = fileWriteRetry ?? ruleDenialRetry
+      if (!retry || token.isCancellationRequested) throw error
+      response.progress(fileWriteRetry
+        ? 'Ghost blocked a terminal file write; retrying with OpenCode edit tools…'
+        : 'OpenCode hit an outside-workspace rule; retrying inside the workspace…')
+      result = await runOpenCodeSession(retry.prompt, retry.sessionId)
+    }
     if (key && !planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles
       .map(file => path.isAbsolute(file) ? file : path.resolve(directory, file))

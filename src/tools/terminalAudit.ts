@@ -7,6 +7,8 @@ export interface TerminalCommandAudit {
   blockReason?: string
 }
 
+export const TERMINAL_FILE_WRITE_BLOCK_REASON = 'Terminal file writes are disabled. Use Ghost file tools for workspace changes.'
+
 export function auditTerminalCommand(command: string): TerminalCommandAudit {
   const normalized = command.trim().toLowerCase()
   const risks = new Set<TerminalCommandRisk>()
@@ -44,7 +46,7 @@ export function auditTerminalCommand(command: string): TerminalCommandAudit {
     risks: selectedRisks,
     blocked,
     summary,
-    ...(blocked ? { blockReason: 'Terminal file writes are disabled. Use Ghost file tools for workspace changes.' } : {})
+    ...(blocked ? { blockReason: TERMINAL_FILE_WRITE_BLOCK_REASON } : {})
   }
 }
 

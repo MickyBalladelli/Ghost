@@ -156,7 +156,7 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     nativeApi: 'opencode-server',
     supportsTools: false,
     supportsJsonMode: false,
-    supportsVision: false,
+    supportsVision: true,
     supportsFIM: false,
     supportsStreaming: true,
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }

@@ -14,7 +14,7 @@ export interface RunTerminalCommandInput {
 }
 
 export type { TerminalCommandAudit, TerminalCommandRisk } from './terminalAudit'
-export { auditTerminalCommand, formatTerminalAudit } from './terminalAudit'
+export { auditTerminalCommand, formatTerminalAudit, TERMINAL_FILE_WRITE_BLOCK_REASON } from './terminalAudit'
 
 const { commandTimeoutMs: COMMAND_TIMEOUT_MS, maxOutputCharacters: MAX_OUTPUT_CHARS, outputRingChunkCharacters: OUTPUT_RING_CHUNK_CHARS, processTerminationGraceMs: PROCESS_TERMINATION_GRACE_MS } = GHOST_POLICY.terminal
 
