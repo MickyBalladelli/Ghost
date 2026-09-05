@@ -1,6 +1,6 @@
 import * as assert from 'node:assert'
 
-import { isSupportedOpenCodeVersion, OpenCodeClient, OpenCodePolicyRejectionError, OpenCodeRuleDenialError } from '../../services/openCodeClient'
+import { isSupportedOpenCodeVersion, OpenCodeClient, OpenCodeEditConflictError, OpenCodePolicyRejectionError, OpenCodeRuleDenialError } from '../../services/openCodeClient'
 import { TERMINAL_FILE_WRITE_BLOCK_REASON } from '../../tools/terminalAudit'
 
 const jsonResponse = (value: unknown, status = 200): Response => new Response(JSON.stringify(value), {
@@ -243,6 +243,70 @@ suite('OpenCode client', () => {
       assert.ok(error instanceof OpenCodeRuleDenialError)
       assert.equal(error.sessionId, 'ses_denied')
       assert.match(error.message, /OpenCode bash failed: The user has specified a rule/)
+    }
+  })
+
+  test('throws a typed edit-conflict error when oldString matches multiple places', async () => {
+    const client = new OpenCodeClient('http://127.0.0.1:4096', {
+      fetchImpl: async (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname === '/global/health') return jsonResponse({ healthy: true, version: '1.18.4' })
+        if (url.pathname === '/config') return jsonResponse({ permission: { edit: 'ask', bash: 'ask', external_directory: 'deny' } })
+        if (url.pathname === '/session' && init?.method === 'POST') return jsonResponse({ id: 'ses_edit', directory: '/workspace' })
+        if (url.pathname === '/event') {
+          return new Response(
+            'data: {"type":"message.part.updated","properties":{"sessionID":"ses_edit","part":{"type":"tool","tool":"edit","state":{"status":"error","error":{"message":"Found multiple matches for oldString. Provide more surrounding context to make the match unique."}}}}}\n\n'
+          )
+        }
+        if (url.pathname === '/session/ses_edit/message') {
+          await new Promise(resolve => setTimeout(resolve, 20))
+          return jsonResponse({ parts: [] })
+        }
+        if (url.pathname === '/session/ses_edit/diff') return jsonResponse([])
+        return jsonResponse({}, 404)
+      }
+    })
+
+    try {
+      await client.run({ prompt: 'Update handler', directory: '/workspace' })
+      assert.fail('expected the run to fail after the ambiguous edit')
+    } catch (error) {
+      assert.ok(error instanceof OpenCodeEditConflictError)
+      assert.equal(error.sessionId, 'ses_edit')
+      assert.equal(error.kind, 'ambiguous')
+      assert.match(error.message, /OpenCode edit failed: Found multiple matches for oldString/)
+    }
+  })
+
+  test('throws a not-found edit-conflict error when oldString matches nothing exactly', async () => {
+    const client = new OpenCodeClient('http://127.0.0.1:4096', {
+      fetchImpl: async (input, init) => {
+        const url = new URL(String(input))
+        if (url.pathname === '/global/health') return jsonResponse({ healthy: true, version: '1.18.4' })
+        if (url.pathname === '/config') return jsonResponse({ permission: { edit: 'ask', bash: 'ask', external_directory: 'deny' } })
+        if (url.pathname === '/session' && init?.method === 'POST') return jsonResponse({ id: 'ses_exact', directory: '/workspace' })
+        if (url.pathname === '/event') {
+          return new Response(
+            'data: {"type":"message.part.updated","properties":{"sessionID":"ses_exact","part":{"type":"tool","tool":"edit","state":{"status":"error","error":{"message":"Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings."}}}}}\n\n'
+          )
+        }
+        if (url.pathname === '/session/ses_exact/message') {
+          await new Promise(resolve => setTimeout(resolve, 20))
+          return jsonResponse({ parts: [] })
+        }
+        if (url.pathname === '/session/ses_exact/diff') return jsonResponse([])
+        return jsonResponse({}, 404)
+      }
+    })
+
+    try {
+      await client.run({ prompt: 'Update handler', directory: '/workspace' })
+      assert.fail('expected the run to fail after the unmatched edit')
+    } catch (error) {
+      assert.ok(error instanceof OpenCodeEditConflictError)
+      assert.equal(error.sessionId, 'ses_exact')
+      assert.equal(error.kind, 'not-found')
+      assert.match(error.message, /OpenCode edit failed: Could not find oldString/)
     }
   })
 })

@@ -2082,10 +2082,6 @@ textarea {
   color: var(--vscode-textLink-foreground);
 }
 
-.message.error .message-body {
-  color: var(--vscode-errorForeground);
-}
-
 .composer {
   border: 1px solid var(--ghost-border);
   border-radius: 4px;

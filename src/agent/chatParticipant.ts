@@ -38,7 +38,7 @@ import { parseTaskPlanMarker, TASK_PLAN_MARKER } from './taskPlan'
 import { describesWorkspaceChange, isLikelyConversationalPrompt } from './workspaceChangeIntent'
 import { buildAgentSystemPrompt, JSON_TOOL_PARSE_FAILURE_REMINDER } from './systemPrompt'
 import { shouldUseNativeToolCalling } from './nativeToolSupport'
-import { OpenCodeClient, OpenCodePermissionDecision, OpenCodePermissionRequest, OpenCodePolicyRejectionError, OpenCodeQuestionRequest, OPENCODE_EXTERNAL_DIRECTORY_PATTERN, OpenCodeRuleDenialError, openCodeSessionStorageKey } from '../services/openCodeClient'
+import { OpenCodeClient, OpenCodeEditConflictError, OpenCodePermissionDecision, OpenCodePermissionRequest, OpenCodePolicyRejectionError, OpenCodeQuestionRequest, OPENCODE_EXTERNAL_DIRECTORY_PATTERN, OpenCodeRuleDenialError, openCodeSessionStorageKey } from '../services/openCodeClient'
 import type { OpenCodeRunResult } from '../services/openCodeClient'
 import { ensureOpenCodeGlobalConfig } from '../services/openCodeProjectConfig'
 import type { GhostStorage } from '../runtimeDependencies'
@@ -1269,38 +1269,55 @@ function parseEmbeddedTaskPlan(value: string): ReturnType<typeof parseTaskPlanMa
   return undefined
 }
 
-const MAX_OPENCODE_POLICY_RETRIES = 2
+const MAX_OPENCODE_STEERING_RETRIES = 2
 
-interface OpenCodePolicyRetry {
+interface OpenCodeSteeringRetry {
   sessionId: string
   prompt: string
   progress: string
 }
 
-function openCodeFileWriteRetry(error: unknown, attempt: number): OpenCodePolicyRetry | undefined {
+function openCodeFileWriteRetry(error: unknown, attempt: number): OpenCodeSteeringRetry | undefined {
   if (!(error instanceof OpenCodePolicyRejectionError)) return undefined
   if (error.reason !== TERMINAL_FILE_WRITE_BLOCK_REASON || !error.sessionId) return undefined
   if (attempt === 0) {
     return {
       sessionId: error.sessionId,
-      progress: 'Ghost blocked a terminal file write; retrying with OpenCode edit tools…',
+      progress: 'Steering: Ghost blocked a terminal file write; retrying with OpenCode edit tools…',
       prompt: `Ghost policy blocked your previous terminal command: ${error.reason} Do not use bash, shell, or terminal commands to create, modify, move, copy, or delete files. Redo that file change with your edit or write tools instead, then continue the task.`
     }
   }
   return {
     sessionId: error.sessionId,
-    progress: 'Ghost blocked another terminal file write; giving the model a final steer…',
+    progress: 'Steering: Ghost blocked another terminal file write; giving the model a final steer…',
     prompt: `Ghost policy blocked your terminal command again, and it will block EVERY bash, shell, or terminal file-writing command. Stop using the terminal for file changes entirely. Right now, call your edit or write tool to make the file change, then continue the task. If you cannot complete the change with edit tools, stop and explain what is blocking you.`
   }
 }
 
-function openCodeRuleDenialRetry(error: unknown, directory: string): OpenCodePolicyRetry | undefined {
+function openCodeRuleDenialRetry(error: unknown, directory: string): OpenCodeSteeringRetry | undefined {
   if (!(error instanceof OpenCodeRuleDenialError)) return undefined
   if (!error.sessionId || !OPENCODE_EXTERNAL_DIRECTORY_PATTERN.test(error.detail)) return undefined
   return {
     sessionId: error.sessionId,
-    progress: 'OpenCode hit an outside-workspace rule; retrying inside the workspace…',
+    progress: 'Steering: OpenCode hit an outside-workspace rule; retrying inside the workspace…',
     prompt: `Your previous tool call was denied by an OpenCode permission rule because it reached outside the workspace directory (${directory}). Redo the task using only files inside ${directory}. Never access paths outside this workspace. If the task genuinely requires files outside the workspace, stop and explain exactly which outside paths you need and why.`
+  }
+}
+
+function openCodeEditConflictRetry(error: unknown): OpenCodeSteeringRetry | undefined {
+  if (!(error instanceof OpenCodeEditConflictError)) return undefined
+  if (!error.sessionId) return undefined
+  if (error.kind === 'not-found') {
+    return {
+      sessionId: error.sessionId,
+      progress: 'Steering: OpenCode edit missed its match; retrying with exact file text…',
+      prompt: `Your edit failed because its oldString was not found in the file: it must match exactly, including whitespace, indentation, and line endings. Read the exact region of the file first, then retry the edit by copying the oldString character-for-character from what you read, without converting line endings. Do not retype it from memory.`
+    }
+  }
+  return {
+    sessionId: error.sessionId,
+    progress: 'Steering: OpenCode edit matched more than one place; retrying with more context…',
+    prompt: `Your edit failed because its oldString matches multiple places in the file: "Found multiple matches for oldString. Provide more surrounding context to make the match unique." Read the exact region of the file first, then retry the edit with a longer oldString that includes enough surrounding lines to match exactly one place. Use the exact text from the file; do not guess.`
   }
 }
 
@@ -1384,15 +1401,17 @@ async function runOpenCodeRequest(
     let result: OpenCodeRunResult | undefined
     let pendingPrompt = redactSensitiveText(contextPrompt)
     let pendingSessionId = sessionId
-    let policyRetries = 0
+    let steeringRetries = 0
     while (!result) {
       try {
         result = await runOpenCodeSession(pendingPrompt, pendingSessionId)
       } catch (error) {
-        if (policyRetries >= MAX_OPENCODE_POLICY_RETRIES || token.isCancellationRequested) throw error
-        const retry = openCodeFileWriteRetry(error, policyRetries) ?? openCodeRuleDenialRetry(error, directory)
+        if (steeringRetries >= MAX_OPENCODE_STEERING_RETRIES || token.isCancellationRequested) throw error
+        const retry = openCodeFileWriteRetry(error, steeringRetries)
+          ?? openCodeRuleDenialRetry(error, directory)
+          ?? openCodeEditConflictRetry(error)
         if (!retry) throw error
-        policyRetries += 1
+        steeringRetries += 1
         response.progress(retry.progress)
         pendingPrompt = retry.prompt
         pendingSessionId = retry.sessionId

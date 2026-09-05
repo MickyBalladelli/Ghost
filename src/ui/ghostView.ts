@@ -407,6 +407,13 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         })
       },
       progress: (progress: string) => {
+        if (progress.startsWith('Steering: ')) {
+          this.postStreamEvent(requestId, request, {
+            type: 'warning',
+            message: progress
+          })
+          return
+        }
         if (progress.startsWith('Running ')) {
           pendingTool = request.pendingTool ?? {
             toolCallId: this.createToolCallId(),

@@ -112,8 +112,25 @@ export class OpenCodeRuleDenialError extends Error {
   }
 }
 
+export type OpenCodeEditConflictKind = 'ambiguous' | 'not-found'
+
+export class OpenCodeEditConflictError extends Error {
+  readonly sessionId: string
+  readonly detail: string
+  readonly kind: OpenCodeEditConflictKind
+  constructor(message: string, sessionId: string, detail: string, kind: OpenCodeEditConflictKind) {
+    super(message)
+    this.name = 'OpenCodeEditConflictError'
+    this.sessionId = sessionId
+    this.detail = detail
+    this.kind = kind
+  }
+}
+
 const OPENCODE_RULE_DENIAL_PATTERN = /a rule which prevents you from using this specific tool call/i
 export const OPENCODE_EXTERNAL_DIRECTORY_PATTERN = /external[_-]?directory/i
+const OPENCODE_AMBIGUOUS_EDIT_PATTERN = /multiple matches for oldstring/i
+const OPENCODE_EDIT_NOT_FOUND_PATTERN = /could not find oldstring/i
 
 interface OpenCodeClientOptions {
   username?: string
@@ -782,11 +799,18 @@ export class OpenCodeClient implements ProviderClient {
       }
       const toolError = eventToolError(event, permissionRejectionReason)
       if (toolError) {
+        const editConflictKind = OPENCODE_AMBIGUOUS_EDIT_PATTERN.test(toolError)
+          ? 'ambiguous' as const
+          : OPENCODE_EDIT_NOT_FOUND_PATTERN.test(toolError)
+            ? 'not-found' as const
+            : undefined
         streamError = permissionRejectionReason && toolError.includes(permissionRejectionReason)
           ? new OpenCodePolicyRejectionError(toolError, session.id, permissionRejectionReason)
           : OPENCODE_RULE_DENIAL_PATTERN.test(toolError)
             ? new OpenCodeRuleDenialError(toolError, session.id, toolError)
-            : new Error(toolError)
+            : editConflictKind
+              ? new OpenCodeEditConflictError(toolError, session.id, toolError, editConflictKind)
+              : new Error(toolError)
         markSessionFinished?.('error')
         streamController.abort()
       }

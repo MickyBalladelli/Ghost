@@ -9,6 +9,8 @@ All notable changes to this extension are documented here.
 - Retry an OpenCode request once in the same session when the server denies an outside-workspace call, steering the model back inside the workspace instead of failing.
 - Steer the model up to twice when Ghost blocks terminal file writes, with a firmer final prompt, before failing the request.
 - Compress consecutive OpenCode tool status lines into a one-line per-tool summary; the full per-transition list stays behind Show verbose tool details.
+- Retry an OpenCode request in the same session when an edit fails because oldString was not found, steering the model to re-read the file and copy the match character-for-character.
+- Show steering retries as yellow warnings instead of plain progress, and keep error red confined to the failing part instead of the whole message.
 
 ## 1.2.32 - 2026-09-05
 
