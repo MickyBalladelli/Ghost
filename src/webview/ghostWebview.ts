@@ -3076,9 +3076,9 @@ const updateComposer = () => {
   const length = promptElement.value.length
   composerCountElement.textContent = `${length} chars · ~${composerStore.tokenEstimate(promptElement.value)} tokens`
   promptElement.rows = promptRows
-  promptElement.style.height = 'auto'
-  promptElement.style.height = `${Math.min(promptElement.scrollHeight, composerHeight)}px`
-  promptElement.style.overflowY = promptElement.scrollHeight > composerHeight ? 'auto' : 'hidden'
+  promptElement.style.height = ''
+  promptElement.style.maxHeight = `${composerHeight}px`
+  promptElement.style.overflowY = 'auto'
   const busy = composerStore.isBusy(activeRequest?.status)
   sendElement.hidden = busy
   sendElement.disabled = busy || promptElement.value.trim().length === 0

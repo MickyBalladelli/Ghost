@@ -2,6 +2,10 @@
 
 All notable changes to this extension are documented here.
 
+## 1.2.27 - 2026-09-05
+
+- Keep the Ghost prompt area at a fixed size while typing, scrolling internally instead of resizing.
+
 ## 1.2.26 - 2026-08-24
 
 - Avoid treating same-shaped edits with different source text as repeated model edits.
