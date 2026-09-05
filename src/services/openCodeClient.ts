@@ -3,6 +3,7 @@ import * as path from 'node:path'
 import type { ModelPricing, ProviderClient } from './providerAdapter'
 import type { ChatRequestOptions, ChatVisionImage } from './chatTypes'
 import { redactSensitiveText, redactSensitiveValue } from '../privacy/redact'
+import { ProviderTimeoutError } from './providerRequest'
 
 export const DEFAULT_OPEN_CODE_URL = 'http://127.0.0.1:4096'
 export const MINIMUM_OPEN_CODE_VERSION = '1.0.0'
@@ -782,18 +783,34 @@ export class OpenCodeClient implements ProviderClient {
     const streamConnected = new Promise<void>(resolve => { markStreamConnected = resolve })
     const sessionFinished = new Promise<'idle' | 'error'>(resolve => { markSessionFinished = resolve })
     let sawSessionActivity = false
+    let idleTimeout: ReturnType<typeof setTimeout> | undefined
+    const resetIdleTimeout = (): void => {
+      if (idleTimeout !== undefined) clearTimeout(idleTimeout)
+      const timeoutMs = Math.max(1, options.timeoutMs ?? 15 * 60 * 1000)
+      idleTimeout = setTimeout(() => {
+        streamError = new ProviderTimeoutError(timeoutMs)
+        markSessionFinished?.('error')
+        streamController.abort()
+        messageController.abort()
+      }, timeoutMs)
+    }
     const streamPromise = this.consumeEvents(session.id, options.directory, streamController.signal, async event => {
       const status = eventSessionStatus(event)
-      if (status === 'busy' || status === 'retry') sawSessionActivity = true
+      if (status === 'busy' || status === 'retry') {
+        sawSessionActivity = true
+        resetIdleTimeout()
+      }
       const delta = eventTextDelta(event)
       if (delta) {
         sawSessionActivity = true
+        resetIdleTimeout()
         streamedText += delta
         options.onText?.(delta)
       }
       const progress = eventToolProgress(event)
       if (progress) {
         sawSessionActivity = true
+        resetIdleTimeout()
         toolCount += 1
         options.onProgress?.(progress)
       }
@@ -815,11 +832,15 @@ export class OpenCodeClient implements ProviderClient {
         streamController.abort()
       }
       const eventFiles = changedFilesFromEvent(event)
-      if (eventFiles.length > 0) sawSessionActivity = true
+      if (eventFiles.length > 0) {
+        sawSessionActivity = true
+        resetIdleTimeout()
+      }
       for (const file of eventFiles) changedFiles.add(file)
       const permission = permissionFromEvent(event)
       if (permission) {
         sawSessionActivity = true
+        resetIdleTimeout()
         await handlePermission(permission)
       }
       const question = questionFromEvent(event)
@@ -832,7 +853,10 @@ export class OpenCodeClient implements ProviderClient {
         markSessionFinished?.('error')
       }
       if (!streamError && status === 'idle' && sawSessionActivity) markSessionFinished?.('idle')
-    }, () => markStreamConnected?.()).catch(error => {
+    }, () => {
+      markStreamConnected?.()
+      resetIdleTimeout()
+    }).catch(error => {
       markStreamConnected?.()
       if (!streamController.signal.aborted) {
         streamError = error instanceof Error ? error : new Error(errorText(error))
@@ -922,6 +946,7 @@ export class OpenCodeClient implements ProviderClient {
       await this.abortSession(session.id, options.directory)
       throw error
     } finally {
+      if (idleTimeout !== undefined) clearTimeout(idleTimeout)
       messageController.abort()
       streamController.abort()
       options.signal?.removeEventListener('abort', onAbort)

@@ -83,6 +83,12 @@ const supported = (parameters: Set<string>, ...names: string[]): boolean => name
 const isOxAlpha = (model: string): boolean => /^(?:openrouter\/)?stealth\/ox-alpha$/i.test(model.trim())
 const OX_ALPHA_MIN_COMPLETION_TOKENS = 8192
 const MAX_PROVIDER_RECOVERY_ATTEMPTS = 3
+const OPENROUTER_PRIVACY_SETTINGS_URL = 'https://openrouter.ai/settings/privacy'
+
+function explainIgnoredProviders(detail: string): string {
+  if (!/all providers have been ignored/i.test(detail)) return detail
+  return `${detail} OpenRouter account privacy settings are ignoring every provider for this model. Allow at least one provider at ${OPENROUTER_PRIVACY_SETTINGS_URL}, or choose a model with an allowed provider.`
+}
 
 function normalizeOpenRouterApiKey(value: string | undefined): string {
   return (value ?? '')
@@ -334,7 +340,7 @@ export class OpenRouterClient implements ProviderClient {
 
       const error = await providerHttpError(response)
       if (error.status === 404) {
-        const detail = error.message.replace(/^Provider returned HTTP 404:\s*/i, '')
+        const detail = explainIgnoredProviders(error.message.replace(/^Provider returned HTTP 404:\s*/i, ''))
         if (error.providerMessage) {
           const provider = error.providerName ? ` "${error.providerName}"` : ''
           throw new ProviderHttpError(

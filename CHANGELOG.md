@@ -1,7 +1,10 @@
 # Changelog
 
 All notable changes to this extension are documented here.
-## 1.2.39 - 2026-09-05
+## 1.2.41 - 2026-09-05
+- Ignore OpenCode heartbeat events when detecting an idle stream.
+- Stop stalled OpenCode event streams after the configured provider timeout and report a provider timeout instead of leaving Ghost thinking indefinitely.
+- Explain OpenRouter provider privacy errors when an account ignores every provider for a model.
 - Add Steer: send a new prompt while a request runs; Ghost stops the active request and continues with the new instruction.
 - Fix autoaccept
 - Forward pasted image attachments to the OpenCode server as file parts so vision questions work with the OpenCode provider.
