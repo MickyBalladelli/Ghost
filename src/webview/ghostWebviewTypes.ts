@@ -108,6 +108,7 @@ export interface ControlSettings {
   logLevel: LogLevel
   networkAccess: 'local' | 'external'
   chatModel: string
+  modelPerProvider: Partial<Record<GhostProvider, string>>
   autocompleteModel: string
   modelProfile: string
   modelAliases: Record<string, string>

@@ -85,6 +85,7 @@ export interface GhostSettings {
   openCodeSessionReuse: 'workspace' | 'new'
   chatModel: string
   autocompleteModel: string
+  modelPerProvider: Partial<Record<GhostProvider, string>>
   providerRequestTimeoutMinutes: number
   inlineCompletionTimeoutMs: number
   requestTimeLimitMinutes: number
@@ -163,6 +164,7 @@ export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   openCodeSessionReuse: 'workspace',
   chatModel: 'qwen2.5-coder:7b',
   autocompleteModel: 'qwen2.5-coder:1.5b',
+  modelPerProvider: {},
   providerRequestTimeoutMinutes: 15,
   inlineCompletionTimeoutMs: 30000,
   requestTimeLimitMinutes: 180,
@@ -303,6 +305,7 @@ export class GhostConfig {
       openCodeSessionReuse: configuration.get('openCodeSessionReuse', DEFAULT_GHOST_SETTINGS.openCodeSessionReuse),
       chatModel: configuration.get('chatModel', DEFAULT_GHOST_SETTINGS.chatModel),
       autocompleteModel: configuration.get('autocompleteModel', DEFAULT_GHOST_SETTINGS.autocompleteModel),
+      modelPerProvider: configuration.get('modelPerProvider', DEFAULT_GHOST_SETTINGS.modelPerProvider),
       providerRequestTimeoutMinutes: configuration.get('providerRequestTimeoutMinutes', DEFAULT_GHOST_SETTINGS.providerRequestTimeoutMinutes),
       inlineCompletionTimeoutMs: configuration.get('inlineCompletionTimeoutMs', DEFAULT_GHOST_SETTINGS.inlineCompletionTimeoutMs),
       requestTimeLimitMinutes: configuration.get('requestTimeLimitMinutes', DEFAULT_GHOST_SETTINGS.requestTimeLimitMinutes),

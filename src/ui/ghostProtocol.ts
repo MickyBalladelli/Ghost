@@ -118,6 +118,7 @@ export interface GhostWebviewRequestOptions {
 export interface GhostSettingsUpdate {
   provider?: GhostProvider
   chatModel?: string
+  modelPerProvider?: Partial<Record<GhostProvider, string>>
   autocompleteModel?: string
   modelProfile?: string
   modelAliases?: GhostModelAliases
@@ -278,6 +279,7 @@ export type GhostExtensionMessage =
       settings: {
         provider: GhostProvider
         chatModel: string
+        modelPerProvider?: Partial<Record<GhostProvider, string>>
         autocompleteModel: string
         modelProfile: string
         modelAliases: GhostModelAliases
@@ -459,6 +461,11 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     (value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter'].includes(value.provider as string)) &&
     (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm', 'custom'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
+    (value.modelPerProvider === undefined || (
+      isRecord(value.modelPerProvider) &&
+      Object.entries(value.modelPerProvider).length <= 5 &&
+      Object.entries(value.modelPerProvider).every(([key, item]) => ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter'].includes(key) && isBoundedString(item, 512))
+    )) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
     (value.modelProfile === undefined || isBoundedString(value.modelProfile, 256)) &&
     (value.modelAliases === undefined || (

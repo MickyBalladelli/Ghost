@@ -433,6 +433,7 @@ let controls: ControlSettings = {
   logLevel: 'off',
   networkAccess: 'local',
   chatModel: 'qwen2.5-coder:7b',
+  modelPerProvider: {},
   autocompleteModel: 'qwen2.5-coder:1.5b',
   modelProfile: '',
   modelAliases: {},
@@ -460,6 +461,21 @@ let availableModelMetadata: ModelMetadata[] = [{
   capabilities: ['chat']
 }]
 let modelRefreshPending = false
+const knownModelProviders: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter']
+const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result: Partial<Record<GhostProvider, string>> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (knownModelProviders.includes(key as GhostProvider) && typeof item === 'string' && item.trim()) {
+      result[key as GhostProvider] = item.trim().slice(0, 512)
+    }
+  }
+  return result
+}
+const rememberChatModelForProvider = (provider: GhostProvider, model: string): void => {
+  if (!model.trim()) return
+  controls.modelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), [provider]: model.trim().slice(0, 512) }
+}
 let connection: 'online' | 'offline' | 'unknown' = 'unknown'
 let contextData: ContextData = {
   workspaceName: 'Untitled workspace',
@@ -534,6 +550,10 @@ const restorePersistedState = (persisted: GhostState): void => {
   if (typeof preferences.workspaceRoot === 'string') uiPreferences.workspaceRoot = preferences.workspaceRoot
   if (typeof preferences.firstRunSetupComplete === 'boolean') uiPreferences.firstRunSetupComplete = preferences.firstRunSetupComplete
   if (typeof preferences.workspaceOnly === 'boolean') uiPreferences.workspaceOnly = preferences.workspaceOnly
+  const restoredModelMap = sanitizeModelPerProvider((preferences as Record<string, unknown>).modelPerProvider)
+  if (Object.keys(restoredModelMap).length > 0) {
+    controls.modelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), ...restoredModelMap }
+  }
   trimPromptHistories()
   applyUiPreferences()
 }
@@ -700,6 +720,7 @@ const workspaceRootElement = document.getElementById('workspace-root') as HTMLSe
 const systemInstructionsElement = document.getElementById('system-instructions') as HTMLTextAreaElement
 const resetSystemInstructionsElement = document.getElementById('reset-system-instructions') as HTMLButtonElement
 const settingsModalElement = document.getElementById('settings-modal') as HTMLElement
+const helpModalElement = document.getElementById('help-modal') as HTMLElement
 const privacyModalElement = document.getElementById('privacy-modal') as HTMLElement
 const contextModalElement = document.getElementById('context-modal') as HTMLElement
 const historyModalElement = document.getElementById('history-modal') as HTMLElement
@@ -874,6 +895,7 @@ const createPersistedState = () => compactPersistedState({
     terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
     terminalEnvironmentAsklist: controls.terminalEnvironmentAsklist,
     chatModel: controls.chatModel,
+    modelPerProvider: sanitizeModelPerProvider(controls.modelPerProvider),
     autocompleteModel: controls.autocompleteModel,
     maxContextTokens: controls.maxContextTokens,
     temperature: controls.temperature,
@@ -1033,6 +1055,7 @@ const sendSettingsUpdate = () => {
         terminalEnvironmentAllowlist: controls.terminalEnvironmentAllowlist,
         terminalEnvironmentAsklist: controls.terminalEnvironmentAsklist,
         chatModel: controls.chatModel,
+        modelPerProvider: sanitizeModelPerProvider(controls.modelPerProvider),
         autocompleteModel: controls.autocompleteModel,
         modelProfile: controls.modelProfile,
         modelAliases: controls.modelAliases,
@@ -1483,6 +1506,7 @@ const renderModelOptions = (show = true): void => {
 const selectChatModel = (model: string): void => {
   if (!modelChoices().includes(model)) return
   controls.chatModel = model
+  rememberChatModelForProvider(controls.provider, model)
   modelElement.value = model
   closeModelOptions()
   renderControls()
@@ -3864,12 +3888,19 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
   if (message.type === 'controls-state') {
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
     const preserveSelection = !modelRefreshPending
-    const selectedModel = preserveSelection && incomingModels.includes(message.settings.chatModel)
-      ? message.settings.chatModel
-      : preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : message.settings.chatModel) : ''
+    const mergedModelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), ...sanitizeModelPerProvider(message.settings.modelPerProvider) }
+    const rememberedModel = mergedModelPerProvider[message.settings.provider]
+    const effectiveChatModel = preserveSelection && rememberedModel ? rememberedModel : message.settings.chatModel
+    const selectedModel = preserveSelection && incomingModels.includes(effectiveChatModel)
+      ? effectiveChatModel
+      : preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : effectiveChatModel) : ''
+    if (selectedModel) {
+      mergedModelPerProvider[message.settings.provider] = selectedModel
+    }
     modelRefreshPending = false
     controls = {
       ...message.settings,
+      modelPerProvider: mergedModelPerProvider,
       chatModel: selectedModel,
       fileEditApproval: message.settings.autoAcceptScope,
       autoAcceptScope: message.settings.autoAcceptScope
@@ -4452,8 +4483,14 @@ mentionMenuElement.addEventListener('click', event => {
 })
 
 providerElement.addEventListener('change', () => {
-  controls.provider = providerElement.value as GhostProvider
-  if (controls.provider === 'opencode') {
+  const previousProvider = controls.provider
+  rememberChatModelForProvider(previousProvider, controls.chatModel)
+  const nextProvider = providerElement.value as GhostProvider
+  controls.provider = nextProvider
+  const remembered = sanitizeModelPerProvider(controls.modelPerProvider)[nextProvider]
+  if (remembered) {
+    controls.chatModel = remembered
+  } else if (nextProvider === 'opencode') {
     controls.chatModel = ''
   }
   availableModels = []
@@ -4838,6 +4875,15 @@ document.getElementById('settings')?.addEventListener('click', () => {
   renderSettingsSearch()
   setModalVisibility(settingsModalElement, true)
 })
+document.getElementById('help')?.addEventListener('click', () => {
+  setModalVisibility(helpModalElement, true)
+})
+helpModalElement.addEventListener('click', event => {
+  const copyButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-copy-text]')
+  if (copyButton) {
+    void copyText(decodeURIComponent(copyButton.dataset.copyText ?? ''))
+  }
+})
 settingsSearchElement.addEventListener('input', renderSettingsSearch)
 document.getElementById('privacy-page')?.addEventListener('click', () => {
   setModalVisibility(settingsModalElement, false)
@@ -5143,7 +5189,7 @@ promptElement.addEventListener('blur', () => {
   saveState()
 })
 promptElement.addEventListener('keydown', event => {
-  if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'n') {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
     event.preventDefault()
     startNewConversation()
     return

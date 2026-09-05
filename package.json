@@ -2,7 +2,7 @@
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
   "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, OpenRouter, and OpenCode",
-  "version": "1.2.29",
+  "version": "1.2.32",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -372,6 +372,15 @@
           "type": "string",
           "default": "qwen2.5-coder:7b",
           "description": "Model used for chat requests."
+        },
+        "ghost.modelPerProvider": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Last used chat model per provider, restored automatically when switching providers."
         },
         "ghost.autocompleteModel": {
           "type": "string",

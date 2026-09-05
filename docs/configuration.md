@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.2.25`.
+Package version: `1.2.31`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -98,6 +98,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openrouterTlsCaFile` | string | empty | Optional PEM CA file for OpenRouter HTTPS. |
 | `ghost.openrouterTlsCertFile` | string | empty | Optional OpenRouter HTTPS client certificate PEM file. |
 | `ghost.openrouterTlsKeyFile` | string | empty | Optional OpenRouter HTTPS client private key PEM file. |
+| `ghost.modelPerProvider` | object | `{}` | Last used chat model per provider, restored automatically when switching providers. |
 | `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. Applies to the Ghost view, @local chat, and registered Language Model tools. |
 | `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. Applies to the Ghost view, @local chat, and registered Language Model tools. |
 | `ghost.toolDenylist` | array | `[]` | Tools Ghost must never use. Deny rules override allow and ask rules, including Copilot and other clients that invoke Ghost's registered Language Model tools. |

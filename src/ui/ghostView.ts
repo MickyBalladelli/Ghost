@@ -95,6 +95,19 @@ interface PendingProviderQuestionApproval {
   resolve: (answers: string[][] | undefined) => void
 }
 
+const GHOST_MODEL_PROVIDERS: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter']
+
+const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result: Partial<Record<GhostProvider, string>> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if ((GHOST_MODEL_PROVIDERS as string[]).includes(key) && typeof item === 'string' && item.trim()) {
+      result[key as GhostProvider] = item.trim().slice(0, 512)
+    }
+  }
+  return result
+}
+
 export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewType = 'ghost.chat'
 
@@ -2365,6 +2378,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       settings: {
         provider: settings.provider,
         chatModel: settings.chatModel,
+        modelPerProvider: sanitizeModelPerProvider(settings.modelPerProvider),
         autocompleteModel: settings.autocompleteModel,
         modelProfile: settings.modelProfile,
         modelAliases: settings.modelAliases,
@@ -2614,6 +2628,24 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
       await ghostConfig.update('chatModel', update.chatModel.trim(), target)
+    }
+    if (update.modelPerProvider !== undefined || (typeof update.chatModel === 'string' && update.chatModel.trim())) {
+      const mergedModelPerProvider: Partial<Record<GhostProvider, string>> = { ...sanitizeModelPerProvider(settingsBeforeUpdate.modelPerProvider) }
+      if (update.modelPerProvider && typeof update.modelPerProvider === 'object') {
+        for (const [key, item] of Object.entries(update.modelPerProvider)) {
+          if ((GHOST_MODEL_PROVIDERS as string[]).includes(key) && typeof item === 'string' && item.trim()) {
+            mergedModelPerProvider[key as GhostProvider] = item.trim().slice(0, 512)
+          }
+        }
+      }
+      if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
+        const effectiveProvider = update.provider ?? settingsBeforeUpdate.provider
+        mergedModelPerProvider[effectiveProvider] = update.chatModel.trim().slice(0, 512)
+      }
+      await ghostConfig.update('modelPerProvider', mergedModelPerProvider, target)
+      if (target === vscode.ConfigurationTarget.Global) {
+        await ghostConfig.clear('modelPerProvider', vscode.ConfigurationTarget.Workspace)
+      }
     }
     if (typeof update.autocompleteModel === 'string' && update.autocompleteModel.trim()) {
       await ghostConfig.update('autocompleteModel', update.autocompleteModel.trim(), target)

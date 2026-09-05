@@ -225,7 +225,7 @@ button:focus-visible {
   border-bottom: 1px solid var(--ghost-border);
   display: grid;
   gap: 6px;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto auto minmax(0, 1fr);
   padding: 7px 10px;
 }
 
@@ -517,6 +517,27 @@ textarea {
   height: 18px;
   overflow: visible;
   width: 18px;
+}
+
+.help-button {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 32px;
+  font-size: 16px;
+  font-weight: 700;
+  grid-column: 3;
+  grid-row: 1;
+  height: 32px;
+  justify-content: center;
+  line-height: 1;
+  min-height: 32px;
+  min-width: 32px;
+  overflow: visible;
+  padding: 5px;
+}
+
+.help-button[hidden] {
+  display: none;
 }
 
 .model-profile-effective {
@@ -989,6 +1010,54 @@ textarea {
   line-height: 1.4;
 }
 
+.help-section {
+  margin-top: 12px;
+}
+
+.help-section h3 {
+  font-size: 0.9em;
+  margin: 0 0 8px;
+}
+
+.help-command-row {
+  align-items: center;
+  border-bottom: 1px solid var(--ghost-border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.help-command-row:last-child {
+  border-bottom: 0;
+}
+
+.help-command-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.help-command-text strong {
+  color: var(--vscode-foreground);
+  font-size: 0.85em;
+}
+
+.help-command-text small {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8em;
+}
+
+.help-command-text code {
+  background: var(--vscode-textCodeBlock-background);
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+  padding: 3px 6px;
+}
+
 .edit-tool-arguments {
   box-sizing: border-box;
   font-family: var(--vscode-editor-font-family, monospace);
@@ -1237,7 +1306,8 @@ textarea {
 .icon-button[data-tooltip],
 .composer-action-button[data-tooltip],
 .provider-area-toggle[data-tooltip],
-.settings-button[data-tooltip] {
+.settings-button[data-tooltip],
+.help-button[data-tooltip] {
   overflow: visible;
   position: relative;
 }
@@ -1245,7 +1315,8 @@ textarea {
 .icon-button[data-tooltip]::after,
 .composer-action-button[data-tooltip]::after,
 .provider-area-toggle[data-tooltip]::after,
-.settings-button[data-tooltip]::after {
+.settings-button[data-tooltip]::after,
+.help-button[data-tooltip]::after {
   background: var(--vscode-quickInput-background, var(--ghost-surface));
   border: 1px solid var(--ghost-border);
   border-radius: 4px;
@@ -1281,7 +1352,8 @@ textarea {
   transform: translate(0, 3px);
 }
 
-.composer-footer .composer-action-button[data-tooltip]::after {
+.composer-footer .composer-action-button[data-tooltip]::after,
+.composer-footer .icon-button[data-tooltip]::after {
   bottom: calc(100% + 7px);
   top: auto;
 }
@@ -1299,7 +1371,9 @@ textarea {
 .provider-area-toggle[data-tooltip]:hover::after,
 .provider-area-toggle[data-tooltip]:focus-visible::after,
 .settings-button[data-tooltip]:hover::after,
-.settings-button[data-tooltip]:focus-visible::after {
+.settings-button[data-tooltip]:focus-visible::after,
+.help-button[data-tooltip]:hover::after,
+.help-button[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
   transition-delay: 300ms;
@@ -2087,16 +2161,29 @@ textarea {
   overflow: visible;
 }
 
-.composer-hint {
-  flex: 1 1 180px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.composer-hint-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 4px;
+}
+
+.composer-hint-button .ui-icon {
+  height: 16px;
+  width: 16px;
+}
+
+.composer-hint-button[data-tooltip]::after {
+  transition-delay: 0ms;
+}
+
+.composer-hint-button[data-tooltip]:hover::after,
+.composer-hint-button[data-tooltip]:focus-visible::after {
+  transition-delay: 0ms;
 }
 
 .composer-count {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   font-variant-numeric: tabular-nums;
   max-width: 100%;
   min-width: 0;
@@ -2288,12 +2375,6 @@ textarea {
 :focus-visible {
   outline: 2px solid var(--vscode-focusBorder, var(--ghost-accent));
   outline-offset: 2px;
-}
-
-@media (max-width: 500px) {
-  .composer-hint {
-    display: none;
-  }
 }
 
 @media (max-width: 360px) {

@@ -2,13 +2,18 @@
 
 All notable changes to this extension are documented here.
 
-## 1.2.29 - 2026-09-05
+## 1.2.32 - 2026-09-05
 
 - Keep the Ghost prompt area at a fixed size while typing, scrolling internally instead of resizing.
 - Stop touching prompt geometry on every keystroke; size is applied only at layout and settings changes.
 - Keep the composer footer on one line with ellipsis so the live character/token count never changes its height.
 - Enlarge the header `+` / import / export buttons and the composer prompt-history buttons for easier clicking.
 - Replace slow native `title` tooltips on icon buttons with fast custom `data-tooltip` popups that appear in ~450ms (under 1s).
+- Replace the composer footer hint text with an info icon whose tooltip shows the send/history shortcuts instantly.
+- Start a new conversation with Cmd+N (Mac) or Ctrl+N (Linux/Windows) while the prompt area has focus.
+- Add a Help button next to Settings with OpenCode install and `opencode serve` instructions, each with a copy button.
+- Show the Help button only when the OpenCode provider is selected.
+- Remember the last used model per provider and restore it when switching back (new `ghost.modelPerProvider` setting).
 
 ## 1.2.26 - 2026-08-24
 
