@@ -1269,20 +1269,37 @@ function parseEmbeddedTaskPlan(value: string): ReturnType<typeof parseTaskPlanMa
   return undefined
 }
 
-function openCodeFileWriteRetry(error: unknown): { sessionId: string; prompt: string } | undefined {
+const MAX_OPENCODE_POLICY_RETRIES = 2
+
+interface OpenCodePolicyRetry {
+  sessionId: string
+  prompt: string
+  progress: string
+}
+
+function openCodeFileWriteRetry(error: unknown, attempt: number): OpenCodePolicyRetry | undefined {
   if (!(error instanceof OpenCodePolicyRejectionError)) return undefined
   if (error.reason !== TERMINAL_FILE_WRITE_BLOCK_REASON || !error.sessionId) return undefined
+  if (attempt === 0) {
+    return {
+      sessionId: error.sessionId,
+      progress: 'Ghost blocked a terminal file write; retrying with OpenCode edit tools…',
+      prompt: `Ghost policy blocked your previous terminal command: ${error.reason} Do not use bash, shell, or terminal commands to create, modify, move, copy, or delete files. Redo that file change with your edit or write tools instead, then continue the task.`
+    }
+  }
   return {
     sessionId: error.sessionId,
-    prompt: `Ghost policy blocked your previous terminal command: ${error.reason} Do not use bash, shell, or terminal commands to create, modify, move, copy, or delete files. Redo that file change with your edit or write tools instead, then continue the task.`
+    progress: 'Ghost blocked another terminal file write; giving the model a final steer…',
+    prompt: `Ghost policy blocked your terminal command again, and it will block EVERY bash, shell, or terminal file-writing command. Stop using the terminal for file changes entirely. Right now, call your edit or write tool to make the file change, then continue the task. If you cannot complete the change with edit tools, stop and explain what is blocking you.`
   }
 }
 
-function openCodeRuleDenialRetry(error: unknown, directory: string): { sessionId: string; prompt: string } | undefined {
+function openCodeRuleDenialRetry(error: unknown, directory: string): OpenCodePolicyRetry | undefined {
   if (!(error instanceof OpenCodeRuleDenialError)) return undefined
   if (!error.sessionId || !OPENCODE_EXTERNAL_DIRECTORY_PATTERN.test(error.detail)) return undefined
   return {
     sessionId: error.sessionId,
+    progress: 'OpenCode hit an outside-workspace rule; retrying inside the workspace…',
     prompt: `Your previous tool call was denied by an OpenCode permission rule because it reached outside the workspace directory (${directory}). Redo the task using only files inside ${directory}. Never access paths outside this workspace. If the task genuinely requires files outside the workspace, stop and explain exactly which outside paths you need and why.`
   }
 }
@@ -1364,18 +1381,22 @@ async function runOpenCodeRequest(
       ),
       onQuestion: question => answerOpenCodeQuestion(question, requestOptions.answerProviderQuestion)
     })
-    let result: OpenCodeRunResult
-    try {
-      result = await runOpenCodeSession(redactSensitiveText(contextPrompt), sessionId)
-    } catch (error) {
-      const fileWriteRetry = openCodeFileWriteRetry(error)
-      const ruleDenialRetry = fileWriteRetry ? undefined : openCodeRuleDenialRetry(error, directory)
-      const retry = fileWriteRetry ?? ruleDenialRetry
-      if (!retry || token.isCancellationRequested) throw error
-      response.progress(fileWriteRetry
-        ? 'Ghost blocked a terminal file write; retrying with OpenCode edit tools…'
-        : 'OpenCode hit an outside-workspace rule; retrying inside the workspace…')
-      result = await runOpenCodeSession(retry.prompt, retry.sessionId)
+    let result: OpenCodeRunResult | undefined
+    let pendingPrompt = redactSensitiveText(contextPrompt)
+    let pendingSessionId = sessionId
+    let policyRetries = 0
+    while (!result) {
+      try {
+        result = await runOpenCodeSession(pendingPrompt, pendingSessionId)
+      } catch (error) {
+        if (policyRetries >= MAX_OPENCODE_POLICY_RETRIES || token.isCancellationRequested) throw error
+        const retry = openCodeFileWriteRetry(error, policyRetries) ?? openCodeRuleDenialRetry(error, directory)
+        if (!retry) throw error
+        policyRetries += 1
+        response.progress(retry.progress)
+        pendingPrompt = retry.prompt
+        pendingSessionId = retry.sessionId
+      }
     }
     if (key && !planningMode && settings.openCodeSessionReuse === 'workspace') await storage?.update(key, result.sessionId)
     const outsideFiles = result.changedFiles
