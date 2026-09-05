@@ -1352,7 +1352,8 @@ const updateProviderAreaVisibility = (): void => {
   providerAreaToggleElement.setAttribute('aria-expanded', String(providerAreaExpanded))
   const label = `${providerAreaExpanded ? 'Collapse' : 'Expand'} provider controls`
   providerAreaToggleElement.setAttribute('aria-label', label)
-  providerAreaToggleElement.title = label
+  providerAreaToggleElement.dataset.tooltip = label
+  providerAreaToggleElement.removeAttribute('title')
 }
 
 providerAreaToggleElement.addEventListener('click', () => {

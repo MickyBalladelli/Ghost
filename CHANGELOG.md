@@ -2,11 +2,13 @@
 
 All notable changes to this extension are documented here.
 
-## 1.2.28 - 2026-09-05
+## 1.2.29 - 2026-09-05
 
 - Keep the Ghost prompt area at a fixed size while typing, scrolling internally instead of resizing.
 - Stop touching prompt geometry on every keystroke; size is applied only at layout and settings changes.
 - Keep the composer footer on one line with ellipsis so the live character/token count never changes its height.
+- Enlarge the header `+` / import / export buttons and the composer prompt-history buttons for easier clicking.
+- Replace slow native `title` tooltips on icon buttons with fast custom `data-tooltip` popups that appear in ~450ms (under 1s).
 
 ## 1.2.26 - 2026-08-24
 

@@ -658,7 +658,8 @@ textarea {
   position: absolute;
   text-align: left;
   transform: translateY(3px);
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms;
+  transition-delay: 300ms;
   visibility: hidden;
   white-space: pre-line;
   width: max-content;
@@ -669,6 +670,7 @@ textarea {
 .context-chip[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translateY(0);
+  transition-delay: 300ms;
   visibility: visible;
 }
 
@@ -1200,7 +1202,7 @@ textarea {
 }
 
 .header-actions {
-  gap: 4px;
+  gap: 6px;
 }
 
 .icon-button {
@@ -1213,6 +1215,102 @@ textarea {
   min-height: 26px;
   min-width: 26px;
   padding: 2px 6px;
+}
+
+.header-actions .icon-button {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 4px 6px;
+}
+
+.header-actions .icon-button .ui-icon {
+  height: 20px;
+  width: 20px;
+}
+
+/* Fast custom tooltips for icon buttons (appear in ~450ms, well under 1s).
+   Native `title` tooltips are slow and OS-controlled, so icon buttons use
+   `data-tooltip` with this CSS instead. */
+.icon-button[data-tooltip],
+.composer-action-button[data-tooltip],
+.provider-area-toggle[data-tooltip],
+.settings-button[data-tooltip] {
+  overflow: visible;
+  position: relative;
+}
+
+.icon-button[data-tooltip]::after,
+.composer-action-button[data-tooltip]::after,
+.provider-area-toggle[data-tooltip]::after,
+.settings-button[data-tooltip]::after {
+  background: var(--vscode-quickInput-background, var(--ghost-surface));
+  border: 1px solid var(--ghost-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.25));
+  color: var(--vscode-foreground);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 400;
+  left: 50%;
+  max-width: 240px;
+  opacity: 0;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  transform: translate(-50%, 3px);
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms;
+  transition-delay: 300ms;
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.header-actions .icon-button[data-tooltip]::after {
+  bottom: auto;
+  top: calc(100% + 7px);
+}
+
+.header-actions .icon-button:last-child[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translate(0, 3px);
+}
+
+.composer-footer .composer-action-button[data-tooltip]::after {
+  bottom: calc(100% + 7px);
+  top: auto;
+}
+
+.prompt-history-actions .composer-action-button:last-child[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translate(0, 3px);
+}
+
+.icon-button[data-tooltip]:hover::after,
+.icon-button[data-tooltip]:focus-visible::after,
+.composer-action-button[data-tooltip]:hover::after,
+.composer-action-button[data-tooltip]:focus-visible::after,
+.provider-area-toggle[data-tooltip]:hover::after,
+.provider-area-toggle[data-tooltip]:focus-visible::after,
+.settings-button[data-tooltip]:hover::after,
+.settings-button[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 300ms;
+  visibility: visible;
+}
+
+.header-actions .icon-button:last-child[data-tooltip]:hover::after,
+.header-actions .icon-button:last-child[data-tooltip]:focus-visible::after,
+.prompt-history-actions .composer-action-button:last-child[data-tooltip]:hover::after,
+.prompt-history-actions .composer-action-button:last-child[data-tooltip]:focus-visible::after {
+  transform: translate(0, 0);
 }
 
 .icon-button:hover,
@@ -1986,12 +2084,15 @@ textarea {
   flex-wrap: nowrap;
   margin-top: 6px;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .composer-hint {
   flex: 1 1 180px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-count {
@@ -2021,7 +2122,7 @@ textarea {
 .prompt-history-actions {
   display: flex;
   flex: 0 0 auto;
-  gap: 2px;
+  gap: 4px;
 }
 
 .prompt-history-button {
@@ -2032,17 +2133,17 @@ textarea {
 .composer-action-button {
   align-items: center;
   display: inline-flex;
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 34px;
+  height: 34px;
   justify-content: center;
-  min-height: 30px;
-  min-width: 30px;
-  padding: 5px;
+  min-height: 34px;
+  min-width: 34px;
+  padding: 6px;
 }
 
 .composer-action-button .ui-icon {
-  height: 16px;
-  width: 16px;
+  height: 20px;
+  width: 20px;
 }
 
 .stop-button {
