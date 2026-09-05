@@ -1963,6 +1963,7 @@ textarea {
   border: 0;
   color: var(--vscode-input-foreground);
   display: block;
+  field-sizing: fixed;
   font: inherit;
   line-height: 1.45;
   max-height: 180px;
@@ -1982,9 +1983,10 @@ textarea {
   color: var(--vscode-descriptionForeground);
   gap: 8px;
   font-size: 0.78em;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-top: 6px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .composer-hint {
@@ -1993,7 +1995,10 @@ textarea {
 }
 
 .composer-count {
+  flex: 0 1 auto;
+  font-variant-numeric: tabular-nums;
   max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2001,7 +2006,9 @@ textarea {
 
 .persistence-status {
   color: var(--vscode-descriptionForeground);
+  flex: 0 1 auto;
   max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

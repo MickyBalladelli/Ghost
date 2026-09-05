@@ -1559,7 +1559,7 @@ const renderControls = () => {
     : contextData.folders[0] ?? ''
   uiPreferences.workspaceRoot = workspaceRootElement.value
   workspaceRootElement.disabled = contextData.folders.length <= 1
-  promptElement.rows = promptRows
+  layoutComposer()
   providerEndpointElement.value = providerEndpoint()
   openCodeUsernameElement.value = controls.openCodeUsername
   openCodeAgentElement.value = controls.openCodeAgent
@@ -3072,13 +3072,17 @@ const scrollMessages = (force: boolean) => {
   })
 }
 
-const updateComposer = () => {
-  const length = promptElement.value.length
-  composerCountElement.textContent = `${length} chars · ~${composerStore.tokenEstimate(promptElement.value)} tokens`
+const layoutComposer = () => {
   promptElement.rows = promptRows
   promptElement.style.height = ''
   promptElement.style.maxHeight = `${composerHeight}px`
   promptElement.style.overflowY = 'auto'
+}
+
+const updateComposer = () => {
+  const length = promptElement.value.length
+  composerCountElement.textContent = `${length} chars · ~${composerStore.tokenEstimate(promptElement.value)} tokens`
+  composerCountElement.title = composerCountElement.textContent
   const busy = composerStore.isBusy(activeRequest?.status)
   sendElement.hidden = busy
   sendElement.disabled = busy || promptElement.value.trim().length === 0
@@ -4733,6 +4737,7 @@ openCodeFileEditApprovalElement.addEventListener('change', () => {
 })
 composerHeightElement.addEventListener('input', () => {
   composerHeight = Math.min(320, Math.max(80, Number(composerHeightElement.value) || 180))
+  layoutComposer()
   updateComposer()
   saveState()
 })
@@ -4740,6 +4745,7 @@ promptRowsElement.addEventListener('input', () => {
   promptRows = settingsStore.clampPromptRows(Number(promptRowsElement.value) || 3)
   promptRowsElement.value = String(promptRows)
   uiPreferences.promptRows = promptRows
+  layoutComposer()
   updateComposer()
   saveState()
 })
