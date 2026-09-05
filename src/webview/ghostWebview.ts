@@ -2898,7 +2898,10 @@ const renderMessagePartSummary = (message: ChatMessage): string => {
   let progressParts: Array<Extract<MessagePart, { kind: 'progress' | 'reasoning' }>> = []
   const flushProgress = (): void => {
     if (uiPreferences.showThinkingDetails && progressParts.length > 0) {
-      renderedParts.push(`<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${progressParts.length})</summary>${progressParts.map(part => `<div class="message-progress">${escapeHtml(part.text)}</div>`).join('')}</details>`)
+      const lines = uiPreferences.showToolProgress
+        ? progressParts.map(part => part.text)
+        : toolTimeline.summarizeOpenCodeToolProgress(progressParts.map(part => part.text))
+      renderedParts.push(`<details class="progress-details"${message.status === 'streaming' ? ' open' : ''}><summary>Progress (${lines.length})</summary>${lines.map(text => `<div class="message-progress">${escapeHtml(text)}</div>`).join('')}</details>`)
     }
     progressParts = []
   }

@@ -24,6 +24,7 @@ export const FAST_TEST_FILES = [
   'terminalAudit.test.js',
   'toolCallParser.test.js',
   'toolFailurePolicy.test.js',
+  'toolTimeline.test.js',
   'webviewAccessibility.test.js',
   'workspaceChangeIntent.test.js'
 ] as const
