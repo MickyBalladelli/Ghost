@@ -39,4 +39,15 @@ suite('Edit loop guard', () => {
       undefined
     )
   })
+
+  test('allows the same replacement shape when the old text differs', () => {
+    const state: FileEditState = {
+      signatures: new Set(),
+      history: [editRecord('first', 1, 1, 'version 1', 'version 2')]
+    }
+    assert.equal(
+      getEditLoopReason(state, editRecord('second', 1, 1, 'version 0', 'version 2')),
+      undefined
+    )
+  })
 })

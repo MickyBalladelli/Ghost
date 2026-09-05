@@ -344,14 +344,9 @@ function getEditRecord(call: LocalToolCall): EditRecord | undefined {
 
   try {
     const edit = parseGhostEdit(call.arguments)
-    const shape = edit.hunks.map(hunk => ({
-      startLine: hunk.startLine,
-      endLine: hunk.endLine,
-      replacement: hunk.replacement
-    }))
     return {
       signature: `${call.name}:${path}:${JSON.stringify(argumentsWithCanonicalPath(call, path))}`,
-      fingerprint: `${call.name}:${path}:${JSON.stringify(shape)}`,
+      fingerprint: `${call.name}:${path}:${JSON.stringify(edit.hunks)}`,
       ranges: edit.hunks.map(hunk => ({ startLine: hunk.startLine, endLine: hunk.endLine })),
       hunks: edit.hunks
     }

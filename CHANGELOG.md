@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 
 ## 1.2.26 - 2026-08-24
 
+- Avoid treating same-shaped edits with different source text as repeated model edits.
 - Clear the selected model when refreshing the model list.
 - Make native edit tool schemas compatible with Gemini providers by defining object types and properties in `anyOf` branches.
 - Reduce unnecessary OpenRouter capability lookups and show rate-limit metadata in provider errors.
