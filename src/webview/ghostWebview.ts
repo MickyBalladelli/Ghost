@@ -3917,16 +3917,17 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
     const preserveSelection = !modelRefreshPending
     const mergedModelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), ...sanitizeModelPerProvider(message.settings.modelPerProvider) }
-    const rememberedModel = mergedModelPerProvider[message.settings.provider]
-    const legacyChatModel = Object.keys(mergedModelPerProvider).length === 0 ? message.settings.chatModel : ''
+    const providerOnline = message.connection === 'online'
+    const rememberedModel = providerOnline ? mergedModelPerProvider[message.settings.provider] : ''
+    const legacyChatModel = providerOnline && Object.keys(mergedModelPerProvider).length === 0 ? message.settings.chatModel : ''
     const effectiveChatModel = preserveSelection && rememberedModel
       ? rememberedModel
       : providerChangePending
         ? ''
         : legacyChatModel
-    const selectedModel = preserveSelection && incomingModels.includes(effectiveChatModel)
+    const selectedModel = providerOnline && preserveSelection && incomingModels.includes(effectiveChatModel)
       ? effectiveChatModel
-      : preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : effectiveChatModel) : ''
+      : providerOnline && preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : effectiveChatModel) : ''
     if (selectedModel) {
       mergedModelPerProvider[message.settings.provider] = selectedModel
     }

@@ -2373,7 +2373,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     let models = providerStatus.models
-    if (models.length === 0 && settings.provider !== 'opencode' && settings.provider !== 'gemini') {
+    if (connection === 'offline') {
+      models = []
+    } else if (models.length === 0 && settings.provider !== 'opencode' && settings.provider !== 'gemini') {
       const fallbackModel = settings.modelPerProvider[settings.provider] ?? settings.chatModel
       models = fallbackModel ? [fallbackModel] : []
     }
