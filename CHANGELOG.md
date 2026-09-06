@@ -4,6 +4,7 @@ All notable changes to this extension are documented here.
 ## 1.2.43 - 2026-09-05
 - Add Google Gemini as a direct provider with secure API-key storage, model discovery, streaming, JSON mode, and image attachments.
 - Preserve each provider's selected model while switching providers or refreshing models.
+- Make the Settings Save button save settings immediately and close the dialog.
 
 ## 1.2.41 - 2026-09-05
 - Ignore OpenCode heartbeat events when detecting an idle stream.

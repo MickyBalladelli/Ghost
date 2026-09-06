@@ -759,6 +759,7 @@ const promptHistoryListElement = document.getElementById('prompt-history-list') 
 const presetSelectElement = document.getElementById('preset-select') as HTMLSelectElement
 const presetNameElement = document.getElementById('preset-name') as HTMLInputElement
 const presetPromptElement = document.getElementById('preset-prompt') as HTMLTextAreaElement
+const saveSettingsElement = document.getElementById('save-settings') as HTMLButtonElement
 const savePresetElement = document.getElementById('save-preset') as HTMLButtonElement
 
 const setPresetSaveState = (saved: boolean): void => {
@@ -1006,11 +1007,11 @@ const lifecycleEnvelope = (prefix: string) => ({
   conversationId: state.activeConversationId
 })
 
-const sendSettingsUpdate = () => {
+const sendSettingsUpdate = (immediate = false) => {
   if (settingsTimer !== undefined) {
     window.clearTimeout(settingsTimer)
   }
-  settingsTimer = window.setTimeout(() => {
+  const postSettingsUpdate = () => {
     settingsTimer = undefined
     post('update-settings', {
       ...lifecycleEnvelope('settings'),
@@ -1083,7 +1084,12 @@ const sendSettingsUpdate = () => {
         logLevel: controls.logLevel
       }
     })
-  }, 200)
+  }
+  if (immediate) {
+    postSettingsUpdate()
+    return
+  }
+  settingsTimer = window.setTimeout(postSettingsUpdate, 200)
 }
 
 const queueModelRefresh = () => {
@@ -3901,17 +3907,23 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'controls-state') {
+    const providerChangePending = pendingProviderChange === message.settings.provider
     if (pendingProviderChange && message.settings.provider !== pendingProviderChange) {
       return
     }
-    if (pendingProviderChange === message.settings.provider) {
+    if (providerChangePending) {
       pendingProviderChange = undefined
     }
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
     const preserveSelection = !modelRefreshPending
     const mergedModelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), ...sanitizeModelPerProvider(message.settings.modelPerProvider) }
     const rememberedModel = mergedModelPerProvider[message.settings.provider]
-    const effectiveChatModel = preserveSelection && rememberedModel ? rememberedModel : message.settings.chatModel
+    const legacyChatModel = Object.keys(mergedModelPerProvider).length === 0 ? message.settings.chatModel : ''
+    const effectiveChatModel = preserveSelection && rememberedModel
+      ? rememberedModel
+      : providerChangePending
+        ? ''
+        : legacyChatModel
     const selectedModel = preserveSelection && incomingModels.includes(effectiveChatModel)
       ? effectiveChatModel
       : preserveSelection ? incomingModels[0] ?? (message.settings.provider === 'opencode' ? '' : effectiveChatModel) : ''
@@ -4747,7 +4759,7 @@ temperatureElement.addEventListener('input', () => {
   controls.temperature = Number(temperatureElement.value)
   temperatureValueElement.value = controls.temperature.toFixed(1)
 })
-temperatureElement.addEventListener('change', sendSettingsUpdate)
+temperatureElement.addEventListener('change', () => sendSettingsUpdate())
 const updateGenerationSettings = () => {
   const topP = Number(topPElement.value)
   const topK = Number(topKElement.value)
@@ -4915,6 +4927,11 @@ settingsSearchElement.addEventListener('input', renderSettingsSearch)
 document.getElementById('privacy-page')?.addEventListener('click', () => {
   setModalVisibility(settingsModalElement, false)
   setModalVisibility(privacyModalElement, true)
+})
+saveSettingsElement.addEventListener('click', () => {
+  sendSettingsUpdate(true)
+  saveState()
+  setModalVisibility(settingsModalElement, false)
 })
 document.getElementById('context-preview')?.addEventListener('click', () => {
   renderContextPreview()
@@ -5107,7 +5124,6 @@ savePresetElement.addEventListener('click', () => {
   renderPresets()
   presetSelectElement.value = preset.id
   setPresetSaveState(true)
-  setModalVisibility(settingsModalElement, false)
 })
 for (const element of [presetNameElement, presetPromptElement]) {
   element.addEventListener('input', () => setPresetSaveState(false))

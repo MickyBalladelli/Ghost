@@ -2373,8 +2373,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       return
     }
     let models = providerStatus.models
-    if (models.length === 0 && settings.provider !== 'opencode') {
-      models = [settings.chatModel]
+    if (models.length === 0 && settings.provider !== 'opencode' && settings.provider !== 'gemini') {
+      const fallbackModel = settings.modelPerProvider[settings.provider] ?? settings.chatModel
+      models = fallbackModel ? [fallbackModel] : []
     }
     const modelMetadata = providerStatus.modelMetadata.map(toGhostModelMetadata)
 
@@ -2640,7 +2641,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         settingsBeforeUpdate.terminalEnvironmentAsklist
       )
     }
-    if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
+    if (typeof update.chatModel === 'string' && (update.chatModel.trim() || update.provider !== undefined)) {
       await ghostConfig.update('chatModel', update.chatModel.trim(), target)
     }
     if (update.modelPerProvider !== undefined || (typeof update.chatModel === 'string' && update.chatModel.trim())) {

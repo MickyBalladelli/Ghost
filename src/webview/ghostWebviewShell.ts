@@ -249,10 +249,11 @@ const createSettingsModal = (): HTMLDivElement => {
       createElement('div', { className: 'modal-subheader' }, [createElement('h3', {}, ['Prompt presets']), button('new-preset', 'New', { className: 'context-button' })]),
       createElement('div', { className: 'preset-row' }, [select('preset-select', [option('', 'Choose a preset')], { 'aria-label': 'Prompt preset' }), button('delete-preset', 'Delete', { className: 'context-button' })]),
       input('preset-name', 'text', { placeholder: 'Preset name', 'aria-label': 'Preset name' }),
-      textarea('preset-prompt', { rows: 3, placeholder: 'Reusable prompt text', 'aria-label': 'Preset prompt' })
+      textarea('preset-prompt', { rows: 3, placeholder: 'Reusable prompt text', 'aria-label': 'Preset prompt' }),
+      createElement('div', { className: 'preset-actions' }, [button('save-preset', 'Save preset')])
     ])
   ])
-  const footer = [button('save-preset', 'Save'), button('', 'Close', { className: 'secondary', 'data-close-modal': 'settings-modal' })]
+  const footer = [button('save-settings', 'Save'), button('', 'Close', { className: 'secondary', 'data-close-modal': 'settings-modal' })]
   const settings = modal('settings-modal', 'Composer controls', 'settings-title', content, footer[0])
   settings.querySelector('.modal-footer')?.append(footer[1])
   settings.querySelector('.modal-header')?.append(button('privacy-page', 'Privacy', { className: 'secondary' }))

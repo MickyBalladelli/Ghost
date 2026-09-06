@@ -1009,6 +1009,11 @@ textarea {
   flex: 1;
 }
 
+.preset-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .modal-description {
   color: var(--vscode-descriptionForeground);
   font-size: 0.85em;
