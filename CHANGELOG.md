@@ -1,12 +1,16 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.45 - 2026-09-05
+- Prevent Cmd+N/Ctrl+N in the Ghost view from also opening a new VS Code file.
+
 ## 1.2.44 - 2026-09-05
 - Add Google Gemini as a direct provider with secure API-key storage, model discovery, streaming, JSON mode, and image attachments.
 - Preserve each provider's selected model while switching providers or refreshing models.
 - Make the Settings Save button save settings immediately and close the dialog.
 - Format long provider error responses instead of displaying truncated raw JSON.
 - Clear the selected model while a provider is offline.
+
 
 ## 1.2.41 - 2026-09-05
 - Ignore OpenCode heartbeat events when detecting an idle stream.

@@ -42,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await ghostConfig.update('enableInlineCompletions', !enabled)
     updateInlineStatusBar()
   })
+  const consumeNewFileShortcutCommand = vscode.commands.registerCommand('ghost.consumeNewFileShortcut', () => {})
   const configurationListener = ghostConfig.onDidChange((settings, event) => {
     if (event.affectsConfiguration('ghost.enableInlineCompletions')) {
       updateInlineStatusBar()
@@ -386,6 +387,7 @@ export async function activate(context: vscode.ExtensionContext) {
     inlineProviderRegistration,
     inlineProvider,
     toggleInlineCommand,
+    consumeNewFileShortcutCommand,
     checkProviderCommand,
     checkOllamaCommand,
     checkModelsCommand,

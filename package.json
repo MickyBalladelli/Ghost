@@ -113,6 +113,14 @@
         "title": "Ghost: Select OpenCode Agent"
       }
     ],
+    "keybindings": [
+      {
+        "command": "ghost.consumeNewFileShortcut",
+        "key": "ctrl+n",
+        "mac": "cmd+n",
+        "when": "focusedView == 'ghost.chat'"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
