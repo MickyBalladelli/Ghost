@@ -1,6 +1,10 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.43 - 2026-09-05
+- Add Google Gemini as a direct provider with secure API-key storage, model discovery, streaming, JSON mode, and image attachments.
+- Preserve each provider's selected model while switching providers or refreshing models.
+
 ## 1.2.41 - 2026-09-05
 - Ignore OpenCode heartbeat events when detecting an idle stream.
 - Stop stalled OpenCode event streams after the configured provider timeout and report a provider timeout instead of leaving Ghost thinking indefinitely.

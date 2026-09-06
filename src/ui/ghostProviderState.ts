@@ -16,6 +16,7 @@ export interface ProviderStatusCache extends ProviderStatus {
 export const providerStatusKey = (settings: GhostSettings, apiKeyConfigured: boolean): string => JSON.stringify({
   provider: settings.provider,
   ollamaUrl: settings.ollamaUrl,
+  geminiUrl: settings.geminiUrl,
   mlxUrl: settings.mlxUrl,
   openaiUrl: settings.openaiUrl,
   openaiProfile: settings.openaiProfile,

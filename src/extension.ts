@@ -51,10 +51,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   })
   const checkProviderStatus = async () => {
-    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { OpenRouterClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
+    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { GeminiClient }, { OpenRouterClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
       import('./services/mlxClient'),
       import('./services/ollamaClient'),
       import('./services/profiledProviderClient'),
+      import('./services/geminiClient'),
       import('./services/openRouterClient'),
       import('./services/providerProfiles'),
       import('./services/openCodeClient')
@@ -67,6 +68,8 @@ export async function activate(context: vscode.ExtensionContext) {
       ? 'MLX/VLM'
       : settings.provider === 'openai-compatible'
         ? getOpenAiProfile(settings.openaiProfile).label
+        : settings.provider === 'gemini'
+          ? 'Google Gemini'
         : settings.provider === 'openrouter'
           ? 'OpenRouter'
         : 'Ollama'
@@ -79,6 +82,8 @@ export async function activate(context: vscode.ExtensionContext) {
       ? new MlxClient(settings.mlxUrl, undefined, () => providerApiKey('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => providerApiKey('openai-compatible'))
+        : settings.provider === 'gemini'
+          ? new GeminiClient(settings.geminiUrl, () => providerApiKey('gemini'))
         : settings.provider === 'openrouter'
           ? new OpenRouterClient({
               url: settings.openrouterUrl,
@@ -122,6 +127,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+          : settings.provider === 'gemini'
+            ? settings.geminiUrl
           : settings.provider === 'openrouter'
             ? settings.openrouterUrl
           : settings.ollamaUrl
@@ -135,6 +142,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+          : settings.provider === 'gemini'
+            ? settings.geminiUrl
           : settings.provider === 'openrouter'
             ? settings.openrouterUrl
           : settings.ollamaUrl
@@ -149,8 +158,9 @@ export async function activate(context: vscode.ExtensionContext) {
   })
   const setProviderApiKeyCommand = vscode.commands.registerCommand('ghost.setProviderApiKey', async (providerOverride?: GhostProvider) => {
     const provider = providerOverride ?? ghostConfig.getSettings().provider
+    const providerLabel = provider === 'gemini' ? 'Google Gemini' : provider
     const value = await vscode.window.showInputBox({
-      prompt: provider === 'opencode' ? 'Enter the OpenCode server password' : `Enter the ${provider} API key`,
+      prompt: provider === 'opencode' ? 'Enter the OpenCode server password' : `Enter the ${providerLabel} API key`,
       password: true,
       ignoreFocusOut: true,
       placeHolder: 'Stored in VS Code SecretStorage'
@@ -159,7 +169,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return
     }
     await providerSecrets.set(provider, value)
-    await vscode.window.showInformationMessage(provider === 'opencode' ? 'OpenCode password stored securely.' : `${provider} API key stored securely.`)
+    await vscode.window.showInformationMessage(provider === 'opencode' ? 'OpenCode password stored securely.' : `${providerLabel} API key stored securely.`)
   })
   const clearProviderApiKeyCommand = vscode.commands.registerCommand('ghost.clearProviderApiKey', async () => {
     const provider = ghostConfig.getSettings().provider

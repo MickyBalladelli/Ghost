@@ -5,6 +5,7 @@ import { shouldFetchInlineFim } from '../../providers/inlineFimPolicy'
 suite('Inline FIM policy', () => {
   test('does not fetch FIM for MLX/VLM', () => {
     assert.equal(shouldFetchInlineFim('mlx-vlm'), false)
+    assert.equal(shouldFetchInlineFim('gemini'), false)
   })
 
   test('fetches FIM for Ollama', () => {

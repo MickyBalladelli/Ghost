@@ -12,15 +12,15 @@
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
-Ghost runs chat and agent tools against Ollama, MLX/VLM, another OpenAI-compatible server, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM is chat and vision only. Your code stays on your machine when you use a local provider.
+Ghost runs chat and agent tools against Ollama, MLX/VLM, Google Gemini, another OpenAI-compatible server, OpenRouter, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM and Gemini are chat and vision providers only. Your code stays on your machine when you use a local provider.
 
-Current release: `1.2.41`
+Current release: `1.2.43`
 
 ## Highlights
 
 - Local chat through the Ghost view and the native `@local` chat participant.
 - Ollama support with automatic API compatibility handling.
-- MLX/VLM and generic OpenAI-compatible provider support.
+- MLX/VLM, Google Gemini, and generic OpenAI-compatible provider support.
 - OpenCode headless-server integration with workspace sessions, streamed progress, model discovery, permissions, cancellation, and diffs.
 - Inline code completion with a fast Fill-in-the-Middle model.
 - Workspace context from the workspace, folders, active editor, selection, and open files.
@@ -38,7 +38,7 @@ Current release: `1.2.41`
 
 - VS Code 1.125 or newer
 - Node.js 20 or newer and npm when running Ghost from source
-- Ollama, MLX/VLM, another OpenAI-compatible local server, or OpenCode 1.x
+- Ollama, MLX/VLM, Google Gemini, another OpenAI-compatible server, OpenRouter, or OpenCode 1.x
 
 For the default Ollama setup, install [Ollama](https://ollama.com) and pull the recommended models:
 
@@ -130,8 +130,9 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.provider` | `ollama` | Select `mlx-vlm`, `ollama`, `openai-compatible`, `opencode`, or `openrouter`. |
+| `ghost.provider` | `ollama` | Select `mlx-vlm`, `ollama`, `gemini`, `openai-compatible`, `opencode`, or `openrouter`. |
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
+| `ghost.geminiUrl` | `https://generativelanguage.googleapis.com` | Google Gemini API base URL. Store the key with **Ghost: Set Provider API Key**. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
 | `ghost.openCodeUrl` | `http://127.0.0.1:4096` | User-managed `opencode serve` URL. Ghost does not start or stop it. |
@@ -172,11 +173,14 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | --- | --- | --- | --- | --- | --- |
 | Ollama | Yes | Yes | Yes | Client-dependent | Temperature, Top P, Top K, Min P, presence penalty, repeat penalty |
 | MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
+| Google Gemini | No | Yes | Yes | No | Temperature, Top P, Top K |
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
 | OpenRouter | Model-dependent | Model-dependent | Model-dependent | No | Model-dependent; metadata comes from the OpenRouter catalog |
 | OpenCode | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 
 OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent and Plan modes are unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need workspace tools. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+
+Google Gemini uses the Generative Language API directly. Choose **Google Gemini**, set an API key with **Ghost: Set Provider API Key**, then refresh models. Gemini model IDs are discovered from Google's model list, streaming uses the Gemini SSE endpoint, and image attachments are sent as inline image data. Gemini has no FIM path in Ghost; Agent and Plan modes use Ghost's JSON-in-text tool loop.
 
 ### OpenRouter setup
 

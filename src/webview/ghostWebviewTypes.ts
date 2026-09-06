@@ -62,6 +62,7 @@ export interface PromptPreset {
 export interface ControlSettings {
   provider: GhostProvider
   ollamaUrl: string
+  geminiUrl: string
   mlxUrl: string
   openaiUrl: string
   openaiProfile: OpenAiProfile

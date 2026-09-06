@@ -162,6 +162,8 @@ const createSettingsContent = (): HTMLDivElement => {
   appendProviderRows(
     settingRow('Provider endpoint', input('provider-endpoint', 'url', { placeholder: 'http://localhost:11434' }), 'provider-endpoint'),
     [createElement('p', { className: 'settings-help', id: 'provider-help' }, ['Endpoint for the selected provider.'])],
+    [button('set-gemini-api-key', 'Set Gemini API key…', { className: 'secondary settings-inline-action', 'data-provider-scope': 'gemini' })],
+    [createElement('p', { className: 'settings-help', 'data-provider-scope': 'gemini' }, ['Key stays in VS Code SecretStorage. Gemini requests go directly to Google.'])],
     settingRow('OpenCode username', input('opencode-username', 'text', { value: 'opencode', placeholder: 'opencode' }), 'opencode-username', undefined, 'opencode'),
     settingRow('OpenCode agent', input('opencode-agent', 'text', { placeholder: 'Use server default' }), 'opencode-agent', undefined, 'opencode'),
     settingRow('Session handling', select('opencode-session-reuse', [option('workspace', 'Reuse per conversation'), option('new', 'New session for every request')]), 'opencode-session-reuse', undefined, 'opencode'),
@@ -258,7 +260,7 @@ const createSettingsModal = (): HTMLDivElement => {
 }
 
 const createAppShell = (iconUri: string): HTMLDivElement => {
-  const providerOptions = [option('mlx-vlm', 'MLX / VLM'), option('ollama', 'Ollama'), option('openai-compatible', 'OpenAI-compatible'), option('opencode', 'OpenCode'), option('openrouter', 'OpenRouter')]
+  const providerOptions = [option('mlx-vlm', 'MLX / VLM'), option('ollama', 'Ollama'), option('openai-compatible', 'OpenAI-compatible'), option('gemini', 'Google Gemini'), option('opencode', 'OpenCode'), option('openrouter', 'OpenRouter')]
   const header = createElement('header', { className: 'header' }, [
     createElement('div', { className: 'brand' }, [ghostFace(iconUri, 'brand-mark ghost-face'), createElement('div', {}, [createElement('div', { className: 'title' }, ['Ghost']), createElement('div', { className: 'subtitle' }, ['AI coding assistant'])])]),
     createElement('div', { className: 'header-actions' }, [

@@ -17,12 +17,12 @@ Chat participant / inline completion
        ProviderClient
              │ provider-specific HTTP and stream parsing
              ▼
- Ollama / MLX / OpenAI-compatible / OpenRouter server
+ Ollama / MLX / Gemini / OpenAI-compatible / OpenRouter server
 ```
 
 - `src/services/llmFactory.ts` selects the configured provider, caches adapters, selects an available model, and disposes clients.
 - `src/services/providerAdapter.ts` defines the common interface, capability defaults, and error normalization.
-- `src/services/ollamaClient.ts`, `src/services/mlxClient.ts`, `src/services/profiledProviderClient.ts`, and `src/services/openRouterClient.ts` implement provider clients.
+- `src/services/ollamaClient.ts`, `src/services/mlxClient.ts`, `src/services/geminiClient.ts`, `src/services/profiledProviderClient.ts`, and `src/services/openRouterClient.ts` implement provider clients.
 - `src/services/providerRequestBuilders.ts` creates provider-specific request bodies.
 - `src/services/providerTransport.ts` and `src/services/providerRequest.ts` own timeout, abort, retry, proxy, and HTTP diagnostics.
 
@@ -69,10 +69,13 @@ Capability values are defaults in `providerAdapter.ts`. A client without `fetchF
 | `mlx-vlm` | MLX OpenAI-compatible chat | No | No | Yes | No | temperature, top P, presence |
 | `ollama` | Ollama | Yes | Yes | Yes | Client-dependent | temperature, top P/K, min P, presence, repeat |
 | `openai-compatible` | OpenAI chat completions | Yes | Yes | No by default | Client-dependent | temperature, top P, presence |
+| `gemini` | Google Generative Language API | No | Yes | Yes | No | temperature, top P/K |
 | `opencode` | OpenCode headless server | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 | `openrouter` | OpenRouter OpenAI chat completions | Model-dependent | Model-dependent | Model-dependent | No | metadata-dependent sampling |
 
-All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX has no native tools, so Agent mode depends on JSON-in-text parsing and is unreliable; prefer Ollama or OpenAI-compatible for workspace edits.
+All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX and Gemini have no native Ghost tool loop, so Agent mode depends on JSON-in-text parsing and is less reliable; prefer Ollama or OpenAI-compatible for workspace edits.
+
+Gemini uses the Google Generative Language API directly. `geminiClient.ts` sends the `x-goog-api-key` header, lists models from `/v1beta/models`, streams from `:streamGenerateContent?alt=sse`, converts data-URL images to Gemini `inlineData`, and maps JSON mode to `responseMimeType: application/json`. Gemini has no FIM support.
 
 OpenCode is a delegated-agent adapter, not an OpenAI-compatible transport. `openCodeClient.ts` talks to the headless server's provider, session, message, permission-reply, diff, and SSE endpoints. `chatParticipant.ts` bypasses Ghost's model/tool loop for this provider because OpenCode owns its agent loop. Ghost still owns workspace selection, connection credentials, permission policy, cancellation, UI streaming, and the selected workspace session id. Ghost keeps the safety defaults in the global `~/.config/opencode/opencode.json`; it does not patch OpenCode's project config API because that can create a project-local file. OpenCode's `edit`, `bash`, and `external_directory` permissions must resolve to `ask` or `deny`; permissive defaults are rejected before a prompt is sent.
 

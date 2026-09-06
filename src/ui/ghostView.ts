@@ -10,6 +10,7 @@ import { legacyFileEditApprovalMirror } from '../settingsMigrations'
 import { MlxClient } from '../services/mlxClient'
 import { ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
+import { GeminiClient } from '../services/geminiClient'
 import { createProviderAdapter, ProviderClient } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
 import { createProfiledProviderClient } from '../services/profiledProviderClient'
@@ -95,7 +96,7 @@ interface PendingProviderQuestionApproval {
   resolve: (answers: string[][] | undefined) => void
 }
 
-const GHOST_MODEL_PROVIDERS: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter']
+const GHOST_MODEL_PROVIDERS: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter']
 
 const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -2170,6 +2171,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+        : settings.provider === 'gemini'
+          ? new GeminiClient(settings.geminiUrl, () => this.providerApiKey?.('gemini'))
         : settings.provider === 'openrouter'
           ? new OpenRouterClient({
               url: settings.openrouterUrl,
@@ -2403,6 +2406,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         enableInlineCompletions: settings.enableInlineCompletions,
         enableConversationPersistence: settings.enableConversationPersistence,
         ollamaUrl: settings.ollamaUrl,
+        geminiUrl: settings.geminiUrl,
         mlxUrl: settings.mlxUrl,
         openaiUrl: resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl),
         openaiProfile: settings.openaiProfile,
@@ -2447,7 +2451,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
         logLevel: effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging),
-        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.provider === 'openrouter' ? settings.openrouterUrl : settings.ollamaUrl) ? 'external' : 'local'
+        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.provider === 'gemini' ? settings.geminiUrl : settings.provider === 'openrouter' ? settings.openrouterUrl : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       modelMetadata,
@@ -2515,8 +2519,14 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         await ghostConfig.clear(setting, vscode.ConfigurationTarget.Workspace)
       }
     }
+    if (update.provider) {
+      await ghostConfig.update('provider', update.provider, target)
+    }
     if (typeof update.ollamaUrl === 'string' && update.ollamaUrl.trim()) {
       await ghostConfig.update('ollamaUrl', update.ollamaUrl.trim(), target)
+    }
+    if (typeof update.geminiUrl === 'string' && update.geminiUrl.trim()) {
+      await ghostConfig.update('geminiUrl', update.geminiUrl.trim(), target)
     }
     if (typeof update.mlxUrl === 'string' && update.mlxUrl.trim()) {
       await ghostConfig.update('mlxUrl', update.mlxUrl.trim(), target)
@@ -2629,9 +2639,6 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         update.terminalEnvironmentAsklist,
         settingsBeforeUpdate.terminalEnvironmentAsklist
       )
-    }
-    if (update.provider) {
-      await ghostConfig.update('provider', update.provider, target)
     }
     if (typeof update.chatModel === 'string' && update.chatModel.trim()) {
       await ghostConfig.update('chatModel', update.chatModel.trim(), target)

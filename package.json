@@ -1,8 +1,8 @@
 {
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
-  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, OpenAI-compatible servers, OpenRouter, and OpenCode",
-  "version": "1.2.41",
+  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, Google Gemini, OpenAI-compatible servers, OpenRouter, and OpenCode",
+  "version": "1.2.43",
   "publisher": "MickyBalladelli",
   "author": {
     "name": "Micky Balladelli"
@@ -146,6 +146,11 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL."
+        },
+        "ghost.geminiUrl": {
+          "type": "string",
+          "default": "https://generativelanguage.googleapis.com",
+          "description": "Google Gemini API base URL."
         },
         "ghost.openrouterUrl": {
           "type": "string",
@@ -464,6 +469,7 @@
                   "mlx-vlm",
                   "ollama",
                   "openai-compatible",
+                  "gemini",
                   "openrouter"
                 ]
               },
@@ -557,6 +563,7 @@
             "mlx-vlm",
             "ollama",
             "openai-compatible",
+            "gemini",
             "opencode",
             "openrouter"
           ],
@@ -564,6 +571,7 @@
             "Use an MLX VLM OpenAI-compatible server.",
             "Use the Ollama API.",
             "Use another OpenAI-compatible server.",
+            "Use the Google Gemini Generative Language API.",
             "Delegate requests to a user-managed OpenCode headless server.",
             "Use the OpenRouter hosted model catalog and routing API."
           ],
@@ -820,7 +828,7 @@
       {
         "id": "ghost.agent",
         "name": "local",
-        "description": "Local AI coding assistant for Ollama, MLX/VLM, OpenAI-compatible servers, and OpenCode",
+        "description": "Local AI coding assistant for Ollama, MLX/VLM, Google Gemini, OpenAI-compatible servers, and OpenCode",
         "isSticky": true
       }
     ],

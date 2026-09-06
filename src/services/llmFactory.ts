@@ -13,6 +13,7 @@ export interface LlmProviderClients {
   ollamaClient: LlmClient
   mlxClient?: LlmClient
   openaiCompatibleClient?: LlmClient
+  geminiClient?: LlmClient
   openrouterClient?: LlmClient
   openCodeClient?: LlmClient
 }
@@ -32,7 +33,7 @@ const MLX_SWITCH_ACTION = 'Switch to MLX VLM'
 const KEEP_PROVIDER_ACTION = 'Keep Current Provider'
 
 function isProvider(value: string): value is GhostProvider {
-  return value === 'mlx-vlm' || value === 'ollama' || value === 'openai-compatible' || value === 'opencode' || value === 'openrouter'
+  return value === 'mlx-vlm' || value === 'ollama' || value === 'openai-compatible' || value === 'gemini' || value === 'opencode' || value === 'openrouter'
 }
 
 export class LlmFactory {
@@ -99,6 +100,7 @@ export class LlmFactory {
       this.clients.ollamaClient,
       ...(this.clients.mlxClient ? [this.clients.mlxClient] : []),
       ...(this.clients.openaiCompatibleClient ? [this.clients.openaiCompatibleClient] : []),
+      ...(this.clients.geminiClient ? [this.clients.geminiClient] : []),
       ...(this.clients.openrouterClient ? [this.clients.openrouterClient] : []),
       ...(this.clients.openCodeClient ? [this.clients.openCodeClient] : [])
     ])
@@ -124,6 +126,11 @@ export class LlmFactory {
 
     if (provider === 'mlx-vlm') {
       return this.getMlxClient()
+    }
+
+    if (provider === 'gemini') {
+      if (!this.clients.geminiClient) throw new Error('No Gemini client has been configured')
+      return this.clients.geminiClient
     }
 
     if (provider === 'opencode') {

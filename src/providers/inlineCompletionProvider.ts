@@ -102,6 +102,8 @@ function getInlineCompletionCacheKey(
 ): string {
   const endpoint = modelSettings.provider === 'openai-compatible'
     ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+    : modelSettings.provider === 'gemini'
+      ? settings.geminiUrl
     : modelSettings.provider === 'openrouter'
       ? settings.openrouterUrl
     : modelSettings.provider === 'mlx-vlm'

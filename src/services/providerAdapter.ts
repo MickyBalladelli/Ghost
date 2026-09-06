@@ -3,8 +3,8 @@ import { ProviderHttpError, ProviderTimeoutError } from './providerRequest'
 import type { FimCompletionOptions } from './fim'
 import { GhostError } from '../ghostErrors'
 
-export type ProviderId = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'opencode' | 'openrouter'
-export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions' | 'opencode-server'
+export type ProviderId = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'gemini' | 'opencode' | 'openrouter'
+export type ProviderNativeApi = 'ollama' | 'openai-chat-completions' | 'mlx-chat-completions' | 'gemini' | 'opencode-server'
 export type ProviderErrorCode = 'cancelled' | 'timeout' | 'network' | 'rate-limit' | 'auth' | 'invalid-request' | 'http' | 'unknown'
 export type ModelPricingStatus = 'free' | 'paid' | 'unknown'
 
@@ -149,6 +149,17 @@ const CAPABILITIES: Record<ProviderId, CapabilityDefaults> = {
     supportsFIM: true,
     supportsStreaming: true,
     supportsSampling: { temperature: true, topP: true, topK: false, minP: false, presencePenalty: true, repeatPenalty: false }
+  },
+  gemini: {
+    contextWindow: 32768,
+    outputLimit: 8192,
+    nativeApi: 'gemini',
+    supportsTools: false,
+    supportsJsonMode: true,
+    supportsVision: true,
+    supportsFIM: false,
+    supportsStreaming: true,
+    supportsSampling: { temperature: true, topP: true, topK: true, minP: false, presencePenalty: false, repeatPenalty: false }
   },
   opencode: {
     contextWindow: 32768,

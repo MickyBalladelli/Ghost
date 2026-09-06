@@ -10,6 +10,7 @@ import { LlmFactory } from '../services/llmFactory'
 import { createVisionMessage, MlxClient } from '../services/mlxClient'
 import { ChatMessage, ChatResponseFormat, ChatStreamEvent, ChatVisionImage } from '../services/chatTypes'
 import { OllamaClient } from '../services/ollamaClient'
+import { GeminiClient } from '../services/geminiClient'
 import { GhostStatusBar } from '../ui/statusBar'
 import { parseGhostEdit } from '../tools/editWorkflow'
 import type { GhostEditHunk } from '../tools/editWorkflow'
@@ -1021,6 +1022,7 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
   return new LlmFactory(
     {
       ollamaClient: new OllamaClient(settings.ollamaUrl, 'ollama', undefined, () => providerApiKey?.('ollama')),
+      geminiClient: new GeminiClient(settings.geminiUrl, () => providerApiKey?.('gemini')),
       mlxClient: new MlxClient(settings.mlxUrl, undefined, () => providerApiKey?.('mlx-vlm')),
       openaiCompatibleClient: createProfiledProviderClient(
         settings,

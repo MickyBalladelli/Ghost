@@ -13,6 +13,7 @@ import { joinEndpoint, normalizeEndpoint } from './endpoint'
 import { providerHttpError, requestWithRetry, streamWithTimeout } from './providerRequest'
 import { ProviderHttpTransport } from './providerTransport'
 import { GHOST_POLICY } from '../ghostPolicy'
+import { GeminiClient } from './geminiClient'
 
 const requestWithProviderTransport = (
   request: FetchLike,
@@ -35,12 +36,6 @@ interface ModelsResponse {
 
 interface AnthropicResponse {
   content?: Array<{ type?: string; text?: string }>
-}
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> }
-  }>
 }
 
 async function httpError(response: Response): Promise<Error> {
@@ -279,81 +274,6 @@ class AnthropicClient implements ProviderClient {
       'anthropic-version': '2023-06-01',
       ...(apiKey ? { 'x-api-key': apiKey } : {})
     }
-  }
-}
-
-class GeminiClient implements ProviderClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly apiKeyProvider: () => string | undefined,
-    private readonly transport: OpenAiTransportSettings,
-    private readonly request: FetchLike = nativeFetch
-  ) {}
-
-  async checkHealth(timeoutMs = 3000): Promise<boolean> {
-    try {
-      const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
-      const response = await requestWithRetry(
-        signal => this.request(endpoint, {
-          method: 'GET',
-          headers: this.headers(),
-          signal,
-          agent: createOpenAiRequestAgent(endpoint, this.transport)
-        }),
-        { timeoutMs }
-      )
-      return response.ok
-    } catch {
-      return false
-    }
-  }
-
-  async listModels(signal?: AbortSignal): Promise<string[]> {
-    const endpoint = joinEndpoint(this.baseUrl, 'v1beta/models')
-    const response = await requestWithRetry(
-      requestSignal => this.request(endpoint, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: requestSignal,
-        agent: createOpenAiRequestAgent(endpoint, this.transport)
-      }),
-      { signal, timeoutMs: GHOST_POLICY.provider.requestTimeoutMs }
-    )
-    if (!response.ok) throw await httpError(response)
-    const payload = await response.json() as ModelsResponse
-    return payload.models?.flatMap(model => model.name ? [model.name.replace(/^models\//, '')] : []) ?? []
-  }
-
-  async *streamChatCompletion(options: ChatRequestOptions): AsyncGenerator<string> {
-    const endpoint = joinEndpoint(this.baseUrl, `v1beta/models/${encodeURIComponent(options.model)}:streamGenerateContent?alt=sse`)
-    const response = await requestWithProviderTransport(this.request, this.transport, endpoint, {
-      method: 'POST',
-      headers: { ...this.headers(), accept: 'text/event-stream', 'content-type': 'application/json' },
-      signal: options.signal,
-      agent: createOpenAiRequestAgent(endpoint, this.transport),
-      body: JSON.stringify({
-        systemInstruction: systemText(options.messages) ? { parts: [{ text: systemText(options.messages) }] } : undefined,
-        contents: nonSystemMessages(options.messages).map(message => ({
-          role: message.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: textFromContent(message.content) }]
-        })),
-        generationConfig: {
-          temperature: generation(options).temperature,
-          topP: generation(options).topP,
-          maxOutputTokens: generation(options).maxTokens,
-          ...(generation(options).stop?.length ? { stopSequences: generation(options).stop } : {}),
-          ...(generation(options).seed === undefined ? {} : { seed: generation(options).seed })
-        }
-      })
-    }, options.signal, options.timeoutMs)
-    if (!response.ok) throw await httpError(response)
-    if (!response.body) throw new Error('Gemini returned an empty streaming response')
-    yield* streamSseJson<GeminiResponse>(streamWithTimeout(response.body, options.timeoutMs ?? GHOST_POLICY.provider.requestTimeoutMs), payload => payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join(''))
-  }
-
-  private headers(): Record<string, string> {
-    const apiKey = this.apiKeyProvider()
-    return apiKey ? { 'x-goog-api-key': apiKey } : {}
   }
 }
 

@@ -5,7 +5,7 @@ import { migrateGhostSettings, GHOST_SETTINGS_SCHEMA_VERSION, legacyFileEditAppr
 
 export const GHOST_CONFIGURATION_SECTION = 'ghost'
 
-export type GhostProvider = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'opencode' | 'openrouter'
+export type GhostProvider = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'gemini' | 'opencode' | 'openrouter'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
 export type GhostFileEditApproval = 'confirm' | 'auto'
@@ -47,6 +47,7 @@ export const DEFAULT_TERMINAL_ENVIRONMENT_ALLOWLIST = [
 export interface GhostSettings {
   settingsSchemaVersion: number
   ollamaUrl: string
+  geminiUrl: string
   openaiUrl: string
   openaiProfile: OpenAiProfileId
   openaiApiVersion: string
@@ -126,6 +127,7 @@ export type GhostSetting = keyof GhostSettings
 export const DEFAULT_GHOST_SETTINGS: Readonly<GhostSettings> = {
   settingsSchemaVersion: GHOST_SETTINGS_SCHEMA_VERSION,
   ollamaUrl: 'http://localhost:11434',
+  geminiUrl: 'https://generativelanguage.googleapis.com',
   openaiUrl: 'http://localhost:8001/v1',
   openaiProfile: 'generic',
   openaiApiVersion: '2024-10-21',
@@ -267,6 +269,7 @@ export class GhostConfig {
     return {
       settingsSchemaVersion: this.configuredSchemaVersion(configuration),
       ollamaUrl: configuration.get('ollamaUrl', DEFAULT_GHOST_SETTINGS.ollamaUrl),
+      geminiUrl: configuration.get('geminiUrl', DEFAULT_GHOST_SETTINGS.geminiUrl),
       openaiUrl: configuration.get('openaiUrl', DEFAULT_GHOST_SETTINGS.openaiUrl),
       openaiProfile: configuration.get('openaiProfile', DEFAULT_GHOST_SETTINGS.openaiProfile),
       openaiApiVersion: configuration.get('openaiApiVersion', DEFAULT_GHOST_SETTINGS.openaiApiVersion),

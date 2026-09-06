@@ -70,6 +70,7 @@ const providerChoices: Array<{ value: GhostProvider; label: string }> = [
   { value: 'mlx-vlm', label: 'MLX / VLM' },
   { value: 'ollama', label: 'Ollama' },
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
+  { value: 'gemini', label: 'Google Gemini' },
   { value: 'opencode', label: 'OpenCode' },
   { value: 'openrouter', label: 'OpenRouter' }
 ]
@@ -375,6 +376,7 @@ let userIsAtBottom = true
 let controls: ControlSettings = {
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
+  geminiUrl: 'https://generativelanguage.googleapis.com',
   mlxUrl: 'http://localhost:8000',
   openaiUrl: 'http://localhost:8001/v1',
   openaiProfile: 'generic',
@@ -461,7 +463,8 @@ let availableModelMetadata: ModelMetadata[] = [{
   capabilities: ['chat']
 }]
 let modelRefreshPending = false
-const knownModelProviders: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'opencode', 'openrouter']
+let pendingProviderChange: GhostProvider | undefined
+const knownModelProviders: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter']
 const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const result: Partial<Record<GhostProvider, string>> = {}
@@ -659,6 +662,7 @@ const openCodeUsernameElement = document.getElementById('opencode-username') as 
 const openCodeAgentElement = document.getElementById('opencode-agent') as HTMLInputElement
 const openCodeSessionReuseElement = document.getElementById('opencode-session-reuse') as HTMLSelectElement
 const setOpenCodePasswordElement = document.getElementById('set-opencode-password') as HTMLButtonElement
+const setGeminiApiKeyElement = document.getElementById('set-gemini-api-key') as HTMLButtonElement
 const setOpenRouterApiKeyElement = document.getElementById('set-openrouter-api-key') as HTMLButtonElement
 const openAiProfileElement = document.getElementById('openai-profile') as HTMLSelectElement
 const openAiApiVersionElement = document.getElementById('openai-api-version') as HTMLInputElement
@@ -852,6 +856,7 @@ const createPersistedState = () => compactPersistedState({
     provider: controls.provider,
     modelProfile: controls.modelProfile,
     ollamaUrl: controls.ollamaUrl,
+    geminiUrl: controls.geminiUrl,
     mlxUrl: controls.mlxUrl,
     openaiUrl: controls.openaiUrl,
     openaiProfile: controls.openaiProfile,
@@ -1012,6 +1017,7 @@ const sendSettingsUpdate = () => {
       settings: {
         provider: controls.provider,
         ollamaUrl: controls.ollamaUrl,
+        geminiUrl: controls.geminiUrl,
         mlxUrl: controls.mlxUrl,
         openaiUrl: controls.openaiUrl,
         openaiProfile: controls.openaiProfile,
@@ -1094,6 +1100,8 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
   ? controls.mlxUrl
   : controls.provider === 'openai-compatible'
     ? controls.openaiUrl
+    : controls.provider === 'gemini'
+      ? controls.geminiUrl
     : controls.provider === 'openrouter'
       ? controls.openrouterUrl
     : controls.provider === 'opencode'
@@ -1662,6 +1670,8 @@ const renderControls = () => {
     ? 'MLX VLM OpenAI-compatible endpoint.'
     : controls.provider === 'openai-compatible'
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
+      : controls.provider === 'gemini'
+        ? 'Google Gemini API endpoint. Ghost sends requests directly to Google.'
       : controls.provider === 'openrouter'
         ? 'OpenRouter remote model catalog and OpenAI-compatible chat endpoint.'
       : controls.provider === 'opencode'
@@ -3891,6 +3901,12 @@ const processExtensionMessage = (message: GhostExtensionMessage) => {
     return
   }
   if (message.type === 'controls-state') {
+    if (pendingProviderChange && message.settings.provider !== pendingProviderChange) {
+      return
+    }
+    if (pendingProviderChange === message.settings.provider) {
+      pendingProviderChange = undefined
+    }
     const incomingModels = message.models.filter(model => typeof model === 'string' && model.trim())
     const preserveSelection = !modelRefreshPending
     const mergedModelPerProvider = { ...sanitizeModelPerProvider(controls.modelPerProvider), ...sanitizeModelPerProvider(message.settings.modelPerProvider) }
@@ -4494,10 +4510,11 @@ providerElement.addEventListener('change', () => {
   rememberChatModelForProvider(previousProvider, controls.chatModel)
   const nextProvider = providerElement.value as GhostProvider
   controls.provider = nextProvider
+  pendingProviderChange = nextProvider
   const remembered = sanitizeModelPerProvider(controls.modelPerProvider)[nextProvider]
   if (remembered) {
     controls.chatModel = remembered
-  } else if (nextProvider === 'opencode') {
+  } else {
     controls.chatModel = ''
   }
   availableModels = []
@@ -4525,6 +4542,8 @@ providerEndpointElement.addEventListener('change', () => {
   }
   if (controls.provider === 'mlx-vlm') {
     controls.mlxUrl = endpoint
+  } else if (controls.provider === 'gemini') {
+    controls.geminiUrl = endpoint
   } else if (controls.provider === 'openai-compatible') {
     controls.openaiUrl = endpoint
   } else if (controls.provider === 'openrouter') {
@@ -4548,6 +4567,7 @@ for (const element of [openCodeUsernameElement, openCodeAgentElement, openCodeSe
   element.addEventListener('change', updateOpenCodeSettings)
 }
 setOpenCodePasswordElement.addEventListener('click', () => post('set-provider-api-key', { provider: 'opencode' }))
+setGeminiApiKeyElement.addEventListener('click', () => post('set-provider-api-key', { provider: 'gemini' }))
 setOpenRouterApiKeyElement.addEventListener('click', () => post('set-provider-api-key', { provider: 'openrouter' }))
 const updateOpenAiSettings = () => {
   controls.openaiApiKeyHeader = openAiApiKeyHeaderElement.value.trim()

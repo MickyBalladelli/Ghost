@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.2.31`.
+Package version: `1.2.43`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -35,7 +35,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openaiTlsCertFile` | string | empty | Optional path to a client certificate PEM file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsKeyFile` | string | empty | Optional path to a client private key PEM file for OpenAI-compatible HTTPS. |
 | `ghost.providerRequestTimeoutMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes to wait for one HTTP request to the model provider. This is not the overall agent run budget. |
-| `ghost.provider` | string; one of `mlx-vlm`, `ollama`, `openai-compatible`, `opencode`, `openrouter` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
+| `ghost.provider` | string; one of `mlx-vlm`, `ollama`, `openai-compatible`, `gemini`, `opencode`, `openrouter` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
 | `ghost.mlxUrl` | string | `http://localhost:8000` | MLX VLM server URL. |
 
 ## Models and generation
@@ -85,6 +85,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `ghost.settingsSchemaVersion` | integer | `3` | Internal Ghost settings schema version. Ghost migrates older settings automatically. |
+| `ghost.geminiUrl` | string | `https://generativelanguage.googleapis.com` | Google Gemini API base URL. |
 | `ghost.openrouterUrl` | string | `https://openrouter.ai/api/v1` | OpenRouter API base URL. |
 | `ghost.openrouterReferer` | string | empty | Optional HTTP-Referer attribution header for OpenRouter. |
 | `ghost.openrouterTitle` | string | `Ghost Coding Assistant` | Optional X-OpenRouter-Title attribution header. |
