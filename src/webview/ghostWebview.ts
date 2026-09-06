@@ -525,17 +525,21 @@ const restorePersistedState = (persisted: GhostState): void => {
   const activeConversationId = conversations.some(conversation => conversation.id === persisted.activeConversationId)
     ? persisted.activeConversationId
     : conversations[0].id
+  // Capture the previous workspace before adopting the persisted one. Legacy
+  // top-level prompt history must only migrate within the same project, never
+  // across projects, otherwise a new project shows another project's prompt.
+  const previousWorkspaceId = state.workspaceId
   state = {
     schemaVersion: persistenceSchemaVersion,
     workspaceId: persisted.workspaceId,
     conversations,
     activeConversationId,
-    promptHistory: normalizePromptHistory(persisted.promptHistory),
+    promptHistory: normalizePromptHistory(previousWorkspaceId === undefined || previousWorkspaceId === persisted.workspaceId ? persisted.promptHistory : []),
     presets: Array.isArray(persisted.presets) ? persisted.presets : [],
     showReasoning: persisted.showReasoning === true,
     preferences: persisted.preferences
   }
-  migrateLegacyPromptHistory(conversations, activeConversationId, persisted.promptHistory)
+  migrateLegacyPromptHistory(conversations, activeConversationId, previousWorkspaceId === undefined || previousWorkspaceId === persisted.workspaceId ? persisted.promptHistory : [])
   showReasoning = state.showReasoning === true
   const preferences = persisted.preferences ?? {}
   if (typeof preferences.assistantName === 'string') uiPreferences.assistantName = preferences.assistantName.slice(0, 40)
@@ -5235,6 +5239,7 @@ promptElement.addEventListener('blur', () => {
 promptElement.addEventListener('keydown', event => {
   if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
     event.preventDefault()
+    event.stopPropagation()
     startNewConversation()
     return
   }
@@ -5243,6 +5248,14 @@ promptElement.addEventListener('keydown', event => {
     composerElement.requestSubmit()
   }
 })
+document.addEventListener('keydown', event => {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'n') {
+    event.preventDefault()
+    if (event.target !== promptElement) {
+      event.stopPropagation()
+    }
+  }
+}, true)
 composerElement.addEventListener('submit', event => {
   event.preventDefault()
   submitPrompt(promptElement.value)

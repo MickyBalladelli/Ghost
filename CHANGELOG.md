@@ -1,8 +1,12 @@
 # Changelog
 
 All notable changes to this extension are documented here.
+## 1.2.46 - 2026-09-05
+- Keep prompt history and composer drafts scoped to each project so opening Ghost in a new project starts empty instead of showing another project's last prompt.
+
 ## 1.2.45 - 2026-09-05
 - Prevent Cmd+N/Ctrl+N in the Ghost view from also opening a new VS Code file.
+- Keep Cmd+N/Ctrl+N swallowed while the prompt field has focus so it starts a new conversation instead of opening a new window.
 
 ## 1.2.44 - 2026-09-05
 - Add Google Gemini as a direct provider with secure API-key storage, model discovery, streaming, JSON mode, and image attachments.

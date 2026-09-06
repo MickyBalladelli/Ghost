@@ -43,7 +43,7 @@ import {
 import type { GhostProtocolVersion } from './ghostProtocol'
 import type { GhostRequestStatus } from './ghostState'
 import { getRequestStatusForEvent } from './requestState'
-import { migratePersistedState, normalizePromptHistory } from './persistenceModel'
+import { migratePersistedState } from './persistenceModel'
 import { compactPersistedState, isStoredRecord, StoredGlobalState, StoredWorkspaceState } from './ghostPersistence'
 import {
   getFileEditPaths,
@@ -2047,7 +2047,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       workspaceId,
       conversations: useStoredWorkspace && Array.isArray(workspaceRecord.conversations) ? workspaceRecord.conversations : [],
       activeConversationId: useStoredWorkspace && typeof workspaceRecord.activeConversationId === 'string' ? workspaceRecord.activeConversationId : undefined,
-      promptHistory: globalRecord.promptHistory,
+      // Prompt history lives per conversation inside workspace-scoped conversations.
+      // Never source it from global state, otherwise a new project shows
+      // the last prompt typed in a different project.
+      promptHistory: [],
       presets: Array.isArray(globalRecord.presets) ? globalRecord.presets : [],
       showReasoning: typeof globalRecord.showReasoning === 'boolean' ? globalRecord.showReasoning : false,
       preferences: isStoredRecord(globalRecord.preferences) ? globalRecord.preferences : {}
@@ -2087,7 +2090,10 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     const safeState = compactPersistedState(JSON.parse(JSON.stringify({ ...state, workspaceId }, (_key, value) => typeof value === 'string' ? redactSensitiveText(value) : value)) as GhostPersistedState)
     const globalState: StoredGlobalState = {
       schemaVersion: GHOST_PERSISTENCE_SCHEMA_VERSION,
-      promptHistory: normalizePromptHistory(safeState.promptHistory),
+      // Keep top-level prompt history out of global state. Per-conversation
+      // history is persisted with the workspace-scoped conversations above,
+      // so a new project never inherits another project's prompts.
+      promptHistory: [],
       presets: safeState.presets ?? [],
       showReasoning: safeState.showReasoning === true,
       preferences: safeState.preferences ?? {}
