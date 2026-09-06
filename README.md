@@ -14,7 +14,7 @@
 
 Ghost runs chat and agent tools against Ollama, MLX/VLM, Google Gemini, another OpenAI-compatible server, OpenRouter, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM and Gemini are chat and vision providers only. Your code stays on your machine when you use a local provider.
 
-Current release: `1.2.44`
+Current release: `1.2.45`
 
 ## Highlights
 
