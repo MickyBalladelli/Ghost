@@ -4,6 +4,8 @@ import { GhostError } from '../ghostErrors'
 import { GhostClock, systemClock } from '../runtimeDependencies'
 
 const { requestTimeoutMs: DEFAULT_TIMEOUT_MS, defaultMaxAttempts: DEFAULT_MAX_ATTEMPTS, maxRetryDelayMs: MAX_RETRY_DELAY_MS, retryBaseDelayMs: RETRY_BASE_DELAY_MS } = GHOST_POLICY.provider
+const MAX_PROVIDER_ERROR_BODY_LENGTH = 1000
+const MAX_PROVIDER_ERROR_MESSAGE_LENGTH = 4000
 
 export interface ProviderRequestOptions {
   signal?: AbortSignal
@@ -155,6 +157,19 @@ function providerRawMessage(value: unknown): string | undefined {
   return undefined
 }
 
+function decodeProviderMessage(value: string): string {
+  return value
+    .replace(/\\\r?\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/&#x([0-9a-f]+);/gi, (_match, value: string) => String.fromCodePoint(Number.parseInt(value, 16)))
+    .replace(/&#(\d+);/g, (_match, value: string) => String.fromCodePoint(Number.parseInt(value, 10)))
+    .replace(/&nbsp;/gi, ' ')
+    .trim()
+    .slice(0, MAX_PROVIDER_ERROR_MESSAGE_LENGTH)
+}
+
 function waitForRetry(delayMs: number, signal: AbortSignal | undefined, clock: GhostClock): Promise<void> {
   if (delayMs <= 0) {
     return Promise.resolve()
@@ -222,16 +237,18 @@ export async function requestWithRetry(
 }
 
 export async function providerHttpError(response: Response): Promise<ProviderHttpError> {
+  let rawDetail = ''
   let detail = ''
   let metadata: Record<string, unknown> | undefined
   try {
-    detail = (await response.text()).slice(0, 1000)
+    rawDetail = await response.text()
+    detail = rawDetail.slice(0, MAX_PROVIDER_ERROR_BODY_LENGTH)
   } catch {
     detail = ''
   }
   let message = detail
   try {
-    const payload = JSON.parse(detail) as { error?: { message?: string; metadata?: Record<string, unknown> } | string; message?: string }
+    const payload = JSON.parse(rawDetail.trim().replace(/^\uFEFF/, '')) as { error?: { message?: string; metadata?: Record<string, unknown> } | string; message?: string }
     const error = typeof payload.error === 'string' ? payload.error : payload.error?.message
     metadata = typeof payload.error === 'object' && payload.error !== null ? payload.error.metadata : undefined
     message = error || payload.message || detail
@@ -250,6 +267,7 @@ export async function providerHttpError(response: Response): Promise<ProviderHtt
   const providerSlugValue = providerSlug(metadata?.provider_slug) ?? providerSlug(providerName)
   const upstreamMessage = providerRawMessage(metadata?.raw)
   if (upstreamMessage) message = upstreamMessage
+  message = decodeProviderMessage(message)
   const retryDetail = retryAfterMs === undefined ? undefined : `retry after ${Math.ceil(retryAfterMs / 1000)}s`
   const details = [...metadataDetails, retryDetail].filter((value): value is string => Boolean(value))
   const suffix = message ? `: ${message}` : ''

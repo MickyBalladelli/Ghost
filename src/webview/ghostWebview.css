@@ -1969,6 +1969,7 @@ textarea {
 .error-progress {
   border-left-color: var(--vscode-errorForeground);
   color: var(--vscode-errorForeground);
+  white-space: pre-line;
 }
 
 .message-body p,

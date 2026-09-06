@@ -10,6 +10,7 @@ import {
   buildOpenAiChatBody,
   buildOpenAiFimBody
 } from '../../services/providerRequestBuilders'
+import { providerHttpError } from '../../services/providerRequest'
 
 async function collect(stream: AsyncIterable<string>): Promise<string[]> {
   const chunks: string[] = []
@@ -173,6 +174,23 @@ suite('Provider resilience', () => {
       () => collect(emptyClient.streamChatCompletion({ model: 'missing', messages: [] })),
       /empty streaming response/
     )
+  })
+
+  test('parses long JSON provider errors before truncating the fallback body', async () => {
+    const message = [
+      'You exceeded your current quota, please check your plan and billing details.',
+      '',
+      '* Quota exceeded for metric: generatecontentfreetierrequests, model: gemini-3-pro-image',
+      '* Quota exceeded for metric: generatecontentfreetierinputtokencount, model: gemini-3-pro-image',
+      'Please retry in 3.35s.'
+    ].join('\n')
+    const response = new Response(JSON.stringify({ error: { code: 429, message, status: 'RESOURCE_EXHAUSTED' } }), { status: 429 })
+
+    const error = await providerHttpError(response)
+
+    assert.match(error.message, /You exceeded your current quota/)
+    assert.match(error.message, /Quota exceeded for metric: generatecontentfreetierrequests/)
+    assert.equal(error.message.includes('{"error"'), false)
   })
 
   test('stops safely on malformed SSE and invalid UTF-8', async () => {
