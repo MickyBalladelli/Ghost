@@ -52,7 +52,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   })
   const checkProviderStatus = async () => {
-    const [{ MlxClient }, { OllamaClient }, { createProfiledProviderClient }, { GeminiClient }, { OpenRouterClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
+    const [{ MlxClient }, { OllamaClient }, { createLlamaCppProviderClient, createProfiledProviderClient }, { GeminiClient }, { OpenRouterClient }, { getOpenAiProfile, resolveOpenAiProfileEndpoint }, { OpenCodeClient }] = await Promise.all([
       import('./services/mlxClient'),
       import('./services/ollamaClient'),
       import('./services/profiledProviderClient'),
@@ -69,6 +69,8 @@ export async function activate(context: vscode.ExtensionContext) {
       ? 'MLX/VLM'
       : settings.provider === 'openai-compatible'
         ? getOpenAiProfile(settings.openaiProfile).label
+      : settings.provider === 'llama-cpp'
+        ? 'llama.cpp'
         : settings.provider === 'gemini'
           ? 'Google Gemini'
         : settings.provider === 'openrouter'
@@ -83,6 +85,8 @@ export async function activate(context: vscode.ExtensionContext) {
       ? new MlxClient(settings.mlxUrl, undefined, () => providerApiKey('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => providerApiKey('openai-compatible'))
+      : settings.provider === 'llama-cpp'
+        ? createLlamaCppProviderClient(settings, () => providerApiKey('llama-cpp'))
         : settings.provider === 'gemini'
           ? new GeminiClient(settings.geminiUrl, () => providerApiKey('gemini'))
         : settings.provider === 'openrouter'
@@ -128,6 +132,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+        : settings.provider === 'llama-cpp'
+          ? settings.llamaCppUrl
           : settings.provider === 'gemini'
             ? settings.geminiUrl
           : settings.provider === 'openrouter'
@@ -143,6 +149,8 @@ export async function activate(context: vscode.ExtensionContext) {
         ? settings.mlxUrl
         : settings.provider === 'openai-compatible'
           ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl)
+        : settings.provider === 'llama-cpp'
+          ? settings.llamaCppUrl
           : settings.provider === 'gemini'
             ? settings.geminiUrl
           : settings.provider === 'openrouter'

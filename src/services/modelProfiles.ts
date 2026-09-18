@@ -97,7 +97,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 )
 
 const isProvider = (value: unknown): value is GhostProvider => (
-  value === 'mlx-vlm' || value === 'ollama' || value === 'openai-compatible' || value === 'gemini' || value === 'opencode' || value === 'openrouter'
+  value === 'mlx-vlm' || value === 'ollama' || value === 'openai-compatible' || value === 'llama-cpp' || value === 'gemini' || value === 'opencode' || value === 'openrouter'
 )
 
 const finiteNumber = (value: unknown): number | undefined => (

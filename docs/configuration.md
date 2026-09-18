@@ -2,7 +2,7 @@
 
 <!-- Generated from package.json by `npm run docs:config`. Do not edit by hand. -->
 
-Package version: `1.2.43`.
+Package version: `1.2.46`.
 
 Defaults and descriptions below come from the VS Code extension manifest. The generator checks every manifest default against `DEFAULT_GHOST_SETTINGS` in `src/config.ts` and fails when they drift.
 
@@ -35,7 +35,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openaiTlsCertFile` | string | empty | Optional path to a client certificate PEM file for OpenAI-compatible HTTPS. |
 | `ghost.openaiTlsKeyFile` | string | empty | Optional path to a client private key PEM file for OpenAI-compatible HTTPS. |
 | `ghost.providerRequestTimeoutMinutes` | integer; min 1; max 1440 | `15` | Maximum minutes to wait for one HTTP request to the model provider. This is not the overall agent run budget. |
-| `ghost.provider` | string; one of `mlx-vlm`, `ollama`, `openai-compatible`, `gemini`, `opencode`, `openrouter` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
+| `ghost.provider` | string; one of `mlx-vlm`, `ollama`, `openai-compatible`, `llama-cpp`, `gemini`, `opencode`, `openrouter` | `ollama` | Ghost model provider. See the [provider parameter guide](https://github.com/MickyBalladelli/Ghost/blob/main/OLLAMA_PARAMETERS.md) for the settings each provider uses. |
 | `ghost.mlxUrl` | string | `http://localhost:8000` | MLX VLM server URL. |
 
 ## Models and generation
@@ -99,6 +99,7 @@ Defaults and descriptions below come from the VS Code extension manifest. The ge
 | `ghost.openrouterTlsCaFile` | string | empty | Optional PEM CA file for OpenRouter HTTPS. |
 | `ghost.openrouterTlsCertFile` | string | empty | Optional OpenRouter HTTPS client certificate PEM file. |
 | `ghost.openrouterTlsKeyFile` | string | empty | Optional OpenRouter HTTPS client private key PEM file. |
+| `ghost.llamaCppUrl` | string | `http://localhost:8080/v1` | llama.cpp llama-server OpenAI-compatible URL. |
 | `ghost.modelPerProvider` | object | `{}` | Last used chat model per provider, restored automatically when switching providers. |
 | `ghost.toolAllowlist` | array | `["ghost_read_file","ghost_search_workspace","ghost_get_diagnostics","ghost_git_context","ghost_update_task_plan","ghost_record_completion","ghost_write_file","ghost_apply_edit","ghost_apply_transaction","ghost_run_terminal_command","ghost_list_directory"]` | Tools Ghost may use automatically. Tools not allowed here ask for approval unless denied. Applies to the Ghost view, @local chat, and registered Language Model tools. |
 | `ghost.toolAsklist` | array | `[]` | Tools Ghost must ask about before use. Deny rules override this list. Applies to the Ghost view, @local chat, and registered Language Model tools. |

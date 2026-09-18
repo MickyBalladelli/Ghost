@@ -70,6 +70,7 @@ const providerChoices: Array<{ value: GhostProvider; label: string }> = [
   { value: 'mlx-vlm', label: 'MLX / VLM' },
   { value: 'ollama', label: 'Ollama' },
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
+  { value: 'llama-cpp', label: 'llama.cpp' },
   { value: 'gemini', label: 'Google Gemini' },
   { value: 'opencode', label: 'OpenCode' },
   { value: 'openrouter', label: 'OpenRouter' }
@@ -379,6 +380,7 @@ let controls: ControlSettings = {
   geminiUrl: 'https://generativelanguage.googleapis.com',
   mlxUrl: 'http://localhost:8000',
   openaiUrl: 'http://localhost:8001/v1',
+  llamaCppUrl: 'http://localhost:8080/v1',
   openaiProfile: 'generic',
   openaiApiVersion: '2024-10-21',
   openaiCustomModelsPath: '/v1/models',
@@ -464,7 +466,7 @@ let availableModelMetadata: ModelMetadata[] = [{
 }]
 let modelRefreshPending = false
 let pendingProviderChange: GhostProvider | undefined
-const knownModelProviders: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter']
+const knownModelProviders: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter']
 const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const result: Partial<Record<GhostProvider, string>> = {}
@@ -864,6 +866,7 @@ const createPersistedState = () => compactPersistedState({
     geminiUrl: controls.geminiUrl,
     mlxUrl: controls.mlxUrl,
     openaiUrl: controls.openaiUrl,
+    llamaCppUrl: controls.llamaCppUrl,
     openaiProfile: controls.openaiProfile,
     openaiApiVersion: controls.openaiApiVersion,
     openaiCustomModelsPath: controls.openaiCustomModelsPath,
@@ -1025,6 +1028,7 @@ const sendSettingsUpdate = (immediate = false) => {
         geminiUrl: controls.geminiUrl,
         mlxUrl: controls.mlxUrl,
         openaiUrl: controls.openaiUrl,
+        llamaCppUrl: controls.llamaCppUrl,
         openaiProfile: controls.openaiProfile,
         openaiApiVersion: controls.openaiApiVersion,
         openaiCustomModelsPath: controls.openaiCustomModelsPath,
@@ -1110,6 +1114,8 @@ const providerEndpoint = (): string => controls.provider === 'mlx-vlm'
   ? controls.mlxUrl
   : controls.provider === 'openai-compatible'
     ? controls.openaiUrl
+    : controls.provider === 'llama-cpp'
+      ? controls.llamaCppUrl
     : controls.provider === 'gemini'
       ? controls.geminiUrl
     : controls.provider === 'openrouter'
@@ -1680,6 +1686,8 @@ const renderControls = () => {
     ? 'MLX VLM OpenAI-compatible endpoint.'
     : controls.provider === 'openai-compatible'
       ? 'OpenAI-compatible endpoint. Keep the /v1 suffix when required.'
+      : controls.provider === 'llama-cpp'
+        ? 'llama.cpp llama-server OpenAI-compatible endpoint. Bonsai defaults to http://localhost:8080/v1.'
       : controls.provider === 'gemini'
         ? 'Google Gemini API endpoint. Ghost sends requests directly to Google.'
       : controls.provider === 'openrouter'
@@ -4563,6 +4571,8 @@ providerEndpointElement.addEventListener('change', () => {
     controls.geminiUrl = endpoint
   } else if (controls.provider === 'openai-compatible') {
     controls.openaiUrl = endpoint
+  } else if (controls.provider === 'llama-cpp') {
+    controls.llamaCppUrl = endpoint
   } else if (controls.provider === 'openrouter') {
     controls.openrouterUrl = endpoint
   } else if (controls.provider === 'opencode') {

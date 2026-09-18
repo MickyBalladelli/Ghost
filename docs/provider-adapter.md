@@ -17,7 +17,7 @@ Chat participant / inline completion
        ProviderClient
              │ provider-specific HTTP and stream parsing
              ▼
- Ollama / MLX / Gemini / OpenAI-compatible / OpenRouter server
+ Ollama / MLX / llama.cpp / Gemini / OpenAI-compatible / OpenRouter server
 ```
 
 - `src/services/llmFactory.ts` selects the configured provider, caches adapters, selects an available model, and disposes clients.
@@ -69,11 +69,14 @@ Capability values are defaults in `providerAdapter.ts`. A client without `fetchF
 | `mlx-vlm` | MLX OpenAI-compatible chat | No | No | Yes | No | temperature, top P, presence |
 | `ollama` | Ollama | Yes | Yes | Yes | Client-dependent | temperature, top P/K, min P, presence, repeat |
 | `openai-compatible` | OpenAI chat completions | Yes | Yes | No by default | Client-dependent | temperature, top P, presence |
+| `llama-cpp` | llama-server OpenAI chat completions | Yes | Yes | Yes when a projector is loaded | No | temperature, top P, presence |
 | `gemini` | Google Generative Language API | No | Yes | Yes | No | temperature, top P/K |
 | `opencode` | OpenCode headless server | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 | `openrouter` | OpenRouter OpenAI chat completions | Model-dependent | Model-dependent | Model-dependent | No | metadata-dependent sampling |
 
 All providers default to a 32,768-token context window, an 8,192-token output limit, and streaming enabled. Model metadata can refine the displayed capability record, but a request builder must still omit unsupported fields. Ollama native tool calling is enabled only when `/api/show` reports a `tools` capability or a `.Tools` template. MLX and Gemini have no native Ghost tool loop, so Agent mode depends on JSON-in-text parsing and is less reliable; prefer Ollama or OpenAI-compatible for workspace edits.
+
+llama.cpp uses the existing OpenAI-compatible client with a dedicated provider id and the default `http://localhost:8080/v1` endpoint. Bonsai-demo's `llama-server` exposes `/v1/models` and `/v1/chat/completions`; its full 27B setup can accept images when the multimodal projector is loaded. llama.cpp has no FIM path in Ghost.
 
 Gemini uses the Google Generative Language API directly. `geminiClient.ts` sends the `x-goog-api-key` header, lists models from `/v1beta/models`, streams from `:streamGenerateContent?alt=sse`, converts data-URL images to Gemini `inlineData`, and maps JSON mode to `responseMimeType: application/json`. Gemini has no FIM support.
 

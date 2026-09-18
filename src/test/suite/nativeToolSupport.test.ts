@@ -17,7 +17,8 @@ suite('Native tool support', () => {
   test('enables native tools only for supported Ollama models and OpenAI chat', () => {
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'ollama', ollamaReportsTools: true }), true)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'ollama', ollamaReportsTools: false }), false)
-    assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openai-compatible', openaiProtocol: 'openai-chat' }), true)
+  assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openai-compatible', openaiProtocol: 'openai-chat' }), true)
+  assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'llama-cpp', openaiProtocol: 'openai-chat' }), true)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openrouter', ollamaReportsTools: true }), true)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'openrouter', ollamaReportsTools: false }), false)
     assert.equal(shouldUseNativeToolCalling({ toolsEnabled: true, provider: 'mlx-vlm' }), false)

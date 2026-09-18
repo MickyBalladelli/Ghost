@@ -19,6 +19,7 @@ export const providerStatusKey = (settings: GhostSettings, apiKeyConfigured: boo
   geminiUrl: settings.geminiUrl,
   mlxUrl: settings.mlxUrl,
   openaiUrl: settings.openaiUrl,
+  llamaCppUrl: settings.llamaCppUrl,
   openaiProfile: settings.openaiProfile,
   openaiApiVersion: settings.openaiApiVersion,
   openaiCustomModelsPath: settings.openaiCustomModelsPath,

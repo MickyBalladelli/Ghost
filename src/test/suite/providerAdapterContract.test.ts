@@ -71,7 +71,7 @@ class FailingProvider implements ProviderClient {
   }
 }
 
-const providerIds: ProviderId[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter']
+const providerIds: ProviderId[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter']
 
 for (const provider of providerIds) {
   suite(`Provider adapter contract: ${provider}`, () => {

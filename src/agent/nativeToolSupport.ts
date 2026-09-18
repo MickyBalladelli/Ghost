@@ -7,7 +7,7 @@ export function shouldUseNativeToolCalling(options: {
   if (!options.toolsEnabled) {
     return false
   }
-  if (options.provider === 'openai-compatible' && options.openaiProtocol === 'openai-chat') {
+  if ((options.provider === 'openai-compatible' || options.provider === 'llama-cpp') && options.openaiProtocol === 'openai-chat') {
     return true
   }
   if (options.provider === 'openrouter') {

@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
-Ghost runs chat and agent tools against Ollama, MLX/VLM, Google Gemini, another OpenAI-compatible server, OpenRouter, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM and Gemini are chat and vision providers only. Your code stays on your machine when you use a local provider.
+Ghost runs chat and agent tools against Ollama, MLX/VLM, llama.cpp, Google Gemini, another OpenAI-compatible server, OpenRouter, or a user-managed OpenCode headless server. Inline completion uses Ollama or a FIM-capable OpenAI-compatible profile; MLX/VLM, llama.cpp, and Gemini are chat and vision providers only. Your code stays on your machine when you use a local provider.
 
 Current release: `1.2.46`
 
@@ -20,7 +20,7 @@ Current release: `1.2.46`
 
 - Local chat through the Ghost view and the native `@local` chat participant.
 - Ollama support with automatic API compatibility handling.
-- MLX/VLM, Google Gemini, and generic OpenAI-compatible provider support.
+- MLX/VLM, llama.cpp, Google Gemini, and generic OpenAI-compatible provider support.
 - OpenCode headless-server integration with workspace sessions, streamed progress, model discovery, permissions, cancellation, and diffs.
 - Inline code completion with a fast Fill-in-the-Middle model.
 - Workspace context from the workspace, folders, active editor, selection, and open files.
@@ -38,7 +38,7 @@ Current release: `1.2.46`
 
 - VS Code 1.125 or newer
 - Node.js 20 or newer and npm when running Ghost from source
-- Ollama, MLX/VLM, Google Gemini, another OpenAI-compatible server, OpenRouter, or OpenCode 1.x
+- Ollama, MLX/VLM, llama.cpp, Google Gemini, another OpenAI-compatible server, OpenRouter, or OpenCode 1.x
 
 For the default Ollama setup, install [Ollama](https://ollama.com) and pull the recommended models:
 
@@ -130,11 +130,12 @@ All VS Code settings use the `ghost` prefix. Open **Settings** and search for `G
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ghost.provider` | `ollama` | Select `mlx-vlm`, `ollama`, `gemini`, `openai-compatible`, `opencode`, or `openrouter`. |
+| `ghost.provider` | `ollama` | Select `mlx-vlm`, `ollama`, `llama-cpp`, `gemini`, `openai-compatible`, `opencode`, or `openrouter`. |
 | `ghost.ollamaUrl` | `http://localhost:11434` | Ollama server URL. |
 | `ghost.geminiUrl` | `https://generativelanguage.googleapis.com` | Google Gemini API base URL. Store the key with **Ghost: Set Provider API Key**. |
 | `ghost.mlxUrl` | `http://localhost:8000` | MLX/VLM server URL. |
 | `ghost.openaiUrl` | `http://localhost:8001/v1` | OpenAI-compatible server URL. |
+| `ghost.llamaCppUrl` | `http://localhost:8080/v1` | llama.cpp `llama-server` OpenAI-compatible URL. |
 | `ghost.openCodeUrl` | `http://127.0.0.1:4096` | User-managed `opencode serve` URL. Ghost does not start or stop it. |
 | `ghost.openCodeUsername` | `opencode` | Basic Auth username. Store the server password with **Ghost: Set Provider API Key**. |
 | `ghost.openCodeAgent` | empty | Optional OpenCode agent id; empty uses OpenCode's default. |
@@ -175,10 +176,11 @@ Ghost adapts requests to the selected provider. Streaming is supported by all bu
 | MLX/VLM | No | No | Yes | No | Temperature, Top P, presence penalty |
 | Google Gemini | No | Yes | Yes | No | Temperature, Top P, Top K |
 | OpenAI-compatible | Yes | Yes | No | Client-dependent | Temperature, Top P, presence penalty |
+| llama.cpp | Yes | Yes | Yes* | No | Temperature, Top P, presence penalty |
 | OpenRouter | Model-dependent | Model-dependent | Model-dependent | No | Model-dependent; metadata comes from the OpenRouter catalog |
 | OpenCode | OpenCode-owned | OpenCode-owned | No | No | OpenCode model configuration |
 
-OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM is the built-in vision path and has no native tool calling, so Agent and Plan modes are unreliable there; keep Ask mode or switch to Ollama / OpenAI-compatible when you need workspace tools. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
+llama.cpp uses its OpenAI-compatible `llama-server` API. Bonsai-demo starts it at `http://localhost:8080`, with the API under `/v1`; choose **llama.cpp** in Ghost and refresh models. Vision works when the server has a compatible multimodal projector loaded. OpenAI-compatible servers can still chat when they do not implement native tools. MLX/VLM has no native tool calling, so Agent and Plan modes are unreliable there; keep Ask mode or switch to Ollama, llama.cpp, or another OpenAI-compatible server when you need workspace tools. Unsupported sampling fields are not sent as native provider controls; server-specific behavior can differ.
 
 Google Gemini uses the Generative Language API directly. Choose **Google Gemini**, set an API key with **Ghost: Set Provider API Key**, then refresh models. Gemini model IDs are discovered from Google's model list, streaming uses the Gemini SSE endpoint, and image attachments are sent as inline image data. Gemini has no FIM path in Ghost; Agent and Plan modes use Ghost's JSON-in-text tool loop.
 
@@ -295,7 +297,7 @@ Choose the `coding` profile for predictable edits, `balanced` for the normal def
 
 ### What URL should I use?
 
-Use the server base URL for Ollama, normally `http://localhost:11434`. Use the MLX/VLM server URL, normally `http://localhost:8000`. OpenAI-compatible servers usually use a URL ending in `/v1`, such as `http://localhost:8001/v1`; do not add `/v1` twice. The selected compatibility profile may choose a different path for Anthropic, Gemini, Azure OpenAI, or a custom server.
+Use the server base URL for Ollama, normally `http://localhost:11434`. Use the MLX/VLM server URL, normally `http://localhost:8000`. For llama.cpp, use `http://localhost:8080/v1`. Other OpenAI-compatible servers usually use a URL ending in `/v1`, such as `http://localhost:8001/v1`; do not add `/v1` twice. The selected compatibility profile may choose a different path for Anthropic, Gemini, Azure OpenAI, or a custom server.
 
 ### Can I send images?
 

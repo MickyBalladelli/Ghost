@@ -2,6 +2,7 @@
 
 All notable changes to this extension are documented here.
 ## 1.2.46 - 2026-09-05
+- Add llama.cpp as a first-class provider for OpenAI-compatible `llama-server` endpoints, including the Bonsai-demo default URL.
 - Keep prompt history and composer drafts scoped to each project so opening Ghost in a new project starts empty instead of showing another project's last prompt.
 
 ## 1.2.45 - 2026-09-05

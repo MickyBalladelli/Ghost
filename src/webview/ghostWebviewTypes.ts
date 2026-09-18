@@ -65,6 +65,7 @@ export interface ControlSettings {
   geminiUrl: string
   mlxUrl: string
   openaiUrl: string
+  llamaCppUrl: string
   openaiProfile: OpenAiProfile
   openaiApiVersion: string
   openaiCustomModelsPath: string

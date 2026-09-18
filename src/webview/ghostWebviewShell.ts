@@ -261,7 +261,7 @@ const createSettingsModal = (): HTMLDivElement => {
 }
 
 const createAppShell = (iconUri: string): HTMLDivElement => {
-  const providerOptions = [option('mlx-vlm', 'MLX / VLM'), option('ollama', 'Ollama'), option('openai-compatible', 'OpenAI-compatible'), option('gemini', 'Google Gemini'), option('opencode', 'OpenCode'), option('openrouter', 'OpenRouter')]
+  const providerOptions = [option('mlx-vlm', 'MLX / VLM'), option('ollama', 'Ollama'), option('openai-compatible', 'OpenAI-compatible'), option('llama-cpp', 'llama.cpp'), option('gemini', 'Google Gemini'), option('opencode', 'OpenCode'), option('openrouter', 'OpenRouter')]
   const header = createElement('header', { className: 'header' }, [
     createElement('div', { className: 'brand' }, [ghostFace(iconUri, 'brand-mark ghost-face'), createElement('div', {}, [createElement('div', { className: 'title' }, ['Ghost']), createElement('div', { className: 'subtitle' }, ['AI coding assistant'])])]),
     createElement('div', { className: 'header-actions' }, [

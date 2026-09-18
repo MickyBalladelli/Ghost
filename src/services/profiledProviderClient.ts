@@ -456,6 +456,17 @@ export function createProfiledProviderClient(
   return new AzureOpenAiClient(endpoint, settings.openaiApiVersion, apiKeyProvider, settings)
 }
 
+export function createLlamaCppProviderClient(
+  settings: GhostSettings,
+  apiKeyProvider: () => string | undefined
+): ProviderClient {
+  return createProfiledProviderClient({
+    ...settings,
+    openaiUrl: settings.llamaCppUrl,
+    openaiProfile: 'llama-cpp'
+  }, apiKeyProvider)
+}
+
 export function profileProtocol(profileId: OpenAiProfileId | undefined): ProviderWireProtocol {
   return getOpenAiProfile(profileId).protocol
 }

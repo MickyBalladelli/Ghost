@@ -24,7 +24,7 @@ import { validateLocalToolCall } from './toolSchema'
 import type { GhostStopReason } from '../ui/ghostState'
 import { GHOST_RETRY_POLICIES } from './retryPolicy'
 import { isFailedToolOutcome, getInspectionPathRecoveryKey, shouldRetryInspectionPath, shouldStopAgentForToolFailure } from './toolFailurePolicy'
-import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { createLlamaCppProviderClient, createProfiledProviderClient } from '../services/profiledProviderClient'
 import { OpenRouterClient } from '../services/openRouterClient'
 import { resolveModelSettings } from '../services/modelProfiles'
 import type { GhostModelRole } from '../services/modelProfiles'
@@ -1028,6 +1028,10 @@ function createDefaultLlmFactory(configuration: GhostConfig, providerApiKey?: (p
         settings,
         () => providerApiKey?.('openai-compatible')
       ),
+      llamaCppClient: createLlamaCppProviderClient(
+        settings,
+        () => providerApiKey?.('llama-cpp')
+      ),
       openrouterClient: new OpenRouterClient({
         url: settings.openrouterUrl,
         referer: settings.openrouterReferer,
@@ -1853,7 +1857,7 @@ export function createChatParticipantHandler(
     const nativeToolCalling = shouldUseNativeToolCalling({
       toolsEnabled: requestToolsEnabled,
       provider: modelSettings.provider,
-      openaiProtocol: profileProtocol(settings.openaiProfile),
+      openaiProtocol: profileProtocol(modelSettings.provider === 'llama-cpp' ? 'llama-cpp' : settings.openaiProfile),
       ollamaReportsTools: providerReportsTools
     })
     const toolRecoveryInstruction = nativeToolCalling

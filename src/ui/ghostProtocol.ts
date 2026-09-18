@@ -142,6 +142,7 @@ export interface GhostSettingsUpdate {
   geminiUrl?: string
   mlxUrl?: string
   openaiUrl?: string
+  llamaCppUrl?: string
   openaiProfile?: GhostOpenAiProfile
   openaiApiVersion?: string
   openaiCustomModelsPath?: string
@@ -301,6 +302,7 @@ export type GhostExtensionMessage =
         geminiUrl: string
         mlxUrl: string
         openaiUrl: string
+        llamaCppUrl: string
         openaiProfile: GhostOpenAiProfile
         openaiApiVersion: string
         openaiCustomModelsPath: string
@@ -427,7 +429,7 @@ const isOptions = (value: unknown): value is GhostWebviewRequestOptions => {
     return false
   }
   if (
-    (value.provider !== undefined && !['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)) ||
+    (value.provider !== undefined && !['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)) ||
     (value.model !== undefined && !isBoundedString(value.model, 512)) ||
     (value.modelProfile !== undefined && !isBoundedString(value.modelProfile, 256)) ||
     (value.modelRole !== undefined && !['chat', 'agent', 'vision', 'autocomplete'].includes(value.modelRole as string)) ||
@@ -460,13 +462,13 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     return false
   }
   return (
-    (value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)) &&
+    (value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)) &&
     (value.openaiProfile === undefined || ['generic', 'anthropic', 'gemini', 'azure-openai', 'lm-studio', 'llama-cpp', 'vllm', 'litellm', 'custom'].includes(value.openaiProfile as string)) &&
     (value.chatModel === undefined || isBoundedString(value.chatModel, 512)) &&
     (value.modelPerProvider === undefined || (
       isRecord(value.modelPerProvider) &&
-      Object.entries(value.modelPerProvider).length <= 6 &&
-      Object.entries(value.modelPerProvider).every(([key, item]) => ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter'].includes(key) && isBoundedString(item, 512))
+      Object.entries(value.modelPerProvider).length <= 7 &&
+      Object.entries(value.modelPerProvider).every(([key, item]) => ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter'].includes(key) && isBoundedString(item, 512))
     )) &&
     (value.autocompleteModel === undefined || isBoundedString(value.autocompleteModel, 512)) &&
     (value.modelProfile === undefined || isBoundedString(value.modelProfile, 256)) &&
@@ -499,6 +501,7 @@ const isSettingsUpdate = (value: unknown): value is GhostSettingsUpdate => {
     && (value.geminiUrl === undefined || isBoundedString(value.geminiUrl, 4096))
     && (value.mlxUrl === undefined || isBoundedString(value.mlxUrl, 4096))
     && (value.openaiUrl === undefined || isBoundedString(value.openaiUrl, 4096))
+    && (value.llamaCppUrl === undefined || isBoundedString(value.llamaCppUrl, 4096))
     && (value.openaiApiVersion === undefined || isBoundedString(value.openaiApiVersion, 128))
     && (value.openaiCustomModelsPath === undefined || isBoundedString(value.openaiCustomModelsPath, 4096))
     && (value.openaiCustomChatPath === undefined || isBoundedString(value.openaiCustomChatPath, 4096))
@@ -563,7 +566,7 @@ export function isGhostWebviewMessage(value: unknown): value is GhostWebviewMess
   }
 
   if (['ready', 'reset', 'clear', 'import', 'check-status', 'test-provider', 'set-provider-api-key', 'complete-first-run', 'load-controls', 'refresh-models', 'pick-file'].includes(value.type)) {
-    return value.type !== 'set-provider-api-key' || value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)
+    return value.type !== 'set-provider-api-key' || value.provider === undefined || ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter'].includes(value.provider as string)
   }
   if (value.type === 'export') {
     return value.state === undefined || isPersistedState(value.state)

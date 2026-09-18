@@ -1,7 +1,7 @@
 {
   "name": "ghost-ai-coding-assistant",
   "displayName": "Ghost Coding Assistant",
-  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, Google Gemini, OpenAI-compatible servers, OpenRouter, and OpenCode",
+  "description": "AI Coding Assistant powered by Ollama, MLX/VLM, llama.cpp, Google Gemini, OpenAI-compatible servers, OpenRouter, and OpenCode",
   "version": "1.2.46",
   "publisher": "MickyBalladelli",
   "author": {
@@ -264,6 +264,11 @@
           "type": "string",
           "default": "http://localhost:8001/v1",
           "description": "OpenAI-compatible model server URL."
+        },
+        "ghost.llamaCppUrl": {
+          "type": "string",
+          "default": "http://localhost:8080/v1",
+          "description": "llama.cpp llama-server OpenAI-compatible URL."
         },
         "ghost.openaiProfile": {
           "type": "string",
@@ -571,6 +576,7 @@
             "mlx-vlm",
             "ollama",
             "openai-compatible",
+            "llama-cpp",
             "gemini",
             "opencode",
             "openrouter"
@@ -579,6 +585,7 @@
             "Use an MLX VLM OpenAI-compatible server.",
             "Use the Ollama API.",
             "Use another OpenAI-compatible server.",
+            "Use a llama.cpp llama-server endpoint.",
             "Use the Google Gemini Generative Language API.",
             "Delegate requests to a user-managed OpenCode headless server.",
             "Use the OpenRouter hosted model catalog and routing API."
@@ -836,7 +843,7 @@
       {
         "id": "ghost.agent",
         "name": "local",
-        "description": "Local AI coding assistant for Ollama, MLX/VLM, Google Gemini, OpenAI-compatible servers, and OpenCode",
+        "description": "Local AI coding assistant for Ollama, MLX/VLM, llama.cpp, Google Gemini, OpenAI-compatible servers, and OpenCode",
         "isSticky": true
       }
     ],

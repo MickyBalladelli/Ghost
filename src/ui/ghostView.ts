@@ -13,7 +13,7 @@ import { OllamaClient } from '../services/ollamaClient'
 import { GeminiClient } from '../services/geminiClient'
 import { createProviderAdapter, ProviderClient } from '../services/providerAdapter'
 import { resolveModelSettings } from '../services/modelProfiles'
-import { createProfiledProviderClient } from '../services/profiledProviderClient'
+import { createLlamaCppProviderClient, createProfiledProviderClient } from '../services/profiledProviderClient'
 import { OpenRouterClient } from '../services/openRouterClient'
 import { OpenCodeClient } from '../services/openCodeClient'
 import { resolveOpenAiProfileEndpoint } from '../services/providerProfiles'
@@ -96,7 +96,7 @@ interface PendingProviderQuestionApproval {
   resolve: (answers: string[][] | undefined) => void
 }
 
-const GHOST_MODEL_PROVIDERS: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'gemini', 'opencode', 'openrouter']
+const GHOST_MODEL_PROVIDERS: GhostProvider[] = ['mlx-vlm', 'ollama', 'openai-compatible', 'llama-cpp', 'gemini', 'opencode', 'openrouter']
 
 const sanitizeModelPerProvider = (value: unknown): Partial<Record<GhostProvider, string>> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -2177,6 +2177,8 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
       ? new MlxClient(settings.mlxUrl, undefined, () => this.providerApiKey?.('mlx-vlm'))
       : settings.provider === 'openai-compatible'
         ? createProfiledProviderClient(settings, () => this.providerApiKey?.('openai-compatible'))
+      : settings.provider === 'llama-cpp'
+        ? createLlamaCppProviderClient(settings, () => this.providerApiKey?.('llama-cpp'))
         : settings.provider === 'gemini'
           ? new GeminiClient(settings.geminiUrl, () => this.providerApiKey?.('gemini'))
         : settings.provider === 'openrouter'
@@ -2418,6 +2420,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         geminiUrl: settings.geminiUrl,
         mlxUrl: settings.mlxUrl,
         openaiUrl: resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl),
+        llamaCppUrl: settings.llamaCppUrl,
         openaiProfile: settings.openaiProfile,
         openaiApiVersion: settings.openaiApiVersion,
         openaiCustomModelsPath: settings.openaiCustomModelsPath,
@@ -2460,7 +2463,7 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
         terminalEnvironmentAsklist: settings.terminalEnvironmentAsklist,
         enableDebugLogging: settings.enableDebugLogging,
         logLevel: effectiveGhostLogLevel(settings.logLevel, settings.enableDebugLogging),
-        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.provider === 'gemini' ? settings.geminiUrl : settings.provider === 'openrouter' ? settings.openrouterUrl : settings.ollamaUrl) ? 'external' : 'local'
+        networkAccess: isExternalEndpoint(settings.provider === 'opencode' ? settings.openCodeUrl : settings.provider === 'mlx-vlm' ? settings.mlxUrl : settings.provider === 'openai-compatible' ? resolveOpenAiProfileEndpoint(settings.openaiProfile, settings.openaiUrl) : settings.provider === 'llama-cpp' ? settings.llamaCppUrl : settings.provider === 'gemini' ? settings.geminiUrl : settings.provider === 'openrouter' ? settings.openrouterUrl : settings.ollamaUrl) ? 'external' : 'local'
       },
       models,
       modelMetadata,
@@ -2539,6 +2542,9 @@ export class GhostViewProvider implements vscode.WebviewViewProvider, vscode.Dis
     }
     if (typeof update.mlxUrl === 'string' && update.mlxUrl.trim()) {
       await ghostConfig.update('mlxUrl', update.mlxUrl.trim(), target)
+    }
+    if (typeof update.llamaCppUrl === 'string' && update.llamaCppUrl.trim()) {
+      await ghostConfig.update('llamaCppUrl', update.llamaCppUrl.trim(), target)
     }
     if (typeof update.openaiUrl === 'string' && update.openaiUrl.trim()) {
       await ghostConfig.update('openaiUrl', update.openaiUrl.trim(), target)

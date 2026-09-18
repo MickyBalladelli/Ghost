@@ -1,5 +1,5 @@
 export type GhostViewStatus = 'ready' | 'offline'
-export type GhostProvider = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'gemini' | 'opencode' | 'openrouter'
+export type GhostProvider = 'mlx-vlm' | 'ollama' | 'openai-compatible' | 'llama-cpp' | 'gemini' | 'opencode' | 'openrouter'
 export type GhostAutoAcceptScope = 'confirm' | 'one-edit' | 'current-file' | 'request' | 'session' | 'workspace' | 'always'
 export type GhostMode = 'ask' | 'edit' | 'agent' | 'plan' | 'explain' | 'inline'
 export type GhostResponseLength = 'short' | 'balanced' | 'long' | 'unlimited'
